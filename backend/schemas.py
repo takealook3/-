@@ -5,35 +5,29 @@
 # =====================================================================
 
 from pydantic import BaseModel
+from typing import Optional
 
 class StyleTransferReq(BaseModel):   
     """
     [스타일 변환 주문서] 프론트엔드가 보낼 때 사용하는 규격
     비유: 미용실에 가서 "이 사진(image_id)을 이런 머리 스타일(style)로 해주세요!"라고 주문하는 것
     """
-    image_id: str  # 변환할 원본 이미지의 고유 번호 (문자열)
-    style: str     # 적용하고 싶은 스타일 이름 (예: 만화풍, 고흐풍 등)
+    image_id: str           # 변환할 원본 이미지의 고유 번호 (문자열)
+    style: str              # 적용하고 싶은 스타일 이름
+    strength: int = 65      # 변환 강도 (0~100, 기본값 65)
 
 class ImageRes(BaseModel):           
     """
     [스타일 변환 결과물] 백엔드가 돌려줄 때 사용하는 규격
-    비유: 미용실에서 완성된 사진과 함께 "이 웹 주소(url)에서 다운로드하세요!"라고 주는 것
     """
     result_image_id: str  # 완성된 결과 이미지의 고유 번호
     url: str              # 완성된 이미지를 확인할 수 있는 인터넷 링크 주소
+    status: str = "ok"    # 처리 상태 결과
 
 class ChatReq(BaseModel):
-    """
-    [채팅 질문서] 프론트엔드가 채팅 메시지를 보낼 때 사용하는 규격
-    비유: 단체 채팅방에서 몇 번 방(session_id)에 대화(message)를 보낼지 적는 것
-    """
-    session_id: str  # 어떤 대화방에서 이야기 중인지 구분하는 방 번호
-    message: str     # 사용자가 입력한 질문이나 메시지 내용
+    session_id: str  
+    message: str     
 
 class ChatRes(BaseModel):
-    """
-    [채팅 답변서] 백엔드가 AI의 답변을 돌려줄 때 사용하는 규격
-    비유: 선생님이 질문에 답(answer)을 해주고, 참고한 교과서 목록(sources)을 적어주는 것
-    """
-    answer: str             # AI가 생성한 답변 내용
-    sources: list[str] = [] # 답변할 때 참고한 출처나 링크 목록 (기본값은 빈 목록)
+    answer: str             
+    sources: list[str] = [] 

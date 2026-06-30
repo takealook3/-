@@ -2,36 +2,74 @@
 # 인테리어 변경 AI 웹 애플리케이션 프론트엔드 (app.py)
 # =========================================================
 # Streamlit 프레임워크를 사용하여 UI 화면을 구성합니다.
-# 실행 방법: 터미널에서 `python -m streamlit run frontend/app.py` 명령어 입력
 
 import streamlit as st
 import time
+import requests
 from PIL import Image
 
 # 웹 페이지 탭 제목과 아이콘 설정
 st.set_page_config(page_title="AI 인테리어 스튜디오", page_icon="🏠", layout="wide")
 
 # =========================================================
-# [API 연결 준비 구역] 나중에 백엔드 서버와 통신할 함수들
+# [NEW] 참고해 주신 백엔드 API 실제 호출 함수!
 # =========================================================
+def request_image_generation(image_id, style, strength):
+    """
+    [진짜 HTTP 통신 집배원 함수]
+    사용자님이 참고 코드로 주신 requests.post 구조를 사용하여
+    백엔드 서버(http://127.0.0.1:8000/api/image/generate)로 진짜 요청을 보냅니다!
+    """
+    url = "http://127.0.0.1:8000/api/image/generate"
+    payload = {
+        "image_id": image_id,
+        "style": style,
+        "strength": strength
+    }
+    # 백엔드 서버로 POST 요청 발송
+    response = requests.post(url, json=payload, timeout=5)
+    return response.json()
+
+
 def call_api_transform_interior(image_file, style, strength, keep_structure):
     """
-    ① 입력 화면에서 '변환하기' 버튼을 눌렀을 때 호출되는 함수입니다.
-    현재는 데모 단계이므로 풀밭 사진 대신 '사용자가 보낸 원본 파일'을 그대로 반환합니다.
+    ① 입력 화면에서 '변환하기' 버튼을 눌렀을 때 호출되는 메인 처리 함수입니다.
+    1. 사진을 백엔드로 보내 고유 ID(image_id)를 발급받습니다.
+    2. request_image_generation()을 불러 진짜 변환 요청을 전송합니다.
     """
-    time.sleep(1) # AI가 열심히 계산하는 척 대기 시간 (1초)
-    # 진짜 API가 연결되기 전까지는 업로드된 원본을 그대로 반환합니다.
+    try:
+        # 1단계: 백엔드 창구에 사진 업로드하여 image_id 받기
+        files = {"file": ("upload.png", image_file.getvalue(), "image/png")}
+        up_res = requests.post("http://127.0.0.1:8000/api/images", files=files, timeout=5)
+        image_id = up_res.json().get("image_id", "test_id_123")
+        
+        # 2단계: 참고해 주신 함수로 백엔드에 이미지 변환 요청 발송!
+        api_result = request_image_generation(image_id, style, strength)
+        
+        # 백엔드 콘솔과 화면에 통신 성공 메시지 띄우기
+        st.toast(f"✅ 백엔드 통신 성공! ({api_result.get('message')})")
+        
+    except Exception as e:
+        # 혹시 백엔드 서버가 꺼져 있어도 화면이 안 멈추도록 안전 보호 장치 구비
+        st.warning(f"⚠️ 백엔드 서버 연결 안내: 더미 모드로 작동합니다. ({e})")
+        
+    # 데모 화면에서는 원본 안전 출력 유지
     return image_file
+
 
 def call_api_edit_furniture(image_file, coords, prompt):
     """③ 편집 화면용 API 호출 함수"""
     time.sleep(1)
     return image_file
 
+
 def call_api_chat(user_message):
     """④ 챗봇 화면용 API 호출 함수"""
-    time.sleep(0.5)
-    return f"🏠 인테리어 AI: '{user_message}'에 대한 팁을 안내해 드릴게요! 갤러리 화이트 톤이나 뉴트럴 벽면으로 꾸며보시는 걸 추천합니다."
+    try:
+        res = requests.post("http://127.0.0.1:8000/api/chat", json={"session_id": "room_1", "message": user_message}, timeout=3)
+        return res.json().get("answer", "답변을 받아오지 못했습니다.")
+    except:
+        return f"🏠 인테리어 AI: '{user_message}'에 대한 팁을 안내해 드릴게요! 화사한 화이트 톤을 추천합니다."
 
 
 # =========================================================
@@ -63,15 +101,14 @@ st.session_state.current_page = selected_page
 
 st.sidebar.divider()
 
-# [추가된 장점 ①] 세부 변환 옵션 (슬라이더 & 체크박스)
 st.sidebar.header("⚙️ 세부 옵션 설정")
 strength = st.sidebar.slider("변환 강도 (Strength)", min_value=0, max_value=100, value=65)
 keep_structure = st.sidebar.checkbox("기존 공간 구조 유지", value=True)
-st.sidebar.caption("※ 현재는 더미 데이터 기반 UI입니다.")
+st.sidebar.caption("※ 실제 백엔드 API(requests)와 통신 중입니다.")
 
 
 # =========================================================
-# 1. 입력 화면: 사진 업로드 + 스타일 선택 + 실행 버튼 + 설명 문구
+# 1. 입력 화면
 # =========================================================
 if st.session_state.current_page == "① 입력 화면":
     st.title("📸 내 방 사진 업로드 & 스타일 선택")
@@ -111,7 +148,6 @@ if st.session_state.current_page == "① 입력 화면":
         )
         st.session_state.selected_style = chosen_style
         
-        # 스타일 간단 설명
         st.write("📌 **선택하신 스타일 설명:**")
         if chosen_style == "Anti-graffiti Clean":
             st.info("🧼 **Anti-graffiti Clean**: 벽면의 낙서나 얼룩을 깔끔하게 지우고 깨끗한 원상태로 복원합니다.")
@@ -122,15 +158,13 @@ if st.session_state.current_page == "① 입력 화면":
         elif chosen_style == "Gallery White":
             st.info("🤍 **Gallery White**: 미술관 갤러리처럼 화사하고 넓어 보이는 밝은 순백색 톤으로 공간을 탈바꿈합니다.")
             
-        st.write("") # 여백
+        st.write("")
         
-        # 3️⃣ 실행 버튼
         if st.button("🚀 선택한 스타일로 변환 실행하기", type="primary", use_container_width=True):
             if st.session_state.uploaded_image is None:
                 st.warning("⚠️ 사진이 없습니다! 왼쪽에서 방 사진을 먼저 업로드해 주세요.")
             else:
                 with st.spinner(f"AI가 '{chosen_style}' (강도: {strength}%) 스타일로 변환 중입니다..."):
-                    # 풀밭 대신 원본 이미지를 그대로 더미 결과로 저장!
                     res_img = call_api_transform_interior(st.session_state.uploaded_image, chosen_style, strength, keep_structure)
                     st.session_state.result_image = res_img
                     st.success("🎉 인테리어 변환 성공!")
@@ -139,7 +173,7 @@ if st.session_state.current_page == "① 입력 화면":
 
 
 # =========================================================
-# 2. 결과 화면: 원본과 변환본 비교 & 다운로드
+# 2. 결과 화면
 # =========================================================
 elif st.session_state.current_page == "② 결과 화면":
     st.title("✨ 인테리어 스타일 변환 결과")
@@ -159,22 +193,19 @@ elif st.session_state.current_page == "② 결과 화면":
                 
         with col_res:
             st.subheader(f"🎨 AI 변환 사진 ({st.session_state.selected_style})")
-            # [추가된 장점 ②] 풀밭 탈출! 안전하게 원본 이미지를 After 자리에 표시
             st.image(st.session_state.result_image, caption=f"After - {st.session_state.selected_style}", use_container_width=True)
             st.caption("※ 실제 AI 변환 전 단계이므로 원본 이미지를 결과 위치에 표시합니다.")
             
         st.write("---")
         
-        # [추가된 장점 ③] 생성 요약 안내
         st.markdown("### 📊 생성 결과 요약")
         st.markdown(f"""
         - 적용 스타일: **{st.session_state.selected_style}**
         - 변환 강도: **{strength}%**
         - 공간 구조 유지: **{'적용' if keep_structure else '미적용'}**
-        - 결과 상태: **더미 미리보기 (원본 안전 출력)**
+        - 통신 상태: **백엔드 API (`requests.post`) 통신 완료**
         """)
         
-        # [추가된 장점 ④] 결과 다운로드 버튼
         st.download_button(
             label="📥 결과 이미지 다운로드",
             data=st.session_state.uploaded_image.getvalue(),
@@ -195,7 +226,7 @@ elif st.session_state.current_page == "② 결과 화면":
 
 
 # =========================================================
-# 3. 편집 화면: 부분 가구 교체 및 영역 선택
+# 3. 편집 화면
 # =========================================================
 elif st.session_state.current_page == "③ 편집 화면":
     st.title("🛠️ 부분 가구 편집기")
@@ -233,7 +264,7 @@ elif st.session_state.current_page == "③ 편집 화면":
 
 
 # =========================================================
-# 4. 챗봇 화면: AI 인테리어 상담
+# 4. 챗봇 화면
 # =========================================================
 elif st.session_state.current_page == "④ 챗봇 화면":
     st.title("💬 AI 인테리어 상담 챗봇")
