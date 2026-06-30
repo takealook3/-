@@ -237,7 +237,8 @@ def run_interactive_loop(retriever: EnsembleRetriever, llm: ChatGoogleGenerative
         start_time = time.time()
         try:
             answer, docs = answer_question(user_input, retriever, llm)
-            print_sources(docs)
+            # 대화형 답변만 깔끔하게 보여주기 위해 참고 문서 출처 출력은 비활성화합니다.
+            # print_sources(docs)
         except Exception as exc:
             print(f"\n❌ 오류 발생: {exc}")
         elapsed = time.time() - start_time
