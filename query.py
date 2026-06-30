@@ -1,12 +1,12 @@
 """
-query.py  (Google Gemini-1.5-flash RAG 엔진 최적화 + 실시간 스트리밍 버전)
+query.py  (Google Gemini-2.5-flash RAG 엔진 최적화 + 실시간 스트리밍 버전)
 ─────────────────────────────────────────────────────────────────────────────
 데이터 흐름:
   1. 사용자 한국어 질문
       ↓  [models/gemini-embedding-001 임베딩 활용]
   2. ChromaDB 한국어 원본 컬렉션에서 관련 법률/체크리스트 문서 검색 (k=3)
-      ↓  [ChatGoogleGenerativeAI (gemini-1.5-flash) 호출]
-  3. Gemini 1.5 Flash가 참고 문서를 분석하여 정확하고 신뢰할 수 있는 한국어 RAG 답변 생성
+      ↓  [ChatGoogleGenerativeAI (gemini-2.5-flash) 호출]
+  3. Gemini 2.5 Flash가 참고 문서를 분석하여 정확하고 신뢰할 수 있는 한국어 RAG 답변 생성
       ↓  [실시간 토큰 스트리밍]
   4. 한국어 최종 답변 화면에 즉시 스트리밍 출력
 """
