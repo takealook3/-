@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ANTIGRAVITY AI - 스마트 다중 API 파이프라인</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .pipeline-container {
+            max-width: 1300px;
+            margin: 2rem auto;
+            padding: 2.5rem;
+            background: rgba(18, 18, 28, 0.8);
+            backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 28px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+        }
+        .status-banner {
+            padding: 1.2rem 2rem;
+            border-radius: 16px;
+            margin: 2rem 0;
+            font-size: 1.15rem;
+            font-weight: 700;
+            text-align: center;
+            background: linear-gradient(90deg, rgba(0,240,255,0.15), rgba(0,223,137,0.15));
+            border: 1px solid rgba(0,240,255,0.4);
+            color: #fff;
+            animation: fadeIn 0.5s ease;
+        }
+        .pipeline-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1.8rem;
+            margin-top: 1.5rem;
+        }
+        .pipeline-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 20px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease;
+        }
+        .pipeline-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(0,240,255,0.5);
+        }
+        .pipeline-card h3 {
+            font-size: 1.25rem;
+            margin-bottom: 1.2rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .img-preview-box {
+            width: 100%;
+            border-radius: 14px;
+            overflow: hidden;
+            background: rgba(0,0,0,0.5);
+            margin-bottom: 1.2rem;
+            text-align: center;
+        }
+        .img-preview-box img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+        .rank-bar-bg {
+            background: rgba(0,0,0,0.4);
+            height: 10px;
+            border-radius: 5px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+        .rank-bar-fill {
+            height: 100%;
+            border-radius: 5px;
+            background: linear-gradient(90deg, #FF0080, #7928CA);
+        }
+    </style>
+</head>
+<body>
+    <div class="background-glow glow-1" style="width: 700px; height: 700px; background: radial-gradient(circle, rgba(0,240,255,0.18) 0%, rgba(0,0,0,0) 70%);"></div>
+    <div class="background-glow glow-2" style="width: 700px; height: 700px; background: radial-gradient(circle, rgba(0,223,137,0.18) 0%, rgba(0,0,0,0) 70%);"></div>
+
+    <main class="pipeline-container">
+        <header style="text-align: center; margin-bottom: 2.5rem;">
+            <span class="badge" style="background: linear-gradient(90deg, #00F0FF, #00DF89); color: #000; font-weight: 800;">SMART VISION CASCADE PIPELINE</span>
+            <h1 style="font-size: 2.6rem; margin: 0.6rem 0;">🚀 스마트 다중 API 조건부 시각화</h1>
+            <p style="color: #aaa; font-size: 1.1rem;">사진 1장을 올리면 AI가 사람 수(0명/1명/여러 명)를 판단하여 필요한 모든 비전 API를 자동으로 계층 구동합니다.</p>
+            <div style="margin-top: 1.2rem;">
+                <a href="/" style="color: #00F0FF; text-decoration: none; font-weight: 700;">⬅️ 메인 로비로 돌아가기</a>
+                <span style="color: #555; margin: 0 0.8rem;">|</span>
+                <a href="/studio" style="color: #FF0080; text-decoration: none; font-weight: 700;">🌟 올인원 스튜디오 가기 ➡️</a>
+            </div>
+        </header>
+
+        <!-- 이미지 업로드 영역 -->
+        <div class="upload-section" style="max-width: 750px; margin: 0 auto;">
+            <label for="multi-file-input" class="drop-zone" style="display: block; cursor: pointer; border-color: rgba(0,240,255,0.5);">
+                <div class="icon-container" style="color: #00F0FF;">⚡</div>
+                <h3>여기에 사진을 올리면 스마트 파이프라인이 가동됩니다</h3>
+                <p class="sub-text">사람 유무 판단 ➡️ [없음: 분류+탐지] | [1명: +자세인식] | [2명 이상: +얼굴유사도]</p>
+                <input type="file" id="multi-file-input" accept="image/*" style="display: none;">
+            </label>
+        </div>
+
+        <!-- 로딩 스피너 -->
+        <div id="multi-loading" class="spinner-overlay hidden" style="background: transparent; margin: 2.5rem 0;">
+            <div class="spinner" style="border-top-color: #00F0FF;"></div>
+            <p id="loading-text" style="font-size: 1.2rem; color: #00F0FF; font-weight: 700;">🤖 1단계: AI 객체 탐지로 사진 속 사람 수를 판단하는 중...</p>
+        </div>
+
+        <!-- 상태 안내 배너 -->
+        <div id="status-banner" class="status-banner hidden"></div>
+
+        <!-- 동적 결과 그리드 -->
+        <div id="results-grid" class="pipeline-grid hidden">
+            <!-- 1. 이미지 분류 카드 -->
+            <div id="card-cls" class="pipeline-card">
+                <h3 style="color: #FF0080;">🖼️ 1. 이미지 분류 (MobileNetV3)</h3>
+                <div class="img-preview-box"><img id="preview-cls" src=""></div>
+                <div id="content-cls"></div>
+            </div>
+
+            <!-- 2. 객체 탐지 카드 -->
+            <div id="card-det" class="pipeline-card">
+                <h3 style="color: #00DF89;">🔍 2. 객체 탐지 (YOLOv8)</h3>
+                <div class="img-preview-box"><img id="preview-det" src=""></div>
+                <div id="content-det"></div>
+            </div>
+
+            <!-- 3. 자세 인식 카드 (조건부 렌더링) -->
+            <div id="card-pose" class="pipeline-card hidden">
+                <h3 style="color: #00F0FF;">🦴 3. 자세 인식 (YOLO-Pose)</h3>
+                <div class="img-preview-box"><img id="preview-pose" src=""></div>
+                <div id="content-pose"></div>
+            </div>
+
+            <!-- 4. 얼굴 유사도 비교 카드 (조건부 렌더링) -->
+            <div id="card-face" class="pipeline-card hidden">
+                <h3 style="color: #FFAA00;">👥 4. 얼굴 유사도 비교 (InsightFace)</h3>
+                <div class="img-preview-box"><img id="preview-face" src=""></div>
+                <div id="content-face"></div>
+            </div>
+        </div>
+
+        <div id="reset-box" class="hidden" style="text-align: center; margin-top: 3rem; display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
+            <button class="reset-btn" onclick="downloadResults()" style="background: linear-gradient(90deg, #FF0080, #7928CA); color: #fff; font-weight: 800; padding: 0.8rem 2rem; font-size: 1.05rem; border-radius: 50px; border: none; cursor: pointer; box-shadow: 0 0 20px rgba(255,0,128,0.5);">📥 시각화 결과 이미지 다운로드</button>
+            <button class="reset-btn" onclick="resetPipeline()" style="background: linear-gradient(90deg, #00F0FF, #00DF89); color: #000; font-weight: 800; padding: 0.8rem 2rem; font-size: 1.05rem; border-radius: 50px; border: none; cursor: pointer;">🔄 다른 사진으로 스마트 파이프라인 테스트하기</button>
+        </div>
+    </main>
+
+    <script src="/static/demo_multi.js"></script>
+</body>
+</html>

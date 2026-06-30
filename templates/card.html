@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ANTIGRAVITY 아케이드 - 카드 짝 맞추기</title>
+    <!-- 구글 폰트 (Outfit) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Phaser.js 2D 게임 엔진 라이브러리 (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <style>
+        /* 화면 기본 설정 및 네온 다크 스타일 */
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Outfit', sans-serif; }
+        body {
+            background-color: #0a0b10;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #1b1035 0%, #0a0b10 100%);
+        }
+        .nav-bar {
+            margin-bottom: 1.2rem;
+            text-align: center;
+            z-index: 10;
+            display: flex;
+            gap: 0.8rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .nav-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1.2rem;
+            border-radius: 50px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+        .nav-btn:hover { background: rgba(255, 255, 255, 0.2); transform: scale(1.05); }
+        .nav-btn.active { background: linear-gradient(90deg, #ff007f, #7928CA); border-color: transparent; box-shadow: 0 4px 15px rgba(255, 0, 127, 0.4); }
+        h1 { font-size: 1.8rem; color: #00df89; text-shadow: 0 0 10px rgba(0, 223, 137, 0.5); margin-bottom: 0.5rem; text-align: center; }
+        /* 게임 엔진 캔버스 테두리 효과 */
+        #game-container {
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(0, 223, 137, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="nav-bar">
+        <a href="/" class="nav-btn">🏠 AI 감별 쇼룸</a>
+        <a href="/game" class="nav-btn">🕹️ 가위바위보</a>
+        <a href="/card" class="nav-btn active">🃏 카드 짝 맞추기</a>
+        <a href="/survivor" class="nav-btn">🧙‍♂️ 뱀파이어 서바이벌</a>
+    </div>
+    <h1>🃏 마법의 동물 카드 짝 맞추기</h1>
+
+    <!-- Phaser 게임 엔진이 화면을 그릴 공간 -->
+    <div id="game-container"></div>
+
+    <!-- 게임 구동 로직이 담긴 자바스크립트 연결 -->
+    <script src="/static/card.js"></script>
+</body>
+</html>

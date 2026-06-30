@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📚 AI 도서관: 소설 오픈북 RAG 모의고사</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;800&family=Outfit:wght@600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #064e3b 0%, #0f172a 50%, #1e1b4b 100%);
+            --glass-bg: rgba(255, 255, 255, 0.07);
+            --glass-border: rgba(255, 255, 255, 0.18);
+            --primary-green: #10b981;
+            --primary-cyan: #06b6d4;
+            --accent-glow: rgba(16, 185, 129, 0.35);
+            --text-main: #f8fafc;
+            --text-sub: #cbd5e1;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Noto Sans KR', 'Outfit', sans-serif;
+        }
+
+        body {
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 2.5rem 1rem;
+            overflow-x: hidden;
+        }
+
+        .orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(90px);
+            z-index: 0;
+            animation: floatOrb 12s ease-in-out infinite alternate;
+            pointer-events: none;
+        }
+        .orb-1 {
+            width: 350px;
+            height: 350px;
+            background: var(--primary-green);
+            top: 5%;
+            left: 10%;
+            opacity: 0.3;
+        }
+        .orb-2 {
+            width: 450px;
+            height: 450px;
+            background: var(--primary-cyan);
+            bottom: 5%;
+            right: 10%;
+            opacity: 0.3;
+            animation-delay: -6s;
+        }
+
+        @keyframes floatOrb {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(40px, -40px) scale(1.15); }
+        }
+
+        .main-wrapper {
+            position: relative;
+            z-index: 10;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+
+        header h1 {
+            font-size: 2.4rem;
+            font-weight: 800;
+            background: linear-gradient(to right, #34d399, #22d3ee, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            color: var(--text-sub);
+            font-size: 1.05rem;
+        }
+
+        /* 검색창 영역 */
+        .search-container {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4), 0 0 30px var(--accent-glow);
+            margin-bottom: 2.5rem;
+        }
+
+        .input-box {
+            display: flex;
+            gap: 1rem;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            background: rgba(15, 23, 42, 0.7);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 14px;
+            padding: 1.1rem 1.4rem;
+            color: white;
+            font-size: 1.1rem;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--primary-cyan);
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+        }
+
+        button.btn-search {
+            background: linear-gradient(135deg, var(--primary-green), var(--primary-cyan));
+            color: white;
+            border: none;
+            border-radius: 14px;
+            padding: 0 2rem;
+            font-size: 1.1rem;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            white-space: nowrap;
+        }
+
+        button.btn-search:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(16, 185, 129, 0.5);
+        }
+
+        button.btn-search:active {
+            transform: translateY(0);
+        }
+
+        /* 추천 질문 칩스 */
+        .suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            margin-top: 1.2rem;
+            align-items: center;
+        }
+
+        .sug-label {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            font-weight: 600;
+            margin-right: 0.3rem;
+        }
+
+        .chip {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 0.4rem 0.9rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: #e2e8f0;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .chip:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: var(--primary-cyan);
+            transform: translateY(-2px);
+        }
+
+        /* 결과 표시 영역 (그리드 레이아웃) */
+        .results-grid {
+            display: none;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 2rem;
+            animation: fadeIn 0.6s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 좌측: AI 최종 답변 카드 */
+        .answer-card {
+            background: rgba(15, 23, 42, 0.85);
+            border: 2px solid var(--primary-green);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.5);
+            line-height: 1.7;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #34d399;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 0.8rem;
+        }
+
+        .answer-content h1, .answer-content h2, .answer-content h3 {
+            color: #38bdf8;
+            margin-top: 1.2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .answer-content strong { color: #34d399; }
+        .answer-content ul { margin-left: 1.5rem; margin-bottom: 1rem; }
+
+        /* 우측: 도서관 사서가 찾아온 근거 카드들 */
+        .context-section {
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+        }
+
+        .context-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            color: #22d3ee;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .context-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 16px;
+            padding: 1.4rem;
+            transition: all 0.3s;
+        }
+
+        .context-card:hover {
+            border-color: rgba(34, 211, 238, 0.5);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .context-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.8rem;
+            font-size: 0.85rem;
+        }
+
+        .badge {
+            background: rgba(6, 182, 212, 0.2);
+            color: #22d3ee;
+            padding: 0.2rem 0.6rem;
+            border-radius: 12px;
+            font-weight: 800;
+        }
+
+        .sim-score {
+            color: #34d399;
+            font-weight: 800;
+        }
+
+        .context-text {
+            font-size: 0.95rem;
+            color: #cbd5e1;
+            line-height: 1.6;
+            word-break: keep-all;
+        }
+
+        /* 로딩 스피너 */
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s infinite linear;
+            display: inline-block;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 850px) {
+            .results-grid { grid-template-columns: 1fr; }
+            .input-box { flex-direction: column; }
+            button.btn-search { padding: 1.2rem; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+
+    <div class="main-wrapper">
+        <header>
+            <h1>📚 AI 도서관: 소설 오픈북 RAG 모의고사</h1>
+            <p>소설 &lt;<strong>운수 좋은 날</strong>&gt;을 읽은 AI 사서에게 궁금한 점을 물어보세요!</p>
+        </header>
+
+        <div class="search-container">
+            <div class="input-box">
+                <input type="text" id="query-input" placeholder="질문을 입력하세요... (예: 김 첨지는 오늘 손님을 몇 번 태웠어?)" onkeypress="handleKeyPress(event)">
+                <button type="button" class="btn-search" id="btn-search" onclick="submitQuery()">
+                    🔍 사서에게 질문하기
+                </button>
+            </div>
+
+            <div class="suggestions">
+                <span class="sug-label">💡 추천 질문:</span>
+                <span class="chip" onclick="setQuery('김 첨지는 오늘 얼마를 벌었어?')">💰 오늘 번 돈은?</span>
+                <span class="chip" onclick="setQuery('아내가 먹고 싶어 하던 음식은 뭐야?')">🍲 아내의 소원 음식</span>
+                <span class="chip" onclick="setQuery('김 첨지는 왜 선술집에서 울었어?')">😭 선술집에서 눈물의 이유</span>
+                <span class="chip" onclick="setQuery('집에 돌아왔을 때 방 안의 상황은 어땠어?')">🏠 집에 돌아왔을 때 풍경</span>
+            </div>
+        </div>
+
+        <!-- 결과 영역 -->
+        <div class="results-grid" id="results-grid">
+            <!-- 좌측: AI 최종 답변 -->
+            <div class="answer-card">
+                <div class="card-header">
+                    <span>💡 Gemini 선생님의 최종 명쾌한 답변</span>
+                </div>
+                <div class="answer-content" id="answer-content">
+                    답변을 불러오는 중입니다...
+                </div>
+            </div>
+
+            <!-- 우측: 사서가 찾은 근거 카드들 -->
+            <div class="context-section">
+                <div class="context-title">
+                    <span>🔍 사서가 찾아온 소설 원문 증거 (Top 3)</span>
+                </div>
+                <div id="context-list">
+                    <!-- JS로 동적 생성 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const queryInput = document.getElementById("query-input");
+        const btnSearch = document.getElementById("btn-search");
+        const resultsGrid = document.getElementById("results-grid");
+        const answerContent = document.getElementById("answer-content");
+        const contextList = document.getElementById("context-list");
+
+        let isLoading = false;
+
+        function setQuery(text) {
+            queryInput.value = text;
+            submitQuery();
+        }
+
+        function handleKeyPress(e) {
+            if (e.key === 'Enter') {
+                submitQuery();
+            }
+        }
+
+        async function submitQuery() {
+            const query = queryInput.value.trim();
+            if (!query) {
+                alert("💡 사서에게 물어볼 질문을 입력해 주세요!");
+                queryInput.focus();
+                return;
+            }
+
+            if (isLoading) return;
+            isLoading = true;
+
+            // UI 로딩 상태 변경
+            btnSearch.innerHTML = '<span class="spinner"></span> 도서관 검색 중...';
+            resultsGrid.style.display = "grid";
+            answerContent.innerHTML = '<div style="text-align:center; padding: 2rem;"><span class="spinner" style="width:35px; height:35px; border-width:4px;"></span><p style="margin-top:1rem; color:#34d399; font-weight:bold;">사서가 책 서랍장을 뒤져 정답을 조합하고 있습니다...</p></div>';
+            contextList.innerHTML = '<p style="color:#94a3b8; text-align:center; padding:1rem;">참고 카드를 검색하고 있습니다...</p>';
+
+            try {
+                const response = await fetch("/api/rag-query", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ query: query })
+                });
+                const data = await response.json();
+
+                if (data.status === "success") {
+                    // 1. AI 답변 렌더링 (마크다운 파싱)
+                    answerContent.innerHTML = marked.parse(data.answer);
+
+                    // 2. 사서가 찾은 근거 카드 렌더링
+                    contextList.innerHTML = "";
+                    data.contexts.forEach((doc, idx) => {
+                        const cardHtml = `
+                            <div class="context-card">
+                                <div class="context-meta">
+                                    <span class="badge">📖 증거 카드 #${idx + 1}</span>
+                                    <span class="sim-score">일치도: ${doc.similarity}%</span>
+                                </div>
+                                <div class="context-text">"${doc.text}"</div>
+                            </div>
+                        `;
+                        contextList.insertAdjacentHTML("beforeend", cardHtml);
+                    });
+
+                    resultsGrid.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else {
+                    answerContent.innerHTML = `<p style="color:#ef4444; font-weight:bold;">❌ 오류: ${data.answer}</p>`;
+                }
+            } catch (error) {
+                answerContent.innerHTML = '<p style="color:#ef4444; font-weight:bold;">❌ 서버 통신 중 문제가 발생했습니다.</p>';
+                console.error("Error:", error);
+            } finally {
+                btnSearch.innerHTML = '🔍 사서에게 질문하기';
+                isLoading = false;
+            }
+        }
+    </script>
+</body>
+</html>
