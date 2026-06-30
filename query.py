@@ -66,6 +66,69 @@ RAG_TEMPLATE = """\
 
 
 
+# ── 취향 및 디자인 스타일 라우터 & 프롬프트 정의 ───────────────────────────
+# 사용자의 질문이 주관적인 디자인 취향/스타일 추천인지, 객관적인 법률/체크리스트인지 판별하기 위한 프롬프트입니다.
+ROUTE_TEMPLATE = """\
+사용자의 질문이 다음 카테고리에 해당하는지 판단하십시오:
+- 개인의 인테리어 취향, 선호하는 분위기나 스타일 추천 (예: 모던, 북유럽, 빈티지, 내추럴 등)
+- 공간 스타일링, 가구 배치, 색상 조합, 조명 디자인 및 소품 추천에 대한 디자인 조언
+- 트렌디한 디자인 아이디어나 주관적인 미적 가이드 추천 및 팁 제공 요청
+
+위 카테고리에 명확히 해당하면 오직 한 단어로 'true'라고만 대답하고, 
+법률, 기술 기준, 안전 고시, 하자 판정, 구체적인 시공 체크리스트/공정 순서 등 객관적인 팩트나 기술 규정에 관한 질문이면 'false'라고만 대답하십시오.
+어떠한 설명이나 다른 단어도 덧붙이지 마십시오.
+
+[사용자 질문]
+{question}
+
+[답변]"""
+
+# 취향 및 디자인 스타일 추천을 위한 전용 컨설팅 프롬프트입니다.
+PREFERENCE_TEMPLATE = """\
+당신은 대한민국 대표 인테리어 공간 디자인 및 홈 스타일링 전문가입니다.
+제시된 질문은 사용자의 취향, 선호 스타일, 인테리어 컨셉 및 조화로운 디자인 조합에 관한 것입니다.
+ChromaDB의 법적/체크리스트 문서에 구애받지 않고, 당신이 알고 있는 풍부한 최신 인테리어 디자인 트렌드와 홈 스타일링 노하우를 바탕으로 답변해 주십시오.
+
+답변 규칙:
+1. 너무 장황하거나 방대한 양의 정보를 나열하지 말고, 질문에 대한 핵심 추천 위주로 명확하게 답변하십시오.
+2. 전체 답변의 길이는 가급적 3~5문장 이내로 간결하게 요약하여 정리하십시오.
+3. 실제 사람과 대화하는 것처럼 친근하고 자연스러운 어조(예: ~해보세요, ~하시는 것이 좋습니다)로 부드럽게 조언해 주십시오.
+
+[질문]
+{question}
+
+[답변]"""
+
+
+def check_is_preference_query(question: str, llm: ChatGoogleGenerativeAI) -> bool:
+    """
+    사용자 질문이 취향/디자인 추천 관련 질문인지 Gemini를 통해 판별합니다.
+    """
+    prompt = ROUTE_TEMPLATE.format(question=question)
+    response = llm.invoke(prompt)
+    result = response.content.strip().lower()
+    return "true" in result
+
+
+def answer_preference_question(
+    korean_question: str,
+    llm: ChatGoogleGenerativeAI,
+) -> str:
+    """
+    사용자의 인테리어 취향/디자인 스타일에 대한 질문을 처리합니다.
+    ChromaDB 검색 없이 Gemini가 직접 조언 및 추천을 생성하여 스트리밍합니다.
+    """
+    print("  [1/1] Gemini AI가 인테리어 취향 맞춤 컨설팅 답변을 생성 중입니다...\n")
+    print("💬 답변:")
+    print("─" * 60)
+    korean_answer = call_llm_stream(
+        llm, PREFERENCE_TEMPLATE,
+        question=korean_question,
+    )
+    print("\n" + "─" * 60)
+    return korean_answer
+
+
 # ── 스트리밍 유틸리티 ───────────────────────────────────────────────────────
 def call_llm_stream(llm: ChatGoogleGenerativeAI, prompt_template: str, **kwargs) -> str:
     """
@@ -236,8 +299,18 @@ def run_interactive_loop(retriever: EnsembleRetriever, llm: ChatGoogleGenerative
 
         start_time = time.time()
         try:
-            answer, docs = answer_question(user_input, retriever, llm)
-            print_sources(docs)
+            # 1단계. 질문 유형 판단 (취향 질문 vs 팩트/규정 질문)
+            print("🔍 질문 유형을 분석 중입니다...")
+            is_preference = check_is_preference_query(user_input, llm)
+            
+            if is_preference:
+                print("💡 취향/스타일 추천 질문으로 판별되었습니다.")
+                answer = answer_preference_question(user_input, llm)
+            else:
+                print("📑 시공/법률/체크리스트 질문으로 판별되었습니다.")
+                # 참고 문헌 출력을 원치 않으므로 RAG 답변은 실행하되 print_sources는 호출하지 않음
+                answer, docs = answer_question(user_input, retriever, llm)
+                
         except Exception as exc:
             print(f"\n❌ 오류 발생: {exc}")
         elapsed = time.time() - start_time
