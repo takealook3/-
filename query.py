@@ -210,35 +210,6 @@ def print_sources(source_docs: List[Document]) -> None:
     print("─" * 60)
 
 
-# ── 자동 검증 테스트 ─────────────────────────────────────────────────────
-def run_test_queries(retriever: EnsembleRetriever, llm: ChatGoogleGenerativeAI) -> None:
-    test_questions = [
-        "실내에 유리 칸막이 설치할 때 어떤 안전 기준을 지켜야 해?",
-        "화장실 타일 바닥 미끄럼 방지 기준이 뭐야?",
-        "공사 끝나고 욕실 검수할 때 뭘 봐야 해?",
-    ]
-
-    print("\n" + "=" * 60)
-    print("  [자동 검증] 테스트 질문 3개 실행")
-    print("=" * 60)
-
-    for i, question in enumerate(test_questions, 1):
-        print(f"\n🧪 [테스트 {i}] {question}")
-        start_time = time.time()
-        try:
-            answer, docs = answer_question(question, retriever, llm)
-            print_sources(docs)
-        except Exception as exc:
-            print(f"  ❌ 오류: {exc}")
-        elapsed = time.time() - start_time
-        print(f"⏱️ 소요 시간: {elapsed:.2f}초")
-
-        if i < len(test_questions):
-            print("  ⏸  다음 질문까지 1초 대기...")
-            time.sleep(1)
-
-    print("\n✅ 자동 검증 완료")
-
 
 # ── 인터랙티브 루프 ──────────────────────────────────────────────────────
 def run_interactive_loop(retriever: EnsembleRetriever, llm: ChatGoogleGenerativeAI) -> None:
@@ -290,11 +261,9 @@ def main() -> None:
     )
     print("✅ 초기화 완료!\n")
 
-    # Step 4. 자동 검증 테스트
-    run_test_queries(retriever, llm)
-
-    # Step 5. 인터랙티브 루프
+    # Step 4. 곧바로 사용자의 질문을 입력받는 인터랙티브 루프 실행
     run_interactive_loop(retriever, llm)
+
 
 
 if __name__ == "__main__":
