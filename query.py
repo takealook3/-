@@ -42,6 +42,7 @@ from langchain_core.prompts import PromptTemplate
 DB_DIR               = "./chroma_db"
 COLLECTION_CHECKLIST = "interior_checklist"
 COLLECTION_LAW       = "interior_law_standard"
+COLLECTION_KNOWLEDGE = "interior_knowledge"  # [추가] 시공 순서 및 FAQ 데이터 컬렉션
 LLM_MODEL            = "gemini-2.5-flash"
 
 # ── RAG 프롬프트 정의 ──────────────────────────────────────────────────────
@@ -191,13 +192,14 @@ def truncate_to_complete_sentences(text: str, max_chars: int = 3000) -> str:
 # ── 커스텀 EnsembleRetriever ─────────────────────────────────────────────
 class EnsembleRetriever(BaseRetriever):
     """
-    법령 + 체크리스트 두 컬렉션을 병합하는 커스텀 Retriever.
+    법령 + 체크리스트 + FAQ(시공지식) 세 컬렉션을 병합하는 커스텀 Retriever.
     임베딩 API 호출을 딱 1회만 수행하도록 최적화되어 속도를 높입니다.
     """
     law_db: Chroma
     checklist_db: Chroma
+    knowledge_db: Chroma  # [추가] 시공 순서 및 FAQ 지식 DB
     embeddings: GoogleGenerativeAIEmbeddings
-    k: int = 2  # 참고할 문서 개수 (각 DB에서 2개씩 총 4개 가져옴)
+    k: int = 2  # 참고할 문서 개수 (각 DB에서 2개씩 총 6개 가져옴)
     
     # [최적화] 중복 질문에 대해 API 호출을 방지하기 위한 메모리 캐시 수첩을 만듭니다.
     _query_cache: dict = {}
@@ -217,17 +219,18 @@ class EnsembleRetriever(BaseRetriever):
             query_vector = self.embeddings.embed_query(query)
             self._query_cache[query] = query_vector
         
-        # 3. 변환된 벡터를 사용해 추가 API 호출 없이 로컬 DB에서 유사한 내용을 검색합니다.
+        # 3. 변환된 벡터를 사용해 추가 API 호출 없이 로컬 DB 3곳에서 유사한 내용을 검색합니다.
         law_docs       = self.law_db.similarity_search_by_vector(query_vector, k=self.k)
         checklist_docs = self.checklist_db.similarity_search_by_vector(query_vector, k=self.k)
+        knowledge_docs = self.knowledge_db.similarity_search_by_vector(query_vector, k=self.k)  # [추가] FAQ 검색
         
-        # 두 DB에서 검색된 문서를 하나로 합쳐서 반환합니다.
-        return law_docs + checklist_docs
+        # 세 DB에서 검색된 문서를 하나로 합쳐서 반환합니다.
+        return law_docs + checklist_docs + knowledge_docs
 
 
 # ── 벡터스토어 로딩 ──────────────────────────────────────────────────────
 def load_retriever(embeddings: GoogleGenerativeAIEmbeddings) -> EnsembleRetriever:
-    """ChromaDB 컬렉션 두 개를 불러와 최적화된 EnsembleRetriever로 통합합니다."""
+    """ChromaDB 컬렉션 세 개를 불러와 최적화된 EnsembleRetriever로 통합합니다."""
     law_db = Chroma(
         collection_name=COLLECTION_LAW,
         embedding_function=embeddings,
@@ -238,10 +241,16 @@ def load_retriever(embeddings: GoogleGenerativeAIEmbeddings) -> EnsembleRetrieve
         embedding_function=embeddings,
         persist_directory=DB_DIR,
     )
-    # DB 인스턴스와 임베딩 모델을 직접 주입하여 임베딩 재사용이 가능하게 합니다.
+    knowledge_db = Chroma(
+        collection_name=COLLECTION_KNOWLEDGE,
+        embedding_function=embeddings,
+        persist_directory=DB_DIR,
+    )
+    # DB 인스턴스들과 임베딩 모델을 직접 주입합니다.
     return EnsembleRetriever(
         law_db=law_db,
         checklist_db=checklist_db,
+        knowledge_db=knowledge_db,
         embeddings=embeddings,
     )
 
