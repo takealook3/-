@@ -1,25 +1,14 @@
 """
-query.py  (KO → EN → KO 파이프라인)
+query.py  (Google Gemini-1.5-flash RAG 엔진 최적화 + 실시간 스트리밍 버전)
 ─────────────────────────────────────────────────────────────────────────────
 데이터 흐름:
   1. 사용자 한국어 질문
-      ↓  [Ollama: KO→EN 번역]
-  2. 영어 질문
-      ↓  [ChromaDB 영어 컬렉션 벡터 검색]
-  3. 영어 컨텍스트 (법령 + 체크리스트 각 2개)
-      ↓  [Ollama: 영어로 RAG 답변 생성]
-  4. 영어 답변
-      ↓  [Ollama: EN→KO 번역]
-  5. 한국어 최종 답변 출력
-
-장점:
-  - 소형 LLM(qwen3.5:0.8b)의 영어 성능이 한국어보다 훨씬 우수
-  - 영어 임베딩의 의미론적 정밀도가 높아 검색 품질 향상
-  - 각 Ollama 호출이 단일 언어 작업으로 단순화됨
-
-사용 방법:
-    python -X utf8 query.py
-    'exit' 또는 'quit' 입력 시 종료
+      ↓  [models/gemini-embedding-001 임베딩 활용]
+  2. ChromaDB 한국어 원본 컬렉션에서 관련 법률/체크리스트 문서 검색 (k=3)
+      ↓  [ChatGoogleGenerativeAI (gemini-1.5-flash) 호출]
+  3. Gemini 1.5 Flash가 참고 문서를 분석하여 정확하고 신뢰할 수 있는 한국어 RAG 답변 생성
+      ↓  [실시간 토큰 스트리밍]
+  4. 한국어 최종 답변 화면에 즉시 스트리밍 출력
 """
 
 import os
@@ -30,92 +19,109 @@ from typing import List
 
 from dotenv import load_dotenv
 
-if sys.stdout.encoding != "utf-8":
-    sys.stdout = open(sys.stdout.fileno(), mode="w", encoding="utf-8", buffering=1)
+# stdout 인코딩 재설정 (한글 출력 깨짐 방지)
+try:
+    if sys.stdout.encoding != "utf-8":
+        sys.stdout.reconfigure(encoding="utf-8")
+except AttributeError:
+    pass
+
+# .env 절대 경로 기반 안전 로드
+current_dir = os.path.dirname(os.path.abspath(__file__))
+dotenv_path = os.path.join(current_dir, ".env")
+load_dotenv(dotenv_path)
 
 from langchain_community.vectorstores import Chroma
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_ollama import ChatOllama
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnableLambda
-from langchain_classic.prompts import PromptTemplate
-
-load_dotenv()
+from langchain_core.prompts import PromptTemplate
 
 # ── 상수 ──────────────────────────────────────────────────────────────────
 DB_DIR               = "./chroma_db"
-COLLECTION_CHECKLIST = "interior_checklist_en"
-COLLECTION_LAW       = "interior_law_standard_en"
-LLM_MODEL            = "qwen3.5:0.8b"
+COLLECTION_CHECKLIST = "interior_checklist"
+COLLECTION_LAW       = "interior_law_standard"
+LLM_MODEL            = "gemini-2.5-flash"
 
-# ── 프롬프트 정의 ─────────────────────────────────────────────────────────
-
-# Step 1: 한국어 → 영어 번역
-KO_TO_EN_TEMPLATE = """\
-Translate the following Korean text into English.
-Output ONLY the English translation with no explanation or extra text.
-
-Korean: {text}
-English:"""
-
-# Step 2: 영어로 RAG 답변 생성
+# ── RAG 프롬프트 정의 ──────────────────────────────────────────────────────
 RAG_TEMPLATE = """\
-You are an expert assistant on Korean interior architecture regulations and construction standards.
-Using ONLY the information in the [Reference Documents] below, answer the [Question] clearly and concisely.
+당신은 대한민국 실내건축 기준 고시 및 인테리어 공정 표준 체크리스트 전문가입니다.
+반드시 아래 제공된 [참고 문서]의 내용만을 기반으로 하여 사용자의 [질문]에 대해 정확하고 신뢰할 수 있게 한국어로 답변하십시오.
 
-Rules:
-- Cite the article number (e.g., "Article 5") when referencing legal standards.
-- Use bullet points for key items.
-- If the answer is not found in the documents, say: "The provided documents do not contain information on this topic."
-- Answer in English only.
+답변 규칙:
+1. 제공된 [참고 문서]에 포함된 팩트(Fact)만을 근거로 작성하십시오. 주관적인 추정이나 문서에 없는 내용은 절대 지어내지 마십시오.
+2. 법률(고시) 내용을 인용할 때는 반드시 해당 조항 번호(예: "제5조")와 조항 제목을 명시하십시오.
+3. 인테리어 공정 체크리스트 내용을 인용할 때는 해당 공정 단계 및 공정 항목명을 함께 언급하십시오.
+4. 가독성을 위해 핵심 사항은 글머리 기호(•) 또는 번호 매기기를 사용하여 구조화하십시오.
+5. 만약 질문에 답변하기에 참고 문서의 정보가 부족하거나 찾을 수 없다면, 억지로 답변하지 말고 정확하게 다음과 같이 답변하십시오: "제공된 문서에서 관련 정보를 찾을 수 없습니다."
 
-[Reference Documents]
+[참고 문서]
 {context}
 
-[Question]
+[질문]
 {question}
 
-[Answer]"""
-
-# Step 3: 영어 → 한국어 번역
-EN_TO_KO_TEMPLATE = """\
-Translate the following English text into natural Korean.
-Output ONLY the Korean translation with no explanation or extra text.
-
-English: {text}
-Korean:"""
+[답변]"""
 
 
-# ── 유틸리티 ──────────────────────────────────────────────────────────────
-def strip_think_tags(text: str) -> str:
-    """qwen 계열 모델의 <think>...</think> 사고 과정 태그를 제거합니다."""
-    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-
-
-def call_llm(llm: ChatOllama, prompt_template: str, **kwargs) -> str:
+# ── 스트리밍 유틸리티 ───────────────────────────────────────────────────────
+def call_llm_stream(llm: ChatGoogleGenerativeAI, prompt_template: str, **kwargs) -> str:
     """
-    단일 LLM 호출 헬퍼.
-    prompt_template의 {변수}를 kwargs로 채워 LLM에 전달하고 문자열 반환.
-    빈 응답 시 최대 3회 재시도합니다.
+    LLM 출력을 실시간 스트리밍 수신하여 화면에 즉시 출력하고, 최종 누적 답변을 반환합니다.
     """
-    prompt = PromptTemplate.from_template(prompt_template)
-    chain  = prompt | llm | StrOutputParser() | RunnableLambda(strip_think_tags)
+    prompt_text = prompt_template.format(**kwargs)
     
-    for attempt in range(1, 4):  # 최대 3회 시도
+    full_response = []
+    # ChatOllama의 stream 메소드 직접 호출
+    for chunk in llm.stream(prompt_text):
+        content = chunk.content
         try:
-            result = chain.invoke(kwargs).strip()
-            if result:
-                return result
-        except Exception as e:
-            print(f"  ⚠️  LLM 호출 오류 (시도 {attempt}/3): {e}")
-        
-        if attempt < 3:
-            time.sleep(2)  # 빈 응답 시 잠시 대기 후 재시도
+            print(content, end="", flush=True)
+        except Exception:
+            pass
+        full_response.append(content)
+    return "".join(full_response).strip()
+
+
+# ── 텍스트 전처리 유틸리티 ──────────────────────────────────────────────────
+def sanitize_text(text: str) -> str:
+    """
+    한글, 영문, 숫자, 표준 구두점을 제외한 모든 눈에 보이지 않는 제어문자 및 특수 유니코드 기호(OOV 토큰)를 제거합니다.
+    """
+    # 윈도우 스타일 개행 표준화
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     
-    return ""  # 3회 모두 실패 시 빈 문자열 반환
+    # 허용하는 문자 패턴 정의 (한글, 영문, 숫자, 공백, 표준 키보드 특수문자 및 기호)
+    allowed_pattern = re.compile(r"[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\s.,?!:;@#$%^&*()_+={}\[\]|\\<>\-~/`'\"★☆●■▶◀▲▼◆◇•#]")
+    
+    # 허용 패턴 이외의 모든 문자 제거
+    text = allowed_pattern.sub("", text)
+    
+    # \xa0 (Non-breaking space) 등 이상한 유니코드 공백을 일반 공백으로 변환
+    text = re.sub(r"\s+", " ", text)
+    
+    # 연속 줄바꿈 방지
+    text = re.sub(r"\n+", "\n", text)
+    
+    return text.strip()
+
+
+def truncate_to_complete_sentences(text: str, max_chars: int = 3000) -> str:
+    """
+    텍스트를 max_chars 글자 내외로 자르되, 
+    마지막 문장이 마침표('.')로 끝나 완결된 문장 구조를 갖추도록 잘라냅니다.
+    """
+    if len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars]
+    last_period = truncated.rfind(".")
+    if last_period != -1:
+        return truncated[:last_period + 1].strip()
+    last_newline = truncated.rfind("\n")
+    if last_newline != -1:
+        return truncated[:last_newline].strip()
+    return truncated.strip()
 
 
 # ── 커스텀 EnsembleRetriever ─────────────────────────────────────────────
@@ -140,7 +146,7 @@ class EnsembleRetriever(BaseRetriever):
 
 # ── 벡터스토어 로딩 ──────────────────────────────────────────────────────
 def load_retriever(embeddings: GoogleGenerativeAIEmbeddings) -> EnsembleRetriever:
-    """영어 ChromaDB 컬렉션 두 개를 EnsembleRetriever로 통합합니다."""
+    """ChromaDB 컬렉션 두 개를 EnsembleRetriever로 통합합니다."""
     law_db = Chroma(
         collection_name=COLLECTION_LAW,
         embedding_function=embeddings,
@@ -152,54 +158,45 @@ def load_retriever(embeddings: GoogleGenerativeAIEmbeddings) -> EnsembleRetrieve
         persist_directory=DB_DIR,
     )
     return EnsembleRetriever(
-        law_retriever=law_db.as_retriever(search_kwargs={"k": 2}),
-        checklist_retriever=checklist_db.as_retriever(search_kwargs={"k": 2}),
+        law_retriever=law_db.as_retriever(search_kwargs={"k": 3}),
+        checklist_retriever=checklist_db.as_retriever(search_kwargs={"k": 3}),
     )
 
 
-# ── KO → EN → KO 3단계 파이프라인 ────────────────────────────────────────
+# ── RAG 파이프라인 (Direct Korean RAG) ───────────────────────────────────
 def answer_question(
     korean_question: str,
     retriever: EnsembleRetriever,
-    llm: ChatOllama,
+    llm: ChatGoogleGenerativeAI,
 ) -> tuple[str, List[Document]]:
     """
-    한국어 질문을 받아 KO→EN→KO 파이프라인으로 한국어 답변을 반환합니다.
-
-    Returns:
-        (한국어_답변, 참고한_문서_리스트)
+    한국어 질문으로 ChromaDB에서 관련 한국어 문서를 직접 검색하고,
+    검색 결과 컨텍스트를 제공하여 Gemini가 한국어로 답변하도록 처리합니다.
     """
-    # ── Step 1. 한국어 질문 → 영어로 번역 ─────────────────────────────
-    print("  [1/3] 질문을 영어로 번역 중...")
-    english_question = call_llm(llm, KO_TO_EN_TEMPLATE, text=korean_question)
-    print(f"        → {english_question}")
-
-    # ── Step 2. 영어 질문으로 ChromaDB 검색 후 영어로 답변 생성 ────────
-    print("  [2/3] 영어로 RAG 답변 생성 중...")
-    source_docs = retriever.invoke(english_question)
-    context     = "\n\n---\n\n".join(doc.page_content for doc in source_docs)
-    english_answer = call_llm(
+    # ── Step 1. 한국어 질문으로 직접 ChromaDB 검색 ─────────────────────
+    print("  [1/2] ChromaDB에서 관련 문서 검색 중...")
+    source_docs = retriever.invoke(korean_question)
+    
+    # ── Step 2. 검색된 한국어 문서를 참고하여 한국어로 RAG 답변 생성 (스트리밍) ──
+    print(f"  [2/2] 한국어 RAG 답변 생성 중 (모델: {LLM_MODEL})...\n")
+    context = "\n\n---\n\n".join(truncate_to_complete_sentences(sanitize_text(doc.page_content), 3000) for doc in source_docs)
+    
+    print("💬 답변:")
+    print("─" * 60)
+    korean_answer = call_llm_stream(
         llm, RAG_TEMPLATE,
         context=context,
-        question=english_question,
+        question=korean_question,
     )
-
-    # ── Step 3. 영어 답변 → 한국어로 번역 ─────────────────────────────
-    print("  [3/3] 답변을 한국어로 번역 중...")
-    korean_answer = call_llm(llm, EN_TO_KO_TEMPLATE, text=english_answer)
-
+    print("\n" + "─" * 60)
+    
     return korean_answer, source_docs
 
 
-# ── 출력 포매터 ──────────────────────────────────────────────────────────
-def print_answer(korean_answer: str, source_docs: List[Document]) -> None:
-    print("\n" + "─" * 60)
-    print("💬 답변:")
-    print("─" * 60)
-    print(korean_answer)
-
+# ── 소스 문서 출력 포매터 ──────────────────────────────────────────────────
+def print_sources(source_docs: List[Document]) -> None:
     if source_docs:
-        print("\n📚 참고한 문서:")
+        print("📚 참고한 문서:")
         seen: set[str] = set()
         for doc in source_docs:
             meta   = doc.metadata
@@ -214,7 +211,7 @@ def print_answer(korean_answer: str, source_docs: List[Document]) -> None:
 
 
 # ── 자동 검증 테스트 ─────────────────────────────────────────────────────
-def run_test_queries(retriever: EnsembleRetriever, llm: ChatOllama) -> None:
+def run_test_queries(retriever: EnsembleRetriever, llm: ChatGoogleGenerativeAI) -> None:
     test_questions = [
         "실내에 유리 칸막이 설치할 때 어떤 안전 기준을 지켜야 해?",
         "화장실 타일 바닥 미끄럼 방지 기준이 뭐야?",
@@ -227,23 +224,26 @@ def run_test_queries(retriever: EnsembleRetriever, llm: ChatOllama) -> None:
 
     for i, question in enumerate(test_questions, 1):
         print(f"\n🧪 [테스트 {i}] {question}")
+        start_time = time.time()
         try:
             answer, docs = answer_question(question, retriever, llm)
-            print_answer(answer, docs)
+            print_sources(docs)
         except Exception as exc:
             print(f"  ❌ 오류: {exc}")
+        elapsed = time.time() - start_time
+        print(f"⏱️ 소요 시간: {elapsed:.2f}초")
 
         if i < len(test_questions):
-            print("  ⏸  다음 질문까지 3초 대기...")
-            time.sleep(3)
+            print("  ⏸  다음 질문까지 1초 대기...")
+            time.sleep(1)
 
     print("\n✅ 자동 검증 완료")
 
 
 # ── 인터랙티브 루프 ──────────────────────────────────────────────────────
-def run_interactive_loop(retriever: EnsembleRetriever, llm: ChatOllama) -> None:
+def run_interactive_loop(retriever: EnsembleRetriever, llm: ChatGoogleGenerativeAI) -> None:
     print("\n" + "=" * 60)
-    print("  실내건축 기준 RAG 질의응답 (KO→EN→KO 파이프라인)")
+    print("  실내건축 기준 RAG 질의응답 (Google Gemini API LLM)")
     print("  (종료: 'exit' 또는 'quit' 입력)")
     print("=" * 60)
 
@@ -262,29 +262,31 @@ def run_interactive_loop(retriever: EnsembleRetriever, llm: ChatOllama) -> None:
             print("\n프로그램을 종료합니다.")
             break
 
+        start_time = time.time()
         try:
             answer, docs = answer_question(user_input, retriever, llm)
-            print_answer(answer, docs)
+            print_sources(docs)
         except Exception as exc:
             print(f"\n❌ 오류 발생: {exc}")
+        elapsed = time.time() - start_time
+        print(f"⏱️ 소요 시간: {elapsed:.2f}초")
 
 
 # ── 메인 ─────────────────────────────────────────────────────────────────
 def main() -> None:
-    # Step 1. 임베딩 모델 초기화 (검색에만 사용, API 호출 1회)
+    # Step 1. 임베딩 모델 초기화
     print("🔧 Gemini 임베딩 모델 초기화 중...")
     embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
 
-    # Step 2. 영어 컬렉션 로드
-    print("📂 ChromaDB 영어 컬렉션 로드 중...")
+    # Step 2. 한국어 원본 컬렉션 로드
+    print("📂 ChromaDB 한국어 원본 컬렉션 로드 중...")
     retriever = load_retriever(embeddings)
 
-    # Step 3. Ollama 로컬 LLM 초기화
-    print(f"🤖 Ollama LLM 초기화 중... (모델: {LLM_MODEL})")
-    llm = ChatOllama(
+    # Step 3. Google Gemini API LLM 초기화
+    print(f"🤖 Google Gemini LLM 초기화 중... (모델: {LLM_MODEL})")
+    llm = ChatGoogleGenerativeAI(
         model=LLM_MODEL,
-        temperature=0.1,  # 번역/사실 기반 작업이므로 더 낮게 설정
-        think=False,      # qwen3 계열 thinking 비활성화
+        temperature=0.2,
     )
     print("✅ 초기화 완료!\n")
 
