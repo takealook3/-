@@ -440,6 +440,7 @@ def main() -> None:
     llm = ChatGoogleGenerativeAI(
         model=LLM_MODEL,
         temperature=0.2,
+        max_retries=1, # 429 할당량 초과 및 지연 대기 루프를 최소화하여 타임아웃 방지
     )
     print("✅ 초기화 완료!\n")
 
