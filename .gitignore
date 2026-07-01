@@ -1,5 +1,32 @@
-.env
+# 가상환경 및 라이브러리
 venv/
+.venv/
+env/
+ComfyUI/
+
+# 파이썬 캐시 및 임시 파일
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# OS 및 IDE 설정
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.gemini/
+.agents/
+
+# 대용량 모델 가중치 및 빌드 파일
+*.pt
+*.pth
+*.onnx
+*.exe
+
+# 데이터베이스 캐시
 chroma_db/
+
+# 환경 변수 및 비밀 정보
+.env
+.env.*
