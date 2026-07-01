@@ -1,0 +1,5 @@
+venv/
+ComfyUI/
+.gemini/
+__pycache__/
+*.pyc
