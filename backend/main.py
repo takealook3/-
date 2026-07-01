@@ -314,33 +314,8 @@ def process_mock_image(
         cb_node = ImageContrastBrightness()
         img_tensor = cb_node.adjust(img_tensor, contrast=contrast, brightness=brightness)[0]
         
-        # 텍스트 합성 구성
-        overlay_msg = text_overlay or "ZipPT AI Processing"
-        if style_name:
-            overlay_msg += f"\nStyle: {style_name}"
-        if prompt_text:
-            overlay_msg += f"\nPrompt: {prompt_text}"
-            
-        text_node = ImageTextOverlay()
-        img_tensor = text_node.draw_text(
-            image=img_tensor,
-            text=overlay_msg,
-            font_size=20,
-            x_position=20,
-            y_position=20,
-            font_color_hex="#00FF00"
-        )[0]
-        
-        # 부분 편집 BBox 지정 시 영역 하이라이트 텍스트 오버레이 추가
-        if bbox and len(bbox) == 4:
-            img_tensor = text_node.draw_text(
-                image=img_tensor,
-                text=f"[Edit Area: {bbox}]",
-                font_size=16,
-                x_position=max(0, bbox[0]),
-                y_position=max(0, bbox[1] - 20),
-                font_color_hex="#FF0000"
-            )[0]
+        # [텍스트 오버레이 비활성화] 사용자의 요청에 따라 이미지 내 가이드/디버그 텍스트 인쇄를 생략합니다.
+        pass
             
         # 텐서 복원
         if hasattr(img_tensor, 'numpy'):
