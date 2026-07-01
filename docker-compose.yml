@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # 1. FastAPI 백엔드 웹 서버
+  web-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: zippt-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./results:/app/results
+      - ./masks:/app/masks
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - COMFYUI_API_URL=http://comfyui-server:8188
+    depends_on:
+      - comfyui-server
+    restart: always
+
+  # 2. ComfyUI AI 이미지 가공 전용 서버
+  comfyui-server:
+    image: yanwk/comfyui:latest-gpu # GPU 사용 가능한 ComfyUI 공식/최적 이미지
+    container_name: zippt-comfyui
+    ports:
+      - "8188:8188"
+    volumes:
+      # 로컬에 다운로드 완료된 AI 모델 폴더를 컨테이너 내부로 그대로 공유 마운트
+      - C:/Users/USER/Desktop/ComfyUI_windows_portable_nvidia/ComfyUI_windows_portable/ComfyUI/models:/home/user/ComfyUI/models
+      - C:/Users/USER/Desktop/ComfyUI_windows_portable_nvidia/ComfyUI_windows_portable/ComfyUI/input:/home/user/ComfyUI/input
+      - C:/Users/USER/Desktop/ComfyUI_windows_portable_nvidia/ComfyUI_windows_portable/ComfyUI/output:/home/user/ComfyUI/output
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu] # 호스트의 NVIDIA GPU 자원을 컨테이너에 완벽 바인딩
+    restart: always

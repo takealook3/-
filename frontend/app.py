@@ -4,7 +4,29 @@
 import streamlit as st
 import time
 import requests
-from PIL import Image
+from PIL import Image, ImageDraw
+from streamlit_drawable_canvas import st_canvas
+
+# 🐒 Streamlit 1.30+ 버전과 streamlit-drawable-canvas 간의 호환성 버그 해결을 위한 멍키 패치
+class DummyLayoutConfig:
+    def __init__(self, width):
+        self.width = width
+
+try:
+    import streamlit.elements.image as st_image
+    from streamlit.elements.lib.image_utils import image_to_url as original_image_to_url
+    
+    def wrapped_image_to_url(image, width_or_config, *args, **kwargs):
+        # 만약 두 번째 인자가 정수형 너비(width)라면 DummyLayoutConfig 객체로 래핑하여 시그니처 마찰 방지
+        if isinstance(width_or_config, int):
+            layout_config = DummyLayoutConfig(width=width_or_config)
+        else:
+            layout_config = width_or_config
+        return original_image_to_url(image, layout_config, *args, **kwargs)
+        
+    st_image.image_to_url = wrapped_image_to_url
+except Exception as e:
+    pass
 
 # 웹 페이지 탭 제목과 아이콘 설정
 st.set_page_config(page_title="AI 인테리어 스튜디오", page_icon="🏠", layout="wide")
@@ -28,7 +50,7 @@ def request_image_generation(image_id, style, strength, prompt):
     return response.json()
 
 
-def call_api_transform_interior(image_file, style, strength, keep_structure):
+def call_api_transform_interior(image_file, strength, prompt):
     """입력 화면에서 '변환하기' 버튼을 눌렀을 때 호출되는 메인 처리 함수"""
     try:
         # 1단계: 백엔드 이미지 업로드
@@ -43,57 +65,24 @@ def call_api_transform_interior(image_file, style, strength, keep_structure):
         image_id = res_data.get("data", {}).get("image_id")
         st.session_state.last_uploaded_image_id = image_id
         
-        # 2단계: 스타일 변환 수행
-        # 스타일이 Anti-graffiti Clean인 경우 낙서 제거 API 호출, 그 외엔 일반 이미지 생성 API 호출
-        if style == "Anti-graffiti Clean":
-            url = f"{BACKEND_URL}/api/graffiti/remove"
-            payload = {
-                "image_id": image_id,
-                "session_id": "room_1",
-                "mode": "auto",
-                "prompt": "Remove graffiti and restore clean wall surface"
+        # 2단계: 사용자가 직접 작성한 프롬프트로 스타일 변환 수행 (room_redesign_workflow.json 적용)
+        api_result = request_image_generation(image_id, "Custom Style", strength, prompt)
+        
+        if api_result.get("success"):
+            data = api_result.get("data", {})
+            result_url = BACKEND_URL + data.get("generated_image_url")
+            
+            # 워크플로우 실시간 상태 기록
+            st.session_state.last_workflow_info = data.get("workflow") or {
+                "workflow": "room_redesign_workflow.json",
+                "status": "loaded",
+                "nodes": ["LoadImage", "ControlNetLoader", "PromptCLIPEncode", "KSampler", "VAEDecode", "SaveImage"],
+                "comfyui_status": "offline",
+                "execution_mode": "mock_fallback"
             }
-            api_res = requests.post(url, json=payload, timeout=60)
-            res_json = api_res.json()
+            st.toast(f"✅ 백엔드 인테리어 변환 통신 성공!")
+            return result_url
             
-            if res_json.get("success"):
-                data = res_json.get("data", {})
-                result_url = BACKEND_URL + data.get("result_image_url")
-                # 워크플로우 실시간 상태 기록
-                st.session_state.last_workflow_info = data.get("workflow") or {
-                    "workflow": "user_masked_inpainting_workflow.json",
-                    "status": "loaded",
-                    "nodes": ["LoadImage", "MaskImage", "SAMDetector", "SEGSDetailer", "KSampler", "SaveImage"],
-                    "comfyui_status": "offline",
-                    "execution_mode": "mock_fallback"
-                }
-                st.toast("✅ 낙서 제거 백엔드 통신 성공!")
-                return result_url
-        else:
-            prompt_map = {
-                "Urban Minimal": "A minimal modern urban living room, tidy and sleek style, high resolution",
-                "Neutral Wall Restore": "A cozy neutral toned bedroom wall with wooden furniture and warm lights",
-                "Gallery White": "A bright gallery white spacious studio room, minimalist decor, artistic setup"
-            }
-            prompt = prompt_map.get(style, "Beautiful interior redesign")
-            
-            api_result = request_image_generation(image_id, style, strength, prompt)
-            
-            if api_result.get("success"):
-                data = api_result.get("data", {})
-                result_url = BACKEND_URL + data.get("generated_image_url")
-                
-                # 워크플로우 시뮬레이션 정보 세션에 저장
-                st.session_state.last_workflow_info = data.get("workflow") or {
-                    "workflow": "room_redesign_workflow.json",
-                    "status": "loaded",
-                    "nodes": ["LoadImage", "ControlNetLoader", "PromptCLIPEncode", "KSampler", "VAEDecode", "SaveImage"],
-                    "comfyui_status": "offline",
-                    "execution_mode": "mock_fallback"
-                }
-                st.toast(f"✅ 백엔드 스타일 변환 통신 성공!")
-                return result_url
-                
     except Exception as e:
         st.warning(f"⚠️ 백엔드 서버 연결 안내: 오프라인 모드로 작동합니다. ({e})")
         
@@ -159,6 +148,8 @@ if "chat_messages" not in st.session_state:
     st.session_state.chat_messages = [{"role": "assistant", "content": "안녕하세요! AI 인테리어 상담사입니다. 어떤 방을 꾸미고 싶으신가요?", "references": []}]
 if "last_workflow_info" not in st.session_state:
     st.session_state.last_workflow_info = None
+if "edit_points" not in st.session_state:
+    st.session_state.edit_points = []
 
 
 # =========================================================
@@ -215,7 +206,19 @@ if st.session_state.current_page == "① 입력 화면":
         uploaded_file = st.file_uploader("이미지 파일 선택 (JPG, PNG)", type=["jpg", "jpeg", "png"])
         
         if uploaded_file is not None:
-            st.session_state.uploaded_image = uploaded_file
+            # 신규 이미지 업로드 시 즉시 백엔드 스토리지로 업로드 태워 ID 선제적 자동 확보 (UX 혁신)
+            if st.session_state.uploaded_image != uploaded_file:
+                st.session_state.uploaded_image = uploaded_file
+                try:
+                    files = {"image": ("upload.png", uploaded_file.getvalue(), "image/png")}
+                    up_res = requests.post(f"{BACKEND_URL}/api/images/upload", files=files, timeout=5)
+                    res_data = up_res.json()
+                    if res_data.get("success"):
+                        image_id = res_data.get("data", {}).get("image_id")
+                        st.session_state.last_uploaded_image_id = image_id
+                        st.toast("💡 원본 이미지 백엔드 선제 업로드 완료 (ID 확보!)")
+                except Exception as e:
+                    st.warning(f"⚠️ 백엔드 업로드 임시 지연: {e}")
             st.image(uploaded_file, caption="✅ 업로드된 방 사진 미리보기", use_container_width=True)
         elif st.session_state.uploaded_image is not None:
             st.image(st.session_state.uploaded_image, caption="✅ 이전 업로드된 사진", use_container_width=True)
@@ -223,48 +226,34 @@ if st.session_state.current_page == "① 입력 화면":
             st.info("👈 상단의 'Browse files' 버튼을 눌러 사진을 올려주세요.")
             
     with col2:
-        st.subheader("2️⃣ 변환 스타일 선택 (필수 요소)")
-        st.write("공간을 새롭게 재탄생시킬 무드를 선택해 주세요.")
+        st.subheader("2️⃣ 스타일 설명 입력 (직접 작성)")
+        st.write("원하시는 방의 스타일이나 변경하고 싶은 세부 인테리어 디자인을 직접 적어주세요.")
         
-        style_list = [
-            "Anti-graffiti Clean",
-            "Urban Minimal",
-            "Neutral Wall Restore",
-            "Gallery White"
-        ]
-        
-        chosen_style = st.radio(
-            "인테리어 변환 옵션:",
-            style_list,
-            index=style_list.index(st.session_state.selected_style) if st.session_state.selected_style in style_list else 0
+        # 사용자가 원하는 인테리어 스타일을 자유롭게 입력받는 텍스트 입력 칸
+        custom_prompt = st.text_input(
+            "원하는 공간 컨셉 및 인테리어 무드 설명:",
+            placeholder="예: 따뜻한 우드 톤의 가구들과 아늑한 조명이 있는 북유럽풍 침실"
         )
-        st.session_state.selected_style = chosen_style
         
-        st.write("📌 **선택하신 스타일 설명:**")
-        if chosen_style == "Anti-graffiti Clean":
-            st.info("🧼 **Anti-graffiti Clean**: 벽면의 낙서나 얼룩을 깔끔하게 지우고 깨끗한 원상태로 복원합니다. [user_masked_inpainting_workflow.json]")
-        elif chosen_style == "Urban Minimal":
-            st.info("🏙️ **Urban Minimal**: 도시적인 감성의 불필요한 장식을 배제한 세련되고 심플한 미니멀 공간을 연출합니다. [room_redesign_workflow.json]")
-        elif chosen_style == "Neutral Wall Restore":
-            st.info("🌿 **Neutral Wall Restore**: 차분하고 따뜻한 뉴트럴 톤으로 편안하게 벽면을 재생합니다. [room_redesign_workflow.json]")
-        elif chosen_style == "Gallery White":
-            st.info("🤍 **Gallery White**: 미술관 갤러리처럼 화사하고 넓어 보이는 밝은 순백색 톤으로 공간을 탈바꿈합니다. [room_redesign_workflow.json]")
-            
+        st.info("💡 **팁:** 한국어 질문도 백엔드에서 Stable Diffusion 전용 영문 프롬프트로 자동 번역 및 윤색되어 최고 품질로 렌더링됩니다!")
         st.write("")
         
-        if st.button("🚀 선택한 스타일로 변환 실행하기", type="primary", use_container_width=True):
-            if st.session_state.uploaded_image is None:
+        if st.button("🚀 스타일 변환 실행하기", type="primary", use_container_width=True):
+            if not custom_prompt:
+                st.warning("⚠️ 원하시는 스타일 설명을 먼저 작성해 주세요!")
+            elif st.session_state.uploaded_image is None:
                 st.warning("⚠️ 사진이 없습니다! 왼쪽에서 방 사진을 먼저 업로드해 주세요.")
             else:
-                with st.spinner(f"AI가 '{chosen_style}' (강도: {strength}%) 스타일로 변환 중입니다..."):
-                    res_img_url = call_api_transform_interior(st.session_state.uploaded_image, chosen_style, strength, keep_structure)
+                with st.spinner(f"AI가 작성하신 스타일에 맞춰 (변환도: {strength}%) 인테리어를 변경 중입니다..."):
+                    res_img_url = call_api_transform_interior(st.session_state.uploaded_image, strength, custom_prompt)
                     if res_img_url:
                         st.session_state.result_image = res_img_url
+                        st.session_state.selected_style = custom_prompt  # 결과 화면 표출용 스타일 기록
                         st.success("🎉 인테리어 변환 성공!")
                         st.session_state.current_page = "② 결과 화면"
                         st.rerun()
                     else:
-                        st.error("❌ 백엔드 처리 중 문제가 발생하여 데모 이미지로 대체하지 못했습니다. 서버 상태를 확인하세요.")
+                        st.error("❌ 백엔드 처리 중 문제가 발생하여 변환 결과를 생성하지 못했습니다. 서버 상태를 확인하세요.")
 
 
 # =========================================================
@@ -288,7 +277,11 @@ elif st.session_state.current_page == "② 결과 화면":
                 
         with col_res:
             st.subheader(f"🎨 AI 변환 사진 ({st.session_state.selected_style})")
-            st.image(st.session_state.result_image, caption=f"After - {st.session_state.selected_style}", use_container_width=True)
+            # 브라우저 캐시 방지를 위해 이미지 URL 끝에 실시간 타임스탬프 파라미터 삽입
+            res_img = st.session_state.result_image
+            if isinstance(res_img, str):
+                res_img = f"{res_img}&t={int(time.time())}" if "?" in res_img else f"{res_img}?t={int(time.time())}"
+            st.image(res_img, caption=f"After - {st.session_state.selected_style}", use_container_width=True)
             
         st.write("---")
         
@@ -330,41 +323,100 @@ elif st.session_state.current_page == "② 결과 화면":
 # =========================================================
 elif st.session_state.current_page == "③ 편집 화면":
     st.title("🛠️ 부분 가구 편집기")
-    st.write("이미지에서 수정하고 싶은 영역의 좌표를 설정하고, 바꾸고 싶은 내용을 적어주세요. [furniture_inpainting_workflow.json]")
+    st.write("이미지에서 수정하고 싶은 가구 영역을 마우스로 **드래그(Drag)**하여 사각형을 그려주세요.")
     
-    col_img, col_tool = st.columns([1, 1])
+    col_img, col_tool = st.columns([1.2, 0.8])
+    
+    current_img = st.session_state.edited_image or st.session_state.result_image or st.session_state.uploaded_image
+    
+    # 로컬 디렉터리에 저장된 원본 또는 결과 이미지 오픈
+    import os
+    pil_img = None
+    if st.session_state.last_uploaded_image_id:
+        for ext in (".jpg", ".jpeg", ".png"):
+            path_candidate = os.path.join("uploads", f"{st.session_state.last_uploaded_image_id}{ext}")
+            if os.path.exists(path_candidate):
+                try:
+                    pil_img = Image.open(path_candidate)
+                    break
+                except Exception:
+                    pass
+                    
+    if pil_img is None and current_img:
+        try:
+            pil_img = Image.open(current_img)
+        except Exception:
+            pass
+
+    # 드래그 좌표 정보 파싱 변수
+    dragged_coords = None
+
     with col_img:
-        st.subheader("현재 이미지")
-        current_img = st.session_state.edited_image or st.session_state.result_image or st.session_state.uploaded_image
-        if current_img:
-            st.image(current_img, use_container_width=True)
+        st.subheader("현재 이미지 (마우스 드래그로 영역 선택)")
+        if pil_img:
+            # 캔버스 너비와 높이 스케일링 설정
+            w, h = pil_img.size
+            aspect_ratio = w / h
+            canvas_width = 700
+            canvas_height = int(canvas_width / aspect_ratio)
+            
+            # 실시간 빨간색 사각형 박스 드래그 캔버스 렌더링
+            canvas_result = st_canvas(
+                fill_color="rgba(255, 0, 0, 0.25)",  # 반투명 빨간색 채우기
+                stroke_width=3,
+                stroke_color="#ff0000",              # 선명한 빨간색 테두리
+                background_image=pil_img,
+                update_streamlit=True,
+                height=canvas_height,
+                width=canvas_width,
+                drawing_mode="rect",                 # 사각형 드로잉 모드 활성화!
+                key="canvas_edit",
+            )
+            
+            # 실시간으로 그려진 사각형 정보 검출
+            if canvas_result.json_data is not None:
+                objects = canvas_result.json_data.get("objects", [])
+                if objects:
+                    # 가장 최근에 그린 드래그 박스 정보
+                    rect = objects[-1]
+                    scale_x = w / canvas_width
+                    scale_y = h / canvas_height
+                    
+                    rx = rect["left"] * scale_x
+                    ry = rect["top"] * scale_y
+                    rw = rect["width"] * scale_x
+                    rh = rect["height"] * scale_y
+                    
+                    x_min, x_max = sorted([int(rx), int(rx + rw)])
+                    y_min, y_max = sorted([int(ry), int(ry + rh)])
+                    dragged_coords = [x_min, y_min, x_max, y_max]
+                    
+                    st.success(f"✅ 영역 지정 완료! 원본 기준 좌표: [{x_min}, {y_min}] ~ [{x_max}, {y_max}]")
+                else:
+                    st.info("🖱️ 이미지 위에서 마우스를 꾹 누르고 드래그하여 교체할 영역을 감싸 주세요.")
         else:
-            st.info("이미지가 없습니다.")
+            st.info("⚠️ 편집할 원본 이미지가 없습니다. '① 입력 화면'에서 먼저 사진을 업로드해 주세요.")
             
     with col_tool:
-        st.subheader("1. 영역 선택 좌표 (BBox 지정)")
-        c1, c2 = st.columns(2)
-        with c1:
-            sx = st.number_input("시작 X 좌표", value=100)
-            sy = st.number_input("시작 Y 좌표", value=150)
-        with c2:
-            w = st.number_input("너비", value=200)
-            h = st.number_input("높이", value=250)
-            
-        st.subheader("2. 바꿀 내용 설명")
-        prompt = st.text_input("예: '소파를 하얀색으로 바꿔줘'")
+        st.subheader("영역 조작 및 명령어")
+        st.write("※ 영역을 다시 그리시려면 마우스로 이미지 위의 다른 곳을 새로 드래그하시면 됩니다.")
+        st.divider()
+        st.subheader("바꿀 내용 설명")
+        prompt = st.text_input("예: '침대로 바꿔줘', '하얀색 모던 소파로 변경'", value="")
+        
         if st.button("✨ 편집 적용하기", type="primary", use_container_width=True):
             if not prompt:
                 st.warning("설명을 입력해주세요!")
             elif st.session_state.last_uploaded_image_id is None:
-                st.warning("⚠️ 업로드된 이미지 ID가 없습니다. '① 입력 화면'에서 먼저 사진을 업로드 및 스타일 변환해 주세요.")
+                st.warning("⚠️ 업로드된 이미지 ID가 없습니다. '① 입력 화면'에서 사진을 먼저 업로드해 주세요.")
+            elif dragged_coords is None:
+                st.warning("⚠️ 이미지 위에서 마우스 드래그로 사각형 영역을 먼저 그려주세요!")
             else:
-                with st.spinner("AI가 가구 부분 편집 및 교체 중..."):
-                    coords = [int(sx), int(sy), int(sx + w), int(sy + h)]
-                    res_edited_url = call_api_edit_furniture(st.session_state.last_uploaded_image_id, coords, prompt)
+                with st.spinner("AI가 드래그한 영역을 읽어 인페인팅 및 가구 교체 중..."):
+                    res_edited_url = call_api_edit_furniture(st.session_state.last_uploaded_image_id, dragged_coords, prompt)
                     if res_edited_url:
                         st.session_state.edited_image = res_edited_url
-                        st.success("완료!")
+                        st.success("가구 편집 성공!")
                         st.rerun()
                     else:
                         st.error("가구 편집 연동에 실패했습니다.")
@@ -381,10 +433,7 @@ elif st.session_state.current_page == "④ 챗봇 화면":
     for msg in st.session_state.chat_messages:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
-            if msg.get("references"):
-                with st.expander("📚 답변의 신뢰도 및 참고 근거 확인"):
-                    for ref in msg["references"]:
-                        st.write(f"- {ref}")
+            pass
                         
     # 자주 묻는 질문 RAG 퀵 링크 버튼 배치 (FAQ.py 및 ingest.py에 정의된 지식 연동)
     st.write("📋 **추천 FAQ 질문 (클릭 시 자동 탐색):**")
@@ -414,10 +463,7 @@ elif st.session_state.current_page == "④ 챗봇 화면":
             with st.spinner("RAG 문헌 탐색 및 답변 생성 중..."):
                 reply, references = call_api_chat(query_to_send)
                 st.write(reply)
-                if references:
-                    with st.expander("📚 답변의 신뢰도 및 참고 근거 확인"):
-                        for ref in references:
-                            st.write(f"- {ref}")
+                pass
                             
         st.session_state.chat_messages.append({
             "role": "assistant",

@@ -1,0 +1,36 @@
+# 1. Base 이미지 지정 (Python 3.11 환경)
+FROM python:3.11-slim
+
+# 2. 필수 시스템 패키지 설치
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3. 작업 디렉터리 설정
+WORKDIR /app
+
+# 4. 종속성 복사 및 설치
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 5. 소스 코드 및 관련 리소스 복사
+COPY backend/ /app/backend/
+COPY query.py /app/
+COPY config.py /app/
+COPY FAQ.py /app/
+COPY utils.py /app/
+COPY .env.example /app/.env
+COPY *.json /app/
+COPY *.pkl /app/
+COPY chroma_db/ /app/chroma_db/
+
+# 6. 정적 파일 보관함 초기화 및 권한 설정
+RUN mkdir -p uploads results masks
+
+# 7. 실행 환경 변수 및 포트 노출
+ENV PORT=8000
+EXPOSE 8000
+
+# 8. Uvicorn 구동 실행 명령 (FastAPI 시작)
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

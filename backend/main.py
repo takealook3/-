@@ -159,11 +159,39 @@ def check_comfyui_online() -> bool:
     except:
         return False
 
+WIDGET_MAP = {
+    "LoadImage": ["image", "upload_format"],
+    "LoadImageMask": ["image", "channel"],
+    "InpaintModelConditioning": [],
+    "CheckpointLoaderSimple": ["ckpt_name"],
+    "CLIPTextEncode": ["text"],
+    "KSampler": ["seed", "control_after_generate", "steps", "cfg", "sampler_name", "scheduler", "denoise"],
+    "UltralyticsDetectorProvider": ["model_name"],
+    "SAMLoader": ["model_name", "device_mode"],
+    "ImpactSimpleDetectorSEGS": ["threshold", "dilation_factor", "crop_factor", "drop_size", "sub_threshold", "sub_dilation_factor", "sub_crop_factor", "sub_drop_size", "noise_mask"],
+    "ImpactSEGSLabelFilter": ["label_list_mode", "label_list"],
+    "SEGSPreview": ["show_mask", "dilation"],
+    "PreviewImage": ["filename_prefix"],
+    "SaveImage": ["filename_prefix"],
+    "SEGSPaste": ["threshold", "feather"],
+    "ToBasicPipe": [],
+    "VAEDecode": [],
+    "VAEEncode": [],
+    "SEGSDetailer": [
+        "guide_size", "guide_size_for", "max_size", "seed", "control_after_generate", 
+        "steps", "cfg", "sampler_name", "scheduler", "denoise", "noise_mask", 
+        "force_inpaint", "wildcard", "cycle", "inpaint_model", "inpaint_model_options", 
+        "cnet_strength"
+    ]
+}
+
 def convert_webui_to_api_format(webui_data: dict) -> dict:
     if "nodes" not in webui_data:
         return webui_data
     api_format = {}
     links = {}
+    
+    # 1. 아웃풋 링크 맵 빌드
     for node in webui_data["nodes"]:
         node_id = str(node.get("id"))
         outputs = node.get("outputs", []) or []
@@ -172,36 +200,80 @@ def convert_webui_to_api_format(webui_data: dict) -> dict:
             if out_links:
                 for link_id in out_links:
                     links[link_id] = [node_id, slot_idx]
+                    
+    # 2. API 형식으로 노드 입력값 재조립
     for node in webui_data["nodes"]:
         node_id = str(node.get("id"))
         node_type = node.get("type")
         widgets = node.get("widgets_values", []) or []
         inputs_list = node.get("inputs", []) or []
         inputs = {}
-        if node_type == "LoadImage" and len(widgets) >= 1:
-            inputs["image"] = widgets[0]
-        elif node_type == "CheckpointLoaderSimple" and len(widgets) >= 1:
-            inputs["ckpt_name"] = widgets[0]
-        elif node_type == "CLIPTextEncode" and len(widgets) >= 1:
-            inputs["text"] = widgets[0]
-        elif node_type == "KSampler" and len(widgets) >= 7:
-            inputs["seed"] = widgets[0]
-            inputs["steps"] = widgets[2]
-            inputs["cfg"] = widgets[3]
-            inputs["sampler_name"] = widgets[4]
-            inputs["scheduler"] = widgets[5]
-            inputs["denoise"] = widgets[6]
+        
+        # 위젯 파라미터 이름을 지도를 통해 순서대로 복원 매핑
+        widget_keys = WIDGET_MAP.get(node_type, [])
+        for i, val in enumerate(widgets):
+            if i < len(widget_keys):
+                inputs[widget_keys[i]] = val
+            else:
+                inputs[f"widget_param_{i}"] = val
+                
+        # 다른 노드 링크 연결 오버레이
         for inp in inputs_list:
             inp_name = inp.get("name")
             link_id = inp.get("link")
             if link_id in links:
                 src_node_id, src_slot = links[link_id]
                 inputs[inp_name] = [src_node_id, src_slot]
+                
         api_format[node_id] = {
             "class_type": node_type,
             "inputs": inputs
         }
     return api_format
+
+def translate_prompt_to_english(prompt: str) -> str:
+    """사용자가 한글로 작성한 프롬프트를 Gemini를 통해 AI 이미지 생성 전용 영어 프롬프트로 번역 및 보강합니다."""
+    if not prompt or not prompt.strip():
+        return "modern interior styling"
+        
+    # 알파벳 비율이 60% 이상이면 영어로 판단하여 번역 생략
+    alpha_chars = sum(1 for c in prompt if c.isalpha())
+    if alpha_chars > len(prompt) * 0.6:
+        return prompt
+
+    global rag_llm, rag_enabled
+    if rag_enabled and rag_llm:
+        try:
+            print(f"🌐 [Translate] 한글 프롬프트 번역 및 보강 시작: '{prompt}'")
+            system_prompt = (
+                "You are an expert interior designer and prompt engineer for Stable Diffusion.\n"
+                "Your task is to translate and expand the following Korean interior/furniture prompt into a highly descriptive English prompt suitable for inpainting/redesign.\n"
+                "If the user wants to replace an object (e.g. sofa to bed), describe the new target object in rich detail (e.g., textures, materials, colors) and ensure the prompt strongly emphasizes the target object to overwrite the old one.\n"
+                "Keep the output as a clean, single-line prompt list of descriptive words, without any explanation, markdown, or intro.\n\n"
+                f"Korean: {prompt}\n"
+                "English Prompt:"
+            )
+            response = rag_llm.invoke(system_prompt)
+            translated = response.content.strip().replace('"', '').replace("'", "")
+            print(f"🌐 [Translate] 번역 완료: '{translated}'")
+            return translated
+        except Exception as e:
+            print(f"⚠️ [Translate] 번역 오류 (기본 영문 대체): {e}")
+            
+    # Fallback 번역 사전 매핑
+    fallback_map = {
+        "우드": "wooden warm cozy interior style",
+        "미니멀": "urban minimal clean interior design",
+        "낙서": "clean plain wall texture",
+        "소파": "modern fabric sofa couch",
+        "화이트": "gallery white bright neat interior",
+        "거실": "luxury bright living room"
+    }
+    for kw, eng in fallback_map.items():
+        if kw in prompt:
+            return eng
+            
+    return f"modern interior, {prompt}"
 
 def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
     import requests
@@ -217,20 +289,30 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
             if node_type == "LoadImage" and len(widgets) >= 1:
                 if "image_filename" in parameters:
                     widgets[0] = parameters["image_filename"]
+            elif node_type == "LoadImageMask" and len(widgets) >= 1:
+                if "mask_filename" in parameters:
+                    widgets[0] = parameters["mask_filename"]
             elif node_type == "CLIPTextEncode" and len(widgets) >= 1:
                 text_val = widgets[0]
                 if "ugly" not in text_val and "bad" not in text_val:
                     if "prompt" in parameters:
                         widgets[0] = parameters["prompt"]
             elif node_type == "KSampler" and len(widgets) >= 7:
-                if "denoise" in parameters:
+                if workflow_filename == "user_masked_inpainting_workflow.json":
+                    # 순정 인페인팅 렌더링 시 가구가 확실히 소거 및 재창조되도록 denoise를 1.0으로 강제 세팅
+                    widgets[6] = 1.0
+                elif "denoise" in parameters:
                     widgets[6] = float(parameters["denoise"])
                 if "seed" in parameters:
                     widgets[0] = int(parameters["seed"])
+                # 🎯 텍스트 지시어 강도 상향 조정 (CFG = 11.5)
+                widgets[3] = 11.5
+            
         prompt_api_data = convert_webui_to_api_format(webui_data)
         if "image_filename" in parameters:
             src_img_path = os.path.join("uploads", parameters["image_filename"])
-            comfy_input_dir = os.path.join("..", "ComfyUI", "input")
+            # 실제 포터블 ComfyUI input 디렉터리 절대경로 지정
+            comfy_input_dir = "C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia\\ComfyUI_windows_portable\\ComfyUI\\input"
             if os.path.exists(comfy_input_dir):
                 shutil.copy(src_img_path, os.path.join(comfy_input_dir, parameters["image_filename"]))
                 print(f"📁 [ComfyUI API] input 복사 완료: {parameters['image_filename']}")
@@ -248,7 +330,8 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                 for node_id, out_data in outputs.items():
                     if "images" in out_data:
                         filename = out_data["images"][0].get("filename")
-                        comfy_out_path = os.path.join("..", "ComfyUI", "output", filename)
+                        # 실제 포터블 ComfyUI output 디렉터리 절대경로 지정
+                        comfy_out_path = os.path.join("C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia\\ComfyUI_windows_portable\\ComfyUI\\output", filename)
                         if os.path.exists(comfy_out_path):
                             dest_path = os.path.join("results", filename)
                             shutil.copy(comfy_out_path, dest_path)
@@ -476,7 +559,7 @@ def remove_graffiti(req: GraffitiRemoveRequest):
     
     parameters = {
         "image_filename": input_filename,
-        "prompt": req.prompt or "Remove graffiti and restore original wall texture",
+        "prompt": translate_prompt_to_english(req.prompt or "Remove graffiti and restore original wall texture"),
         "denoise": 0.55,
         "seed": int(time.time()) % 1000000
     }
@@ -489,8 +572,8 @@ def remove_graffiti(req: GraffitiRemoveRequest):
         result_url = f"/static/results/{real_filename}"
         workflow_info["execution_mode"] = "real_comfyui"
     else:
-        brightness_val = 0.03
-        contrast_val = 1.02
+        brightness_val = 0.15
+        contrast_val = 1.25
         overlay_msg = f"ZipPT Anti-Graffiti Restored\nMode: {req.mode}"
         result_url = process_mock_image(
             image_id=req.image_id,
@@ -634,7 +717,7 @@ def generate_image(req: ImageGenerateRequest):
     denoise_val = float(req.strength or 65.0) / 100.0
     parameters = {
         "image_filename": input_filename,
-        "prompt": req.prompt,
+        "prompt": translate_prompt_to_english(req.prompt),
         "denoise": denoise_val,
         "seed": int(time.time()) % 1000000
     }
@@ -651,14 +734,14 @@ def generate_image(req: ImageGenerateRequest):
         contrast_val = 1.0
         
         if req.style == "Gallery White":
-            brightness_val = 0.08
-            contrast_val = 1.03
+            brightness_val = 0.20
+            contrast_val = 1.15
         elif req.style == "Urban Minimal":
-            brightness_val = -0.02
-            contrast_val = 1.05
+            brightness_val = -0.10
+            contrast_val = 1.40
         elif req.style == "Neutral Wall Restore":
-            brightness_val = 0.02
-            contrast_val = 0.98
+            brightness_val = -0.05
+            contrast_val = 0.88
 
         generated_url = process_mock_image(
             image_id=req.image_id or "img_dummy",
@@ -797,7 +880,8 @@ def edit_image(req: ImageEditRequest):
     start_time = time.time()
     
     comfy_online = check_comfyui_online()
-    workflow_info = log_workflow_execution("furniture_inpainting_workflow.json")
+    # 사용자의 직접 선택 마스크를 반영하는 user_masked_inpainting_workflow.json 기반 실행
+    workflow_info = log_workflow_execution("user_masked_inpainting_workflow.json")
     workflow_info["comfyui_status"] = "online" if comfy_online else "offline"
     
     edit_id = f"edit_{uuid.uuid4().hex[:8]}"
@@ -807,25 +891,71 @@ def edit_image(req: ImageEditRequest):
         if os.path.exists(os.path.join("uploads", f"{req.image_id}{ext}")):
             ext_found = ext
             break
-    input_filename = f"{req.image_id}{ext_found}"
+    orig_input_filename = f"{req.image_id}{ext_found}"
     
+    # 🎭 사용자가 웹 화면에서 드래그한 영역(req.mask = [x1, y1, x2, y2])을 순수 흑백(L 모드) 마스크로 직접 추출 저장
+    from PIL import Image, ImageDraw
+    # 캐시 폭파 일련 해시
+    cache_bust_suffix = f"_{int(time.time() * 10)}"
+    mask_filename = f"{req.image_id}_mask{cache_bust_suffix}.png"
+    orig_path = os.path.join("uploads", orig_input_filename)
+    mask_path = os.path.join("uploads", mask_filename)
+    
+    try:
+        if os.path.exists(orig_path):
+            with Image.open(orig_path) as img:
+                w, h = img.size
+                # 1. 흑백 채널 레이어 생성 (기본 0, 검은색 = 마스크 없음)
+                mask_layer = Image.new("L", (w, h), 0)
+                if req.mask and len(req.mask) == 4:
+                    x1, y1, x2, y2 = req.mask
+                    # 바운더리 검증 및 정렬
+                    x1, x2 = sorted([max(0, min(x1, w)), max(0, min(x2, w))])
+                    y1, y2 = sorted([max(0, min(y1, h)), max(0, min(y2, h))])
+                    
+                    draw = ImageDraw.Draw(mask_layer)
+                    draw.rectangle([x1, y1, x2, y2], fill=255) # 255 = 흰색 (마스크 있음)
+                    print(f"🎭 [Masking] 사용자가 지정한 BBox 영역 마스킹 채널 생성: ({x1}, {y1}) ~ ({x2}, {y2})")
+                else:
+                    draw = ImageDraw.Draw(mask_layer)
+                    draw.rectangle([int(w * 0.2), int(h * 0.2), int(w * 0.8), int(h * 0.8)], fill=255)
+                    print("🎭 [Masking] 영역 좌표가 없으므로 중앙 60% 기본 마스킹 생성")
+                
+                # 2. 흑백 PNG 마스크 직접 저장
+                mask_layer.save(mask_path, "PNG")
+                print(f"💾 [Masking] 흑백 마스크 이미지 준비 완료: {mask_path}")
+        else:
+            print(f"⚠️ [Masking] 원본 이미지를 찾을 수 없어 합성 생략: {orig_path}")
+    except Exception as e:
+        print(f"⚠️ [Masking] 마스크 채널 생성 중 에러 발생: {e}")
+        
+    # 실제 포터블 ComfyUI input 디렉토리 절대경로 지정하여 흑백 마스크 파일 복사
+    comfy_input_dir = "C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia\\ComfyUI_windows_portable\\ComfyUI\\input"
+    if os.path.exists(comfy_input_dir) and os.path.exists(mask_path):
+        import shutil
+        shutil.copy(mask_path, os.path.join(comfy_input_dir, mask_filename))
+        print(f"📁 [ComfyUI API] mask 파일 복사 완료: {mask_filename}")
+        
     parameters = {
-        "image_filename": input_filename,
-        "prompt": req.prompt,
-        "denoise": 0.60,
+        # 1번 노드(LoadImage)에는 깨끗한 원본 이미지를 전달!
+        "image_filename": orig_input_filename,
+        # 15번 노드(LoadImageMask)에는 동적으로 생성된 고유한 흑백 마스크 파일을 전달!
+        "mask_filename": mask_filename,
+        "prompt": translate_prompt_to_english(req.prompt),
+        "denoise": 1.0,
         "seed": int(time.time()) % 1000000
     }
     
     real_filename = None
     if comfy_online:
-        real_filename = execute_real_comfyui("furniture_inpainting_workflow.json", parameters)
+        real_filename = execute_real_comfyui("user_masked_inpainting_workflow.json", parameters)
         
     if real_filename:
         result_url = f"/static/results/{real_filename}"
         workflow_info["execution_mode"] = "real_comfyui"
     else:
-        brightness_val = 0.0
-        contrast_val = 1.02
+        brightness_val = -0.15
+        contrast_val = 1.35
         result_url = process_mock_image(
             image_id=req.image_id,
             result_id=edit_id,
