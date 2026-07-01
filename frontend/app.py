@@ -24,7 +24,7 @@ def request_image_generation(image_id, style, strength, prompt):
         "strength": float(strength),
         "prompt": prompt
     }
-    response = requests.post(url, json=payload, timeout=10)
+    response = requests.post(url, json=payload, timeout=60)
     return response.json()
 
 
@@ -53,7 +53,7 @@ def call_api_transform_interior(image_file, style, strength, keep_structure):
                 "mode": "auto",
                 "prompt": "Remove graffiti and restore clean wall surface"
             }
-            api_res = requests.post(url, json=payload, timeout=10)
+            api_res = requests.post(url, json=payload, timeout=60)
             res_json = api_res.json()
             
             if res_json.get("success"):
@@ -111,7 +111,7 @@ def call_api_edit_furniture(image_id, coords, prompt):
             "selected_object": "furniture",
             "prompt": prompt
         }
-        res = requests.post(url, json=payload, timeout=10)
+        res = requests.post(url, json=payload, timeout=60)
         res_data = res.json()
         
         if res_data.get("success"):
@@ -133,7 +133,7 @@ def call_api_edit_furniture(image_id, coords, prompt):
 def call_api_chat(user_message):
     """챗봇 화면용 API 호출 함수"""
     try:
-        res = requests.post(f"{BACKEND_URL}/api/chat", json={"session_id": "room_1", "question": user_message}, timeout=10)
+        res = requests.post(f"{BACKEND_URL}/api/chat", json={"session_id": "room_1", "question": user_message}, timeout=30)
         data = res.json().get("data", {})
         return data.get("answer", "답변을 받아오지 못했습니다."), data.get("references", [])
     except Exception as e:
