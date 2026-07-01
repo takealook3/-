@@ -30,3 +30,7 @@ chroma_db/
 # 환경 변수 및 비밀 정보
 .env
 .env.*
+
+# 업로드 및 임시 결과 이미지 폴더
+uploads/
+results/
