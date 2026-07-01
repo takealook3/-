@@ -1,6 +1,6 @@
 {
-  "last_node_id": 8,
-  "last_link_id": 12,
+  "last_node_id": 11,
+  "last_link_id": 16,
   "nodes": [
     {
       "id": 1,
@@ -11,7 +11,7 @@
       "order": 0,
       "mode": 0,
       "outputs": [
-        {"name": "IMAGE", "type": "IMAGE", "links": [1], "slot_index": 0},
+        {"name": "IMAGE", "type": "IMAGE", "links": [1, 14], "slot_index": 0},
         {"name": "MASK", "type": "MASK", "links": null, "slot_index": 1}
       ],
       "properties": {"Nodevator.size": [210, 314]},
@@ -86,16 +86,65 @@
       "widgets_values": []
     },
     {
-      "id": 6,
-      "type": "KSampler",
-      "pos": [900, 100],
-      "size": [315, 262],
+      "id": 9,
+      "type": "ControlNetLoader",
+      "pos": [50, 680],
+      "size": [315, 58],
       "flags": {},
       "order": 5,
       "mode": 0,
+      "outputs": [
+        {"name": "CONTROL_NET", "type": "CONTROL_NET", "links": [13], "slot_index": 0}
+      ],
+      "properties": {},
+      "widgets_values": ["control_v11p_sd15_mlsd.safetensors"]
+    },
+    {
+      "id": 10,
+      "type": "MLSD_Preprocessor",
+      "pos": [450, 620],
+      "size": [315, 122],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {"name": "image", "type": "IMAGE", "link": 14}
+      ],
+      "outputs": [
+        {"name": "IMAGE", "type": "IMAGE", "links": [15], "slot_index": 0}
+      ],
+      "properties": {},
+      "widgets_values": [100, 200, 0.1, 0.1]
+    },
+    {
+      "id": 11,
+      "type": "ControlNetApply",
+      "pos": [800, 400],
+      "size": [315, 98],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {"name": "conditioning", "type": "CONDITIONING", "link": 8},
+        {"name": "control_net", "type": "CONTROL_NET", "link": 13},
+        {"name": "image", "type": "IMAGE", "link": 15}
+      ],
+      "outputs": [
+        {"name": "CONDITIONING", "type": "CONDITIONING", "links": [16], "slot_index": 0}
+      ],
+      "properties": {}
+    },
+    {
+      "id": 6,
+      "type": "KSampler",
+      "pos": [1150, 100],
+      "size": [315, 262],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
       "inputs": [
         {"name": "model", "type": "MODEL", "link": 3},
-        {"name": "positive", "type": "CONDITIONING", "link": 8},
+        {"name": "positive", "type": "CONDITIONING", "link": 16},
         {"name": "negative", "type": "CONDITIONING", "link": 9},
         {"name": "latent_image", "type": "LATENT", "link": 10}
       ],
@@ -116,10 +165,10 @@
     {
       "id": 7,
       "type": "VAEDecode",
-      "pos": [900, 480],
+      "pos": [1150, 480],
       "size": [210, 46],
       "flags": {},
-      "order": 6,
+      "order": 9,
       "mode": 0,
       "inputs": [
         {"name": "samples", "type": "LATENT", "link": 11},
@@ -134,10 +183,10 @@
     {
       "id": 8,
       "type": "SaveImage",
-      "pos": [1180, 480],
+      "pos": [1400, 480],
       "size": [210, 270],
       "flags": {},
-      "order": 7,
+      "order": 10,
       "mode": 0,
       "inputs": [
         {"name": "images", "type": "IMAGE", "link": 12}
@@ -153,11 +202,15 @@
     [5, 2, 1, 4, 0, "CLIP"],
     [6, 2, 2, 5, 1, "VAE"],
     [7, 2, 2, 7, 1, "VAE"],
-    [8, 3, 0, 6, 1, "CONDITIONING"],
+    [8, 3, 0, 11, 0, "CONDITIONING"],
     [9, 4, 0, 6, 2, "CONDITIONING"],
     [10, 5, 0, 6, 3, "LATENT"],
     [11, 6, 0, 7, 0, "LATENT"],
-    [12, 7, 0, 8, 0, "IMAGE"]
+    [12, 7, 0, 8, 0, "IMAGE"],
+    [13, 9, 0, 11, 1, "CONTROL_NET"],
+    [14, 1, 0, 10, 0, "IMAGE"],
+    [15, 10, 0, 11, 2, "IMAGE"],
+    [16, 11, 0, 6, 1, "CONDITIONING"]
   ],
   "groups": [],
   "config": {},

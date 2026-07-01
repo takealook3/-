@@ -446,6 +446,7 @@ class ImageGenerateRequest(BaseModel):
     style: Optional[str] = Field("realistic", description="스타일 옵션")
     image_id: Optional[str] = Field(None, description="원본 이미지 고유 ID")
     strength: Optional[float] = Field(65.0, description="스타일 변환 강도 (0~100)")
+    keep_structure: Optional[bool] = Field(True, description="기존 공간 구조 유지 여부")
 
 
 class ImageGenerateResponse(BaseModel):
@@ -644,3 +645,25 @@ class SessionHistoryResponse(BaseModel):
     edits: List[dict] = Field(default_factory=list, description="이미지 편집 및 낙서 제거 내역 목록")
     chats: List[dict] = Field(default_factory=list, description="챗봇 대화 내역 목록")
     updated_at: str = Field(..., description="최근 활동 일시")
+
+
+# =====================================================================
+# [NEW API 8 규격] 유사 상품 검색 요청/결과 양식 (POST /api/products/search)
+# =====================================================================
+
+class ProductItem(BaseModel):
+    """
+    [유사 상품 정보 규격]
+    """
+    product_name: str = Field(..., description="상품명")
+    price: str = Field(..., description="가격 정보 (예: 150,000원)")
+    image_url: str = Field(..., description="상품 이미지 URL")
+    purchase_link: str = Field(..., description="구매 링크")
+    similarity: float = Field(..., description="유사도 점수 (0.0~1.0)")
+
+
+class ProductSearchResponse(BaseModel):
+    """
+    [유사 상품 검색 결과 목록]
+    """
+    products: List[ProductItem] = Field(default_factory=list, description="유사 상품 목록")

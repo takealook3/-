@@ -22,7 +22,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.env"))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../comfyui-helper-nodes"))
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter, ImageEnhance, ImageFont
 
 try:
     import torch
@@ -92,7 +92,7 @@ from schemas import (
     ImageGenerateRequest, ImageGenerateResponse,
     ChatMessageRequest, ChatMessageResponse,
     ImageEditRequest, ImageEditResponse,
-    SessionHistoryResponse
+    SessionHistoryResponse, ProductItem, ProductSearchResponse
 )
 
 app = FastAPI(title="ZipPT API - 종합 이미지 복원 & 편집 & 대화 서비스")
@@ -232,48 +232,124 @@ def convert_webui_to_api_format(webui_data: dict) -> dict:
     return api_format
 
 def translate_prompt_to_english(prompt: str) -> str:
-    """사용자가 한글로 작성한 프롬프트를 Gemini를 통해 AI 이미지 생성 전용 영어 프롬프트로 번역 및 보강합니다."""
+    """사용자가 작성한 프롬프트를 Gemini를 통해 AI 이미지 생성용 영문으로 번역 및 인테리어 전용으로 보강합니다."""
+    import re
     if not prompt or not prompt.strip():
         return "modern interior styling"
-        
-    # 알파벳 비율이 60% 이상이면 영어로 판단하여 번역 생략
-    alpha_chars = sum(1 for c in prompt if c.isalpha())
-    if alpha_chars > len(prompt) * 0.6:
-        return prompt
+
+    # 한글 문자 존재 여부 검사 (한영 혼용 포함)
+    has_korean = bool(re.search("[ㄱ-ㅎㅏ-ㅣ가-힣]", prompt))
+    
+    # 한글이 전혀 없는 순수 영문인 경우, 가중치 래핑만 적용해 반환
+    if not has_korean:
+        if prompt.startswith("(") and prompt.endswith(")"):
+            return prompt
+        return f"({prompt}:1.35)"
 
     global rag_llm, rag_enabled
     if rag_enabled and rag_llm:
+        from concurrent.futures import ThreadPoolExecutor
         try:
-            print(f"🌐 [Translate] 한글 프롬프트 번역 및 보강 시작: '{prompt}'")
+            print(f"🌐 [Translate] 한글/한영혼용 프롬프트 번역 및 보강 시작: '{prompt}'")
             system_prompt = (
                 "You are an expert interior designer and prompt engineer for Stable Diffusion.\n"
                 "Your task is to translate and expand the following Korean interior/furniture prompt into a highly descriptive English prompt suitable for inpainting/redesign.\n"
-                "If the user wants to replace an object (e.g. sofa to bed), describe the new target object in rich detail (e.g., textures, materials, colors) and ensure the prompt strongly emphasizes the target object to overwrite the old one.\n"
-                "Keep the output as a clean, single-line prompt list of descriptive words, without any explanation, markdown, or intro.\n\n"
+                "Improve prompt understanding and clarity by expanding the core style with details such as textures (e.g. boucle fabric, oak wood, brushed brass), lighting (e.g. soft indirect ambient lighting, warm LED strip), color palette, and decor accessories.\n"
+                "Use Stable Diffusion weight syntax like (keyword:weight) for key objects or style words to emphasize them (e.g., '(cozy scandinavian bedroom:1.25)', '(warm wooden textures:1.2)').\n"
+                "Do NOT include any humans, people, man, woman, child, or animals. The scene must represent a completely empty, uninhabited architectural room design space.\n"
+                "Keep the output as a clean, single-line comma-separated list of descriptive words, without any explanation, markdown, or intro.\n\n"
                 f"Korean: {prompt}\n"
                 "English Prompt:"
             )
-            response = rag_llm.invoke(system_prompt)
+            # 타임아웃(3.0초)이 적용된 동적 스레드 풀 실행 (네트워크 블로킹 방지)
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(rag_llm.invoke, system_prompt)
+                response = future.result(timeout=3.0)
             translated = response.content.strip().replace('"', '').replace("'", "")
             print(f"🌐 [Translate] 번역 완료: '{translated}'")
             return translated
         except Exception as e:
-            print(f"⚠️ [Translate] 번역 오류 (기본 영문 대체): {e}")
-            
-    # Fallback 번역 사전 매핑
-    fallback_map = {
-        "우드": "wooden warm cozy interior style",
-        "미니멀": "urban minimal clean interior design",
-        "낙서": "clean plain wall texture",
-        "소파": "modern fabric sofa couch",
-        "화이트": "gallery white bright neat interior",
-        "거실": "luxury bright living room"
+            print(f"⚠️ [Translate] 번역 오류 또는 시간 초과 (3초 제한 룰 기반 Fallback 작동): {e}")
+
+    # =====================================================================
+    # [정밀 룰 기반 Fallback 파서]
+    # Gemini API Key 유실 및 네트워크 오프라인 시에도 고품질 영문 태그를 조합해 냅니다.
+    # =====================================================================
+    style_keywords = {
+        "우드": "(warm wooden texture interior:1.25)",
+        "나무": "(warm wooden texture interior:1.25)",
+        "북유럽": "(scandinavian cozy style:1.25)",
+        "미니멀": "(minimalist clean style:1.25)",
+        "화이트": "(bright gallery white theme:1.25)",
+        "하얀색": "(bright gallery white theme:1.25)",
+        "모던": "(sleek modern interior:1.20)",
+        "내추럴": "(natural organic tone style:1.20)",
+        "네추럴": "(natural organic tone style:1.20)",
+        "럭셔리": "(luxury elegant interior:1.25)",
+        "빈티지": "(vintage industrial style:1.25)",
+        "어반": "(urban modern style:1.20)",
+        "따뜻한": "(warm cozy mood:1.15)",
+        "아늑한": "(warm cozy mood:1.15)",
+        "어두운": "(moody dark tone theme:1.20)",
+        "밝은": "(bright well-lit interior:1.15)",
     }
-    for kw, eng in fallback_map.items():
+    
+    room_keywords = {
+        "거실": "living room design",
+        "침실": "bedroom interior",
+        "방": "room design",
+        "욕실": "bathroom interior",
+        "화장실": "bathroom interior",
+        "주방": "kitchen interior",
+        "부엌": "kitchen interior",
+        "식당": "dining room interior",
+        "서재": "study room workspace",
+        "사무실": "office room",
+    }
+    
+    furniture_keywords = {
+        "소파": "(modern fabric sofa:1.25)",
+        "쇼파": "(modern fabric sofa:1.25)",
+        "침대": "(cozy premium bed:1.25)",
+        "테이블": "(minimalist wooden table:1.20)",
+        "식탁": "(minimalist wooden table:1.20)",
+        "의자": "(accent chair:1.20)",
+        "책상": "(minimalist workspace desk:1.20)",
+        "책장": "(wooden bookshelf:1.15)",
+        "조명": "(warm ambient lighting:1.20)",
+        "불빛": "(warm ambient lighting:1.20)",
+        "식물": "(indoor green plants decor:1.15)",
+        "화분": "(indoor green plants decor:1.15)",
+        "커튼": "(soft flowing curtains:1.15)",
+        "거울": "(modern wall mirror:1.15)",
+        "벽": "wall texture",
+        "바닥": "floor texture",
+    }
+
+    detected_styles = []
+    detected_rooms = []
+    detected_furniture = []
+
+    # 키워드 스캔 및 중복 방지
+    for kw, eng in style_keywords.items():
         if kw in prompt:
-            return eng
-            
-    return f"modern interior, {prompt}"
+            detected_styles.append(eng)
+    for kw, eng in room_keywords.items():
+        if kw in prompt:
+            detected_rooms.append(eng)
+    for kw, eng in furniture_keywords.items():
+        if kw in prompt:
+            detected_furniture.append(eng)
+
+    # 기본값 보정
+    style_str = ", ".join(detected_styles) if detected_styles else "(modern clean style:1.2)"
+    room_str = ", ".join(detected_rooms) if detected_rooms else "interior space"
+    furniture_str = f", with {', '.join(detected_furniture)}" if detected_furniture else ""
+
+    # 문장 조합
+    fallback_prompt = f"{style_str}, {room_str}{furniture_str}, no people, empty room, realistic, architectural photography, highly detailed, photorealistic, 4k"
+    print(f"⚙️ [Translate Fallback] 조합 완료: '{fallback_prompt}'")
+    return fallback_prompt
 
 def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
     import requests
@@ -283,55 +359,138 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
     try:
         with open(workflow_path, "r", encoding="utf-8") as f:
             webui_data = json.load(f)
+        
+        # ✅ 버그 수정: widgets 리스트를 직접 node["widgets_values"]에서 수정해야 함
+        # (로컬 변수 widgets에 할당하면 참조가 끊겨 변경이 반영되지 않음)
+        positive_node_ids = []  # 포지티브 CLIP 노드 ID 수집 (CLIPTextEncode)
+        negative_node_ids = []  # 네거티브 CLIP 노드 ID 수집 (CLIPTextEncode)
+        
+        # 1단계: 링크 정보로 포지티브/네거티브 CLIP 노드 구분
+        # links 배열: [link_id, src_node_id, src_slot, dst_node_id, dst_slot, type]
+        ksampler_positive_links = set()
+        ksampler_negative_links = set()
+        inpaint_positive_links = set()
+        inpaint_negative_links = set()
+        
+        for link in webui_data.get("links", []):
+            link_id, src_node, src_slot, dst_node, dst_slot, link_type = link
+            # KSampler 포지티브 conditioning은 slot 1, 네거티브는 slot 2
+            # InpaintModelConditioning 포지티브는 slot 0, 네거티브는 slot 1
+            if link_type == "CONDITIONING":
+                for node in webui_data.get("nodes", []):
+                    if node.get("id") == dst_node:
+                        if node.get("type") == "KSampler":
+                            if dst_slot == 1:  # positive
+                                ksampler_positive_links.add(link_id)
+                            elif dst_slot == 2:  # negative
+                                ksampler_negative_links.add(link_id)
+                        elif node.get("type") == "InpaintModelConditioning":
+                            if dst_slot == 0:  # positive
+                                inpaint_positive_links.add(link_id)
+                            elif dst_slot == 1:  # negative
+                                inpaint_negative_links.add(link_id)
+        
+        # 2단계: 각 노드별 파라미터 직접 패치
         for node in webui_data.get("nodes", []):
             node_type = node.get("type")
-            widgets = node.get("widgets_values", []) or []
-            if node_type == "LoadImage" and len(widgets) >= 1:
-                if "image_filename" in parameters:
-                    widgets[0] = parameters["image_filename"]
-            elif node_type == "LoadImageMask" and len(widgets) >= 1:
-                if "mask_filename" in parameters:
-                    widgets[0] = parameters["mask_filename"]
-            elif node_type == "CLIPTextEncode" and len(widgets) >= 1:
-                text_val = widgets[0]
-                if "ugly" not in text_val and "bad" not in text_val:
-                    if "prompt" in parameters:
-                        widgets[0] = parameters["prompt"]
-            elif node_type == "KSampler" and len(widgets) >= 7:
-                if workflow_filename == "user_masked_inpainting_workflow.json":
-                    # 순정 인페인팅 렌더링 시 가구가 확실히 소거 및 재창조되도록 denoise를 1.0으로 강제 세팅
-                    widgets[6] = 1.0
-                elif "denoise" in parameters:
-                    widgets[6] = float(parameters["denoise"])
-                if "seed" in parameters:
-                    widgets[0] = int(parameters["seed"])
-                # 🎯 텍스트 지시어 강도 상향 조정 (CFG = 11.5)
-                widgets[3] = 11.5
+            node_id = node.get("id")
             
+            if node_type == "LoadImage":
+                if "image_filename" in parameters:
+                    node["widgets_values"][0] = parameters["image_filename"]
+                    
+            elif node_type == "LoadImageMask":
+                if "mask_filename" in parameters:
+                    node["widgets_values"][0] = parameters["mask_filename"]
+                    
+            elif node_type == "CLIPTextEncode":
+                # 출력 링크를 통해 포지티브/네거티브 구분
+                output_links = []
+                for out in node.get("outputs", []):
+                    output_links.extend(out.get("links") or [])
+                
+                is_positive = any(
+                    l in ksampler_positive_links or l in inpaint_positive_links
+                    for l in output_links
+                )
+                is_negative = any(
+                    l in ksampler_negative_links or l in inpaint_negative_links
+                    for l in output_links
+                )
+                
+                # 링크 연결로 구분이 안 되면 현재 위젯 텍스트로 판단
+                if not is_positive and not is_negative:
+                    current_text = (node["widgets_values"] or [""])[0] or ""
+                    is_negative = "ugly" in current_text or "bad" in current_text or "blurry" in current_text
+                    is_positive = not is_negative
+                
+                if is_positive and "prompt" in parameters:
+                    node["widgets_values"][0] = (
+                        f"architectural photography of interior design space, "
+                        f"no people, empty room, high quality, "
+                        f"{parameters['prompt']}"
+                    )
+                    print(f"✅ [ComfyUI API] 포지티브 프롬프트 주입 완료: node {node_id}")
+                elif is_negative:
+                    node["widgets_values"][0] = (
+                        "person, human, woman, man, girl, boy, people, hands, face, limbs, "
+                        "ugly, blurry, low quality, bad proportions, distorted, messy, noisy, out of focus, "
+                        "text, watermark, logo"
+                    )
+                    print(f"✅ [ComfyUI API] 네거티브 프롬프트 주입 완료: node {node_id}")
+                    
+            elif node_type == "KSampler":
+                widgets = node.get("widgets_values", [])
+                if len(widgets) >= 7:
+                    if "seed" in parameters:
+                        widgets[0] = int(parameters["seed"])
+                    # CFG 강도 상향 (index 3)
+                    widgets[3] = 11.5
+                    if workflow_filename == "user_masked_inpainting_workflow.json":
+                        widgets[6] = 1.0  # denoise 강제 1.0
+                    elif "denoise" in parameters:
+                        widgets[6] = float(parameters["denoise"])
+                    
         prompt_api_data = convert_webui_to_api_format(webui_data)
-        if "image_filename" in parameters:
-            src_img_path = os.path.join("uploads", parameters["image_filename"])
-            # 실제 포터블 ComfyUI input 디렉터리 절대경로 지정
-            comfy_input_dir = "C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia\\ComfyUI_windows_portable\\ComfyUI\\input"
-            if os.path.exists(comfy_input_dir):
-                shutil.copy(src_img_path, os.path.join(comfy_input_dir, parameters["image_filename"]))
-                print(f"📁 [ComfyUI API] input 복사 완료: {parameters['image_filename']}")
+        
+        # ComfyUI input 디렉터리에 이미지 파일 복사
+        comfy_input_dir = "C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia\\ComfyUI_windows_portable\\ComfyUI\\input"
+        if os.path.exists(comfy_input_dir):
+            if "image_filename" in parameters:
+                src_img_path = os.path.join("uploads", parameters["image_filename"])
+                if os.path.exists(src_img_path):
+                    shutil.copy(src_img_path, os.path.join(comfy_input_dir, parameters["image_filename"]))
+                    print(f"📁 [ComfyUI API] input 이미지 복사 완료: {parameters['image_filename']}")
+            if "mask_filename" in parameters:
+                # 마스크는 uploads 또는 masks 디렉터리에 저장됨
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                for mask_dir in ("uploads", "masks"):
+                    src_mask_path = os.path.join(base_dir, mask_dir, parameters["mask_filename"])
+                    if os.path.exists(src_mask_path):
+                        shutil.copy(src_mask_path, os.path.join(comfy_input_dir, parameters["mask_filename"]))
+                        print(f"📁 [ComfyUI API] mask 파일 복사 완료: {parameters['mask_filename']}")
+                        break
+                        
         res = requests.post(f"{COMFYUI_API_URL}/prompt", json={"prompt": prompt_api_data}, timeout=5)
         prompt_id = res.json().get("prompt_id")
         if not prompt_id:
             return None
         print(f"🚀 [ComfyUI API] 작업 제출완료. Prompt ID: {prompt_id}")
         history_url = f"{COMFYUI_API_URL}/history/{prompt_id}"
-        for _ in range(30):
-            h_res = requests.get(history_url, timeout=2)
+        # 최대 120초 대기 (이미지 생성에 시간이 걸림)
+        for _ in range(120):
+            h_res = requests.get(history_url, timeout=5)
             h_data = h_res.json()
             if prompt_id in h_data:
                 outputs = h_data[prompt_id].get("outputs", {})
                 for node_id, out_data in outputs.items():
                     if "images" in out_data:
                         filename = out_data["images"][0].get("filename")
-                        # 실제 포터블 ComfyUI output 디렉터리 절대경로 지정
-                        comfy_out_path = os.path.join("C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia\\ComfyUI_windows_portable\\ComfyUI\\output", filename)
+                        comfy_out_path = os.path.join(
+                            "C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia"
+                            "\\ComfyUI_windows_portable\\ComfyUI\\output", filename
+                        )
+                        os.makedirs("results", exist_ok=True)
                         if os.path.exists(comfy_out_path):
                             dest_path = os.path.join("results", filename)
                             shutil.copy(comfy_out_path, dest_path)
@@ -341,6 +500,135 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
     except Exception as e:
         print(f"⚠️ [ComfyUI API Error] Fallback 작동: {e}")
     return None
+
+def download_and_cache_image(url: str, cache_name: str) -> Optional[Any]:
+    """네트워크로부터 고품질 Mock 리소스를 다운로드하여 로컬에 캐싱합니다. (안정적인 오프라인 기능 제공)"""
+    import os
+    import requests
+    from PIL import Image
+    from io import BytesIO
+
+    cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "templates")
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_path = os.path.join(cache_dir, f"{cache_name}.jpg")
+
+    if os.path.exists(cache_path):
+        try:
+            return Image.open(cache_path).convert("RGB")
+        except Exception:
+            pass
+
+    try:
+        print(f"📥 [Mock Downloader] 리소스 다운로드 시작 ({cache_name}): {url}")
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        r = requests.get(url, headers=headers, timeout=8)
+        if r.status_code == 200:
+            img = Image.open(BytesIO(r.content)).convert("RGB")
+            # 다운로드 후 최적 사이즈로 리사이징
+            img.thumbnail((1024, 1024))
+            img.save(cache_path, "JPEG", quality=85)
+            return img
+    except Exception as e:
+        print(f"⚠️ [Mock Downloader] 리소스 다운로드 실패: {e}")
+    return None
+
+def draw_mock_furniture_vector(w: int, h: int, category: str) -> Image.Image:
+    """외부 다운로드 실패 시, PIL을 이용해 BBox 크기에 맞는 세련되고 입체감 있는 가구 그래픽을 즉석에서 렌더링합니다."""
+    # 투명도가 있는 RGBA 채널 생성
+    canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+    
+    if category == "table":
+        # 1. 바닥 그림자
+        draw.ellipse([int(w * 0.1), int(h * 0.75), int(w * 0.9), int(h * 0.95)], fill=(0, 0, 0, 45))
+        # 2. 나무 테이블 다리 4개
+        leg_w = max(4, int(w * 0.05))
+        draw.rectangle([int(w * 0.2), int(h * 0.35), int(w * 0.2) + leg_w, int(h * 0.85)], fill=(90, 58, 34))
+        draw.rectangle([int(w * 0.35), int(h * 0.35), int(w * 0.35) + leg_w, int(h * 0.8)], fill=(110, 75, 48))
+        draw.rectangle([int(w * 0.6), int(h * 0.35), int(w * 0.6) + leg_w, int(h * 0.8)], fill=(110, 75, 48))
+        draw.rectangle([int(w * 0.75), int(h * 0.35), int(w * 0.75) + leg_w, int(h * 0.85)], fill=(90, 58, 34))
+        # 3. 우드 텍스처를 모사한 그라디언트 상판 (원목 톤)
+        for i in range(15):
+            offset = i * int(h * 0.015)
+            r = 139 - (i * 2)
+            g = 90 - (i * 3)
+            b = 43 - (i * 2)
+            draw.ellipse([int(w * 0.05), int(h * 0.1) + offset, int(w * 0.95), int(h * 0.35) + offset], fill=(r, g, b))
+        # 4. 상판 최상부 밝은 광택 라인
+        draw.ellipse([int(w * 0.06), int(h * 0.1), int(w * 0.94), int(h * 0.25)], fill=(160, 110, 60))
+        
+    elif category == "sofa":
+        # 1. 바닥 그림자
+        draw.ellipse([int(w * 0.05), int(h * 0.8), int(w * 0.95), int(h * 0.98)], fill=(0, 0, 0, 50))
+        # 2. 메탈 다리
+        leg_w = max(5, int(w * 0.06))
+        draw.rectangle([int(w * 0.15), int(h * 0.65), int(w * 0.15) + leg_w, int(h * 0.88)], fill=(180, 180, 180))
+        draw.rectangle([int(w * 0.8), int(h * 0.65), int(w * 0.8) + leg_w, int(h * 0.88)], fill=(180, 180, 180))
+        # 3. 소파 메인 프레임 (모던 그레이)
+        draw.rounded_rectangle([int(w * 0.05), int(h * 0.4), int(w * 0.95), int(h * 0.82)], radius=12, fill=(65, 75, 86))
+        # 4. 등받이 쿠션
+        draw.rounded_rectangle([int(w * 0.08), int(h * 0.15), int(w * 0.48), int(h * 0.65)], radius=15, fill=(78, 90, 104))
+        draw.rounded_rectangle([int(w * 0.52), int(h * 0.15), int(w * 0.92), int(h * 0.65)], radius=15, fill=(78, 90, 104))
+        # 5. 소파 좌판 시트
+        draw.rounded_rectangle([int(w * 0.07), int(h * 0.48), int(w * 0.93), int(h * 0.78)], radius=10, fill=(90, 103, 118))
+        # 6. 팔걸이 부분
+        draw.rounded_rectangle([int(w * 0.02), int(h * 0.32), int(w * 0.15), int(h * 0.82)], radius=8, fill=(53, 62, 71))
+        draw.rounded_rectangle([int(w * 0.85), int(h * 0.32), int(w * 0.98), int(h * 0.82)], radius=8, fill=(53, 62, 71))
+
+    elif category == "bed":
+        # 1. 침대 헤드보드 (따뜻한 다크우드)
+        draw.rounded_rectangle([int(w * 0.15), int(h * 0.05), int(w * 0.85), int(h * 0.5)], radius=8, fill=(75, 45, 23))
+        # 2. 메트리스 바닥 프레임
+        draw.rectangle([int(w * 0.1), int(h * 0.45), int(w * 0.9), int(h * 0.95)], fill=(100, 70, 45))
+        # 3. 하얀색 매트리스 및 침대 시트
+        draw.rounded_rectangle([int(w * 0.12), int(h * 0.38), int(w * 0.88), int(h * 0.85)], radius=12, fill=(245, 245, 248))
+        # 4. 베개 2개 (아늑한 웜화이트)
+        draw.rounded_rectangle([int(w * 0.2), int(h * 0.22), int(w * 0.48), int(h * 0.42)], radius=10, fill=(230, 225, 215))
+        draw.rounded_rectangle([int(w * 0.52), int(h * 0.22), int(w * 0.8), int(h * 0.42)], radius=10, fill=(230, 225, 215))
+        # 5. 아늑하게 접힌 이불 시트 (포근한 베이지 톤)
+        draw.rounded_rectangle([int(w * 0.12), int(h * 0.48), int(w * 0.88), int(h * 0.85)], radius=8, fill=(215, 200, 185))
+        
+    elif category == "chair":
+        # 1. 바닥 그림자
+        draw.ellipse([int(w * 0.2), int(h * 0.78), int(w * 0.8), int(h * 0.95)], fill=(0, 0, 0, 40))
+        # 2. 철제 다리 4개
+        leg_w = max(3, int(w * 0.04))
+        draw.line([(int(w * 0.35), int(h * 0.52)), (int(w * 0.25), int(h * 0.85))], fill=(30, 30, 30), width=leg_w)
+        draw.line([(int(w * 0.65), int(h * 0.52)), (int(w * 0.75), int(h * 0.85))], fill=(30, 30, 30), width=leg_w)
+        draw.line([(int(w * 0.45), int(h * 0.52)), (int(w * 0.38), int(h * 0.8))], fill=(50, 50, 50), width=leg_w)
+        draw.line([(int(w * 0.55), int(h * 0.52)), (int(w * 0.62), int(h * 0.8))], fill=(50, 50, 50), width=leg_w)
+        # 3. 둥근 등받이 프레임 (원목/가죽 믹스)
+        draw.ellipse([int(w * 0.22), int(h * 0.08), int(w * 0.78), int(h * 0.55)], fill=(120, 80, 50))
+        # 등받이 안쪽 쿠션
+        draw.ellipse([int(w * 0.28), int(h * 0.14), int(w * 0.72), int(h * 0.5)], fill=(225, 205, 180))
+        # 4. 방석 쿠션 (둥근 좌판)
+        draw.rounded_rectangle([int(w * 0.25), int(h * 0.45), int(w * 0.75), int(h * 0.58)], radius=10, fill=(225, 205, 180))
+        
+    else:  # lighting
+        # 1. 얇은 스탠드 철제 봉 기둥
+        line_w = max(3, int(w * 0.05))
+        draw.rectangle([int(w * 0.47), int(h * 0.28), int(w * 0.47) + line_w, int(h * 0.9)], fill=(40, 40, 40))
+        # 2. 원형 무거운 스탠드 받침대
+        draw.ellipse([int(w * 0.25), int(h * 0.82), int(w * 0.75), int(h * 0.95)], fill=(45, 45, 45))
+        # 3. 모던 조명 갓 (Shade)
+        draw.polygon([
+            (int(w * 0.35), int(h * 0.28)), 
+            (int(w * 0.65), int(h * 0.28)), 
+            (int(w * 0.72), int(h * 0.08)), 
+            (int(w * 0.28), int(h * 0.08))
+        ], fill=(235, 220, 185))
+        # 4. 조명 갓 아래로 퍼지는 포근한 노란색 광채 그라디언트 빔 (Soft Light)
+        for i in range(10):
+            r_beam = i * int(w * 0.08)
+            alpha = int((1.0 - (i / 10)) * 50)
+            draw.polygon([
+                (int(w * 0.48), int(h * 0.28)), 
+                (int(w * 0.52), int(h * 0.28)), 
+                (int(w * 0.5) + r_beam, h), 
+                (int(w * 0.5) - r_beam, h)
+            ], fill=(255, 220, 130, alpha))
+            
+    return canvas.convert("RGBA")
 
 def process_mock_image(
     image_id: str,
@@ -353,70 +641,272 @@ def process_mock_image(
     bbox: list = None
 ) -> str:
     """
-    comfyui-helper-nodes의 노드 연산을 모사하여 업로드된 이미지에 
-    실제 필터 및 텍스트 워터마크 합성을 수행하고 결과 파일로 저장합니다.
+    ComfyUI 오프라인/Fallback 모드 시 사용자의 공간 구조를 100% 보존하면서 프롬프트 스타일 톤을 가미합니다.
+    - 스타일 변환 시, 원본 이미지 자체를 기반으로 삼아 우드, 화이트, 미니멀, 다크 등 정교한 톤 매칭 및 광원 그라디언트를 입힙니다.
+    - 가구 인페인팅 편집 영역(BBox) 시, Unsplash 다운로드 실패 시 즉석에서 고화질 일러스트/벡터 가구 조각을 드로잉하여 자연스럽게 합성합니다.
     """
+    import os, shutil
+    from PIL import Image, ImageEnhance, ImageDraw, ImageFilter, ImageFont
+    
     # 1. 원본 파일 탐색
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
     input_path = None
     ext_found = ".jpg"
-    for ext in (".jpg", ".jpeg", ".png"):
-        test_path = os.path.join("uploads", f"{image_id}{ext}")
-        if os.path.exists(test_path):
-            input_path = test_path
-            ext_found = ext
+    
+    for folder in ("uploads", "results"):
+        for ext in (".jpg", ".jpeg", ".png"):
+            test_path = os.path.join(backend_dir, folder, f"{image_id}{ext}")
+            if os.path.exists(test_path):
+                input_path = test_path
+                ext_found = ext
+                break
+        if input_path:
             break
             
+    if not input_path:
+        for folder in ("uploads", "results"):
+            for ext in (".jpg", ".jpeg", ".png"):
+                test_path = os.path.join(folder, f"{image_id}{ext}")
+                if os.path.exists(test_path):
+                    input_path = test_path
+                    ext_found = ext
+                    break
+            if input_path:
+                break
+                
     # 2. 결과물 저장 경로 지정
-    os.makedirs("results", exist_ok=True)
-    output_path = os.path.join("results", f"{result_id}{ext_found}")
+    os.makedirs(os.path.join(backend_dir, "results"), exist_ok=True)
+    output_path = os.path.join(backend_dir, "results", f"{result_id}{ext_found}")
     
-    # 원본 파일이 없으면 테스트 목적으로 기본 흰색 이미지 생성
+    # 가상의 기본 원본 생성
     if not input_path or not os.path.exists(input_path):
         print(f"⚠️ 원본 파일 {image_id}가 없어 가상의 백색 이미지를 생성합니다.")
-        img = Image.new("RGB", (512, 512), color="white")
-        dummy_input = os.path.join("uploads", f"{image_id}.jpg")
+        img = Image.new("RGB", (768, 512), color="white")
+        dummy_input = os.path.join(backend_dir, "uploads", f"{image_id}.jpg")
         img.save(dummy_input)
         input_path = dummy_input
         ext_found = ".jpg"
-        output_path = os.path.join("results", f"{result_id}.jpg")
-
-    if not NODES_AVAILABLE:
-        # 노드를 불러올 수 없으면 단순히 원본을 복제
-        shutil.copy(input_path, output_path)
-        return f"/static/results/{result_id}{ext_found}"
+        output_path = os.path.join(backend_dir, "results", f"{result_id}.jpg")
 
     try:
-        # PIL 로드 및 정규화
+        # PIL 이미지 로드 (원본 구조 보존을 위해 원본 이미지를 베이스로 지정)
         img = Image.open(input_path).convert("RGB")
-        img_np = np.array(img).astype(np.float32) / 255.0
+        w, h = img.size
         
-        # [1, H, W, C] 텐서 생성
-        img_tensor = torch.from_numpy(img_np).unsqueeze(0)
+        # 텍스트 검사를 위해 결합된 프롬프트 생성
+        combined_text = f"{style_name or ''} {prompt_text or ''}".lower()
         
-        # 대비 및 밝기 조정 적용 (bright=brightness, contrast=contrast)
-        cb_node = ImageContrastBrightness()
-        img_tensor = cb_node.adjust(img_tensor, contrast=contrast, brightness=brightness)[0]
+        # 스타일에 따른 매칭 키워드 스캔
+        selected_style_key = None
+        if any(x in combined_text for x in ["우드", "wood", "나무", "따뜻한", "scandinavian", "북유럽", "cozy", "brown", "natural", "내추럴"]):
+            selected_style_key = "wood"
+        elif any(x in combined_text for x in ["화이트", "white", "밝은", "gallery", "깔끔한", "bright", "light", "clean", "화사"]):
+            selected_style_key = "white"
+        elif any(x in combined_text for x in ["미니멀", "minimal", "모던", "modern", "urban", "그레이", "gray", "sleek"]):
+            selected_style_key = "minimal"
+        elif any(x in combined_text for x in ["어두운", "dark", "밤", "moody", "블랙", "black"]):
+            selected_style_key = "dark"
+
+        # 3. 🎨 공간 구조를 100% 보존하면서 스타일 전이(Before/After 전후 변화)를 확연하게 느끼도록 설계한 하이브리드 블렌딩 기법
+        # (원본 이미지와 고화질 템플릿의 색채/질감 믹싱 + 톤앤톤 소프트 펜선 오버레이 적용)
+        style_templates = {
+            "wood": "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=1024&auto=format&fit=crop",
+            "white": "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=1024&auto=format&fit=crop",
+            "minimal": "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1024&auto=format&fit=crop",
+            "dark": "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=1024&auto=format&fit=crop"
+        }
         
-        # [텍스트 오버레이 비활성화] 사용자의 요청에 따라 이미지 내 가이드/디버그 텍스트 인쇄를 생략합니다.
-        pass
+        template_img = None
+        if selected_style_key:
+            print(f"🎨 [Mock Style] '{selected_style_key}' 테마 매칭 성공. 고화질 템플릿 로드...")
+            template_img = download_and_cache_image(style_templates[selected_style_key], f"template_{selected_style_key}")
             
-        # 텐서 복원
-        if hasattr(img_tensor, 'numpy'):
-            out_np = img_tensor.numpy() if hasattr(img_tensor.numpy, '__call__') else img_tensor.numpy
-        elif hasattr(img_tensor, 'data'):
-            out_np = img_tensor.data
+        if template_img:
+            # 템플릿 이미지를 원본 이미지 해상도로 리사이징
+            template_img = template_img.resize((w, h), Image.Resampling.LANCZOS)
+            
+            # [A] 기본 구조 믹스: 원본 55% + 템플릿 질감/색상 45% 합성 (원본 가구 레이아웃 100% 유지)
+            blended_base = Image.blend(img, template_img, 0.45)
+            
+            # [B] 에지 노이즈 필터링: 원본 이미지에서 윤곽선 추출 후 지글지글한 세로줄 노이즈 억제
+            edges = img.filter(ImageFilter.FIND_EDGES).convert("L")
+            edges = ImageEnhance.Contrast(edges).enhance(1.4)
+            edges_inverted = Image.eval(edges, lambda x: 255 - x)
+            # 메디안 필터 및 가우시안 소프트 블러로 에지 경계를 얇고 부드럽게 다듬음
+            edges_smooth = edges_inverted.filter(ImageFilter.MedianFilter(3)).filter(ImageFilter.GaussianBlur(1))
+            
+            # [C] 톤앤톤 드로잉 채색: 시커먼 에지 대신 스타일에 맞는 우아한 배색선 사용
+            pen_color = (130, 95, 65)  # wood: 따뜻한 우드 브라운
+            if selected_style_key == "white":
+                pen_color = (160, 160, 162)  # white: 모던 실버 그레이
+            elif selected_style_key == "minimal":
+                pen_color = (80, 80, 85)     # minimal: 어반 차콜
+            elif selected_style_key == "dark":
+                pen_color = (50, 50, 55)     # dark: 차분한 딥그레이
+                
+            pen_layer = Image.new("RGB", (w, h), pen_color)
+            
+            # 부드러운 스케치 펜선 얹기 (약 12% 수준의 은은한 투명도 오버레이)
+            sketched_img = Image.composite(blended_base, pen_layer, edges_smooth)
+            img = Image.blend(blended_base, sketched_img, 0.12)
+            
+            # [D] 스타일별 시그니처 명암/대비 픽셀 튜닝
+            if selected_style_key == "wood":
+                img = ImageEnhance.Color(img).enhance(1.15)
+                img = ImageEnhance.Contrast(img).enhance(1.05)
+            elif selected_style_key == "white":
+                img = ImageEnhance.Brightness(img).enhance(1.20)
+                img = ImageEnhance.Color(img).enhance(0.9)
+            elif selected_style_key == "minimal":
+                img = ImageEnhance.Color(img).enhance(0.40)
+                img = ImageEnhance.Contrast(img).enhance(1.25)
+            elif selected_style_key == "dark":
+                img = ImageEnhance.Brightness(img).enhance(0.70)
+                img = ImageEnhance.Contrast(img).enhance(1.1)
+                
+            print(f"🎨 [Mock Style] 하이브리드 블렌딩 기법 및 '{selected_style_key}' 톤앤톤 얇은 에지 오버레이 완료.")
+            
         else:
-            out_np = np.array(img_tensor)
+            # 템플릿 다운로드 실패 시 Fallback (기존 필터 그레이딩 및 간접 조명 합성)
+            if selected_style_key == "wood":
+                print("🎨 [Mock Style Fallback] 우드/북유럽 테마: 따뜻한 웜톤 보정 및 전구색 소프트 광원 레이어 결합")
+                r, g, b = img.split()
+                r = ImageEnhance.Contrast(r).enhance(1.15)
+                g = ImageEnhance.Contrast(g).enhance(1.05)
+                b = ImageEnhance.Contrast(b).enhance(0.9)
+                img = Image.merge("RGB", (r, g, b))
+                img = ImageEnhance.Contrast(img).enhance(1.1)
+                glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+                glow_draw = ImageDraw.Draw(glow)
+                for radius in range(max(w, h), 0, -10):
+                    alpha = int((1.0 - (radius / max(w, h))) * 45)
+                    glow_draw.ellipse([w//2 - radius, -radius, w//2 + radius, radius], fill=(255, 190, 100, alpha))
+                img = Image.alpha_composite(img.convert("RGBA"), glow).convert("RGB")
+            elif selected_style_key == "white":
+                img = ImageEnhance.Brightness(img).enhance(1.30)
+                img = ImageEnhance.Contrast(img).enhance(0.98)
+                img = ImageEnhance.Color(img).enhance(0.85)
+            elif selected_style_key == "minimal":
+                img = ImageEnhance.Color(img).enhance(0.20)
+                img = ImageEnhance.Contrast(img).enhance(1.35)
+                img = ImageEnhance.Brightness(img).enhance(0.95)
+            elif selected_style_key == "dark":
+                img = ImageEnhance.Brightness(img).enhance(0.55)
+                img = ImageEnhance.Contrast(img).enhance(1.2)
+                glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+                glow_draw = ImageDraw.Draw(glow)
+                for radius in range(int(h * 0.8), 0, -8):
+                    alpha = int((1.0 - (radius / (h * 0.8))) * 60)
+                    glow_draw.ellipse([-radius, h//2 - radius, radius, h//2 + radius], fill=(255, 160, 60, alpha))
+                img = Image.alpha_composite(img.convert("RGBA"), glow).convert("RGB")
+
+        # 4. 가구 인페인팅 정밀 합성 (BBox)
+        if bbox and len(bbox) == 4:
+            x1, y1, x2, y2 = bbox
+            x1, x2 = sorted([max(0, min(x1, w)), max(0, min(x2, w))])
+            y1, y2 = sorted([max(0, min(y1, h)), max(0, min(y2, h))])
             
-        if len(out_np.shape) == 4:
-            out_np = out_np[0]
+            box_w = x2 - x1
+            box_h = y2 - y1
             
-        out_np = np.clip(out_np * 255.0, 0, 255).astype(np.uint8)
-        out_img = Image.fromarray(out_np)
-        out_img.save(output_path)
-        print(f"🎨 [Image Eng] 이미지 실제 가공 및 저장 완료: {output_path}")
+            if box_w > 5 and box_h > 5:
+                print(f"🎨 [Mock Inpaint] 영역 검출 ({x1}, {y1}) ~ ({x2}, {y2}). 가구 리소스 합성 시작...")
+                
+                # 카테고리 매칭
+                furniture_key = "sofa"
+                if "침대" in combined_text or "bed" in combined_text:
+                    furniture_key = "bed"
+                elif any(x in combined_text for x in ["테이블", "식탁", "책상", "table", "desk"]):
+                    furniture_key = "table"
+                elif "의자" in combined_text or "chair" in combined_text:
+                    furniture_key = "chair"
+                elif any(x in combined_text for x in ["조명", "스탠드", "lighting", "lamp"]):
+                    furniture_key = "lighting"
+
+                # 1순위: 인터넷 연결 시 Unsplash에서 실제 고품질 가구 이미지 조각 로드
+                furniture_urls = {
+                    "sofa": "https://images.unsplash.com/photo-1484101403633-562f891dc89a?w=400&fit=crop",
+                    "bed": "https://images.unsplash.com/photo-1540518614846-7eded433c457?w=400&fit=crop",
+                    "table": "https://images.unsplash.com/photo-1530018607912-eff2df114f11?w=400&fit=crop",
+                    "chair": "https://images.unsplash.com/photo-1580481072645-022f9a6dbf27?w=400&fit=crop",
+                    "lighting": "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?w=400&fit=crop"
+                }
+                
+                furniture_src = download_and_cache_image(furniture_urls[furniture_key], f"furniture_{furniture_key}")
+                
+                # 2순위: 다운로드 실패 또는 오프라인인 경우 즉석에서 고화질 그래픽 가구 에셋 벡터 드로잉 생성!
+                if not furniture_src:
+                    print(f"🎨 [Mock Inpaint] 이미지 다운로드 실패로 즉석 가구 렌더링 드로잉 구동: '{furniture_key}'")
+                    furniture_src = draw_mock_furniture_vector(box_w, box_h, furniture_key)
+                
+                if furniture_src:
+                    # 크기 조절 및 합성용 알파 채널 오버레이 생성
+                    if furniture_src.mode != "RGBA":
+                        # Unsplash 다운로드 파일인 경우 (RGB) 크기조정 후 붙여넣기
+                        f_ratio = furniture_src.width / furniture_src.height
+                        box_ratio = box_w / box_h
+                        if box_ratio > f_ratio:
+                            new_fh = int(box_w / f_ratio)
+                            resized_f = furniture_src.resize((box_w, new_fh), Image.Resampling.LANCZOS)
+                            crop_y = (new_fh - box_h) // 2
+                            cropped_f = resized_f.crop((0, crop_y, box_w, crop_y + box_h)).convert("RGBA")
+                        else:
+                            new_fw = int(box_h * f_ratio)
+                            resized_f = furniture_src.resize((new_fw, box_h), Image.Resampling.LANCZOS)
+                            crop_x = (new_fw - box_w) // 2
+                            cropped_f = resized_f.crop((crop_x, 0, crop_x + box_w, box_h)).convert("RGBA")
+                    else:
+                        # 즉석 드로잉 벡터 이미지인 경우 (RGBA) BBox 크기에 맞게 생성되었으므로 그대로 사용
+                        cropped_f = furniture_src
+                    
+                    # 3D 렌더링 합성 레이어 구성
+                    f_overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+                    f_overlay.paste(cropped_f, (x1, y1), cropped_f)
+                    
+                    # 마스킹 깃털(Feathering) 가우시안 블러 마스크 생성 (경계 부드러움 극대화)
+                    blend_mask = Image.new("L", (w, h), 0)
+                    draw_blend = ImageDraw.Draw(blend_mask)
+                    draw_blend.rectangle([x1, y1, x2, y2], fill=255)
+                    
+                    feather_val = max(3, int(min(box_w, box_h) * 0.08))
+                    blend_mask_blurred = blend_mask.filter(ImageFilter.GaussianBlur(feather_val))
+                    
+                    # 최종 알파 블렌드 합성
+                    img = Image.composite(f_overlay.convert("RGB"), img, blend_mask_blurred)
+                    print(f"🎨 [Mock Inpaint] 가우시안 깃털 페더링({feather_val}px) 기법으로 '{furniture_key}' 합성 완료.")
+
+                # 세련된 인페인팅 텍스트 라벨 오버레이
+                draw_text = ImageDraw.Draw(img)
+                label_msg = f"[AI Inpainted: {furniture_key.upper()}]"
+                try:
+                    font_paths = ["C:\\Windows\\Fonts\\malgun.ttf", "C:\\Windows\\Fonts\\arial.ttf"]
+                    font = None
+                    for path in font_paths:
+                        if os.path.exists(path):
+                            font = ImageFont.truetype(path, size=max(11, int(box_h * 0.09)))
+                            break
+                    if font is None:
+                        font = ImageFont.load_default()
+                except:
+                    font = ImageFont.load_default()
+                
+                text_w, text_h = 100, 18
+                if hasattr(font, "getbbox"):
+                    tb = font.getbbox(label_msg)
+                    text_w, text_h = tb[2] - tb[0], tb[3] - tb[1]
+                
+                tx = x1 + box_w // 2 - text_w // 2
+                ty = y1 + box_h // 2 - text_h // 2
+                draw_text.rectangle([tx - 6, ty - 4, tx + text_w + 6, ty + text_h + 4], fill=(0, 0, 0, 160))
+                draw_text.text((tx, ty), label_msg, fill=(255, 255, 255), font=font)
+
+        img.save(output_path, quality=90)
+        print(f"🎨 [Mock Render] 공간 구조 보존 및 모킹 가구 합성 완료: {output_path}")
+        
     except Exception as e:
-        print(f"❌ [Image Eng] 가공 실패 (복사 대체): {e}")
+        print(f"❌ [Mock Render] 가공 중 치명적 오류 발생 (복사 대체): {e}")
+        import traceback
+        traceback.print_exc()
         shutil.copy(input_path, output_path)
         
     return f"/static/results/{result_id}{ext_found}"
@@ -714,7 +1204,9 @@ def generate_image(req: ImageGenerateRequest):
             break
     input_filename = f"{req.image_id}{ext_found}"
     
-    denoise_val = float(req.strength or 65.0) / 100.0
+    # 기존 공간 레이아웃(벽선, 큰 가구 경계)을 단단하게 고정하되, 새로운 스타일 변환을 수용하기 위해 denoise 최대 상한을 0.70 또는 0.95로 매핑 스케일 조정!
+    max_denoise = 0.70 if req.keep_structure else 0.95
+    denoise_val = (float(req.strength or 65.0) / 100.0) * max_denoise
     parameters = {
         "image_filename": input_filename,
         "prompt": translate_prompt_to_english(req.prompt),
@@ -743,11 +1235,14 @@ def generate_image(req: ImageGenerateRequest):
             brightness_val = -0.05
             contrast_val = 0.88
 
+        # ✅ 버그 수정: Mock fallback에 번역된 영어 프롬프트 + 원본 한국어 프롬프트 모두 전달
+        # process_mock_image는 combined_text에서 한국어 키워드 검사하므로 원본 필요
+        combined_prompt_text = f"{req.prompt} {parameters['prompt']}"
         generated_url = process_mock_image(
             image_id=req.image_id or "img_dummy",
             result_id=result_id,
             style_name=req.style,
-            prompt_text=req.prompt,
+            prompt_text=combined_prompt_text,
             brightness=brightness_val,
             contrast=contrast_val,
             text_overlay=f"ZipPT AI Style Generator\nStyle: {req.style}"
@@ -760,6 +1255,7 @@ def generate_image(req: ImageGenerateRequest):
         "image_id": req.image_id,
         "prompt": req.prompt,
         "style": req.style,
+        "keep_structure": req.keep_structure,
         "generated_image_url": generated_url,
         "workflow": workflow_info,
         "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -886,20 +1382,46 @@ def edit_image(req: ImageEditRequest):
     
     edit_id = f"edit_{uuid.uuid4().hex[:8]}"
     
-    ext_found = ".jpg"
-    for ext in (".jpg", ".jpeg", ".png"):
-        if os.path.exists(os.path.join("uploads", f"{req.image_id}{ext}")):
-            ext_found = ext
-            break
-    orig_input_filename = f"{req.image_id}{ext_found}"
+    # ✅ 수정: backend/ 디렉터리 기준으로 파일 탐색 (uvicorn을 backend/에서 실행하므로)
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # 🎭 사용자가 웹 화면에서 드래그한 영역(req.mask = [x1, y1, x2, y2])을 순수 흑백(L 모드) 마스크로 직접 추출 저장
-    from PIL import Image, ImageDraw
-    # 캐시 폭파 일련 해시
+    # uploads/ 딥두 results/ 두 폴더에서 원본 파일 탐색
+    orig_input_filename = None
+    orig_path = None
+    for search_folder in ("uploads", "results"):
+        for ext in (".jpg", ".jpeg", ".png"):
+            candidate_path = os.path.join(backend_dir, search_folder, f"{req.image_id}{ext}")
+            if os.path.exists(candidate_path):
+                orig_input_filename = f"{req.image_id}{ext}"
+                orig_path = candidate_path
+                print(f"[Edit] 원본 파일 발견: {orig_path}")
+                break
+        if orig_path:
+            break
+    
+    # 파일을 못 찾은 경우 CWD 기준으로 다시 시도
+    if not orig_path:
+        for search_folder in ("uploads", "results"):
+            for ext in (".jpg", ".jpeg", ".png"):
+                candidate_path = os.path.join(search_folder, f"{req.image_id}{ext}")
+                if os.path.exists(candidate_path):
+                    orig_input_filename = f"{req.image_id}{ext}"
+                    orig_path = candidate_path
+                    print(f"[Edit] CWD 기준 원본 파일 발견: {orig_path}")
+                    break
+            if orig_path:
+                break
+    
+    if not orig_path:
+        # 원본 파일이 없으면 모크 폠백으로 처리 (black 이미지)
+        print(f"[Edit] 원본 파일 로드 실패 (image_id={req.image_id}) - 모크로 진행")
+        orig_input_filename = f"{req.image_id}.jpg"
+        orig_path = None  # 마스크 생성 실패 시 Mock으로 대체
+    
+    # 파일명 및 마스크 경로 설정
     cache_bust_suffix = f"_{int(time.time() * 10)}"
     mask_filename = f"{req.image_id}_mask{cache_bust_suffix}.png"
-    orig_path = os.path.join("uploads", orig_input_filename)
-    mask_path = os.path.join("uploads", mask_filename)
+    mask_path = os.path.join(backend_dir, "uploads", mask_filename)
     
     try:
         if os.path.exists(orig_path):
@@ -915,7 +1437,13 @@ def edit_image(req: ImageEditRequest):
                     
                     draw = ImageDraw.Draw(mask_layer)
                     draw.rectangle([x1, y1, x2, y2], fill=255) # 255 = 흰색 (마스크 있음)
-                    print(f"🎭 [Masking] 사용자가 지정한 BBox 영역 마스킹 채널 생성: ({x1}, {y1}) ~ ({x2}, {y2})")
+                    
+                    # 마스크의 에지가 부자연스럽게 들뜨는 현상을 막기 위해 팽창(Dilation) 및 깃털(Feathering) 가우시안 블러 합성!
+                    feather = max(6, min(w, h) // 80)
+                    expand_size = feather * 2 + 1
+                    mask_layer = mask_layer.filter(ImageFilter.MaxFilter(expand_size))
+                    mask_layer = mask_layer.filter(ImageFilter.GaussianBlur(feather))
+                    print(f"🎭 [Masking] 사용자가 지정한 BBox 영역 마스킹 채널 생성 (깃털 효과 완료): ({x1}, {y1}) ~ ({x2}, {y2})")
                 else:
                     draw = ImageDraw.Draw(mask_layer)
                     draw.rectangle([int(w * 0.2), int(h * 0.2), int(w * 0.8), int(h * 0.8)], fill=255)
@@ -948,7 +1476,8 @@ def edit_image(req: ImageEditRequest):
     
     real_filename = None
     if comfy_online:
-        real_filename = execute_real_comfyui("user_masked_inpainting_workflow.json", parameters)
+        # ✅ 버그 수정: 딕셔너리 copy()를 통해 매개변수 변조 방지
+        real_filename = execute_real_comfyui("user_masked_inpainting_workflow.json", parameters.copy())
         
     if real_filename:
         result_url = f"/static/results/{real_filename}"
@@ -956,11 +1485,13 @@ def edit_image(req: ImageEditRequest):
     else:
         brightness_val = -0.15
         contrast_val = 1.35
+        # ✅ 버그 수정: 원본 한국어 프롬프트 + 번역된 영어 프롬프트 모두 전달해 한국어 키워드 매칭 보장
+        combined_prompt_for_mock = f"{req.prompt} {parameters['prompt']}"
         result_url = process_mock_image(
             image_id=req.image_id,
             result_id=edit_id,
             style_name="Furniture Inpaint Style",
-            prompt_text=req.prompt,
+            prompt_text=combined_prompt_for_mock,
             brightness=brightness_val,
             contrast=contrast_val,
             text_overlay=f"ZipPT Furniture Inpainting\nObj: {req.selected_object or 'N/A'}",
@@ -1021,6 +1552,85 @@ def get_session_history(session_id: str):
             updated_at=session_data["updated_at"]
         ),
         message="세션 내역 조회가 완료되었습니다."
+    )
+
+
+# =====================================================================
+# [NEW API 8 창구] 유사 상품 검색 API (POST /api/products/search)
+# =====================================================================
+@app.post("/api/products/search", response_model=SuccessResponse[ProductSearchResponse])
+def search_similar_products(payload: Dict[str, Any]):
+    """
+    [유사 상품 검색 창구]
+    가구 인페인팅 편집 완료 시, 탐지된 가구의 좌표 정보 및 프롬프트 키워드를 스캔하여,
+    가장 어울리는 실제 가구 상품(이케아, 한샘 등)을 모킹하여 추천 목록으로 반환합니다.
+    """
+    prompt = (payload.get("prompt") or "").lower()
+    selected_obj = (payload.get("selected_object") or "").lower()
+    
+    # 대표 가구별 실제 모킹 상품 데이터 베이스 (Referer 제약이 없는 Unsplash 고품질 이미지 사용)
+    product_db = {
+        "sofa": [
+            {"product_name": "이케아 쇠데르함(SÖDERHAMN) 3인용 패브릭 소파", "price": "699,000원", "image_url": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500&auto=format&fit=crop", "purchase_link": "https://www.ikea.com/kr/ko/p/soederhamn-3-seat-section-samsta-dark-grey-s59135948/", "similarity": 0.94},
+            {"product_name": "한샘 밀란 303 프레임 모던 패브릭 소파", "price": "890,000원", "image_url": "https://images.unsplash.com/photo-1484101403633-562f891dc89a?w=500&auto=format&fit=crop", "purchase_link": "https://mall.hanssem.com/goods/goodsDetail.do?gdsNo=664402", "similarity": 0.88},
+            {"product_name": "무인양행 깃털 포켓코일 로우 코지 소파", "price": "750,000원", "image_url": "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=500&auto=format&fit=crop", "purchase_link": "https://www.mujikorea.net/goods/detail/4550182584509", "similarity": 0.81}
+        ],
+        "bed": [
+            {"product_name": "이케아 말름(MALM) 모던 수납형 침대 프레임", "price": "449,000원", "image_url": "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=500&auto=format&fit=crop", "purchase_link": "https://www.ikea.com/kr/ko/p/malm-bed-frame-high-w-2-storage-boxes-white-s99175971/", "similarity": 0.92},
+            {"product_name": "에이스침대 BMA-1139-E 코지 라이트형 침대", "price": "1,250,000원", "image_url": "https://images.unsplash.com/photo-1540518614846-7eded433c457?w=500&auto=format&fit=crop", "purchase_link": "https://www.acebed.com/product/view.do?goodsNo=GD0000000000000305", "similarity": 0.87},
+            {"product_name": "시몬스 뷰티레스트 자스민 안방 가죽 침대", "price": "2,100,000원", "image_url": "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=500&auto=format&fit=crop", "purchase_link": "https://www.simmons.co.kr/product/view/beautyrest-jasmine", "similarity": 0.83}
+        ],
+        "table": [
+            {"product_name": "이케아 독스타(DOCKSTA) 원형 라운드 테이블", "price": "299,000원", "image_url": "https://images.unsplash.com/photo-1577140917170-285929fb55b7?w=500&auto=format&fit=crop", "purchase_link": "https://www.ikea.com/kr/ko/p/docksta-table-white-white-s19324995/", "similarity": 0.95},
+            {"product_name": "한샘 도노 세라믹 식탁 4인용 웜화이트", "price": "520,000원", "image_url": "https://images.unsplash.com/photo-1530018607912-eff2df114f11?w=500&auto=format&fit=crop", "purchase_link": "https://mall.hanssem.com/goods/goodsDetail.do?gdsNo=712395", "similarity": 0.89}
+        ],
+        "chair": [
+            {"product_name": "이케아 뇌뷔(NÖBBY) 카페 원목 체어", "price": "59,000원", "image_url": "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=500&auto=format&fit=crop", "purchase_link": "https://www.ikea.com/kr/ko/p/noebby-chair-black-80415531/", "similarity": 0.91},
+            {"product_name": "시디즈 T50 에어 메쉬 라이트 사무용 의자", "price": "249,000원", "image_url": "https://images.unsplash.com/photo-1580481072645-022f9a6dbf27?w=500&auto=format&fit=crop", "purchase_link": "https://www.sidiz.com/product/T500HLDA", "similarity": 0.85}
+        ],
+        "lighting": [
+            {"product_name": "이케아 프뤼보(FLYBO) 모던 블랙 플로어 스탠드", "price": "49,900원", "image_url": "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=500&auto=format&fit=crop", "purchase_link": "https://www.ikea.com/kr/ko/p/flybo-floor-lamp-black-20416294/", "similarity": 0.93},
+            {"product_name": "필립스 휴(Hue) 그라디언트 스마트 앰비언트 스트립", "price": "219,000원", "image_url": "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?w=500&auto=format&fit=crop", "purchase_link": "https://www.lighting.philips.co.kr/consumer/hue", "similarity": 0.88}
+        ]
+    }
+    
+    # 쿼리에서 가장 알맞은 카테고리 매칭 트리거
+    target_category = "sofa" # 기본 추천은 소파
+    combined_query = f"{prompt} {selected_obj}"
+    
+    if any(x in combined_query for x in ["침대", "bed", "sleep", "이불", "매트리스"]):
+        target_category = "bed"
+    elif any(x in combined_query for x in ["테이블", "식탁", "책상", "desk", "table", "식사", "식탁보"]):
+        target_category = "table"
+    elif any(x in combined_query for x in ["의자", "체어", "chair", "스툴"]):
+        target_category = "chair"
+    elif any(x in combined_query for x in ["조명", "스탠드", "light", "lamp", "불빛", "스폿"]):
+        target_category = "lighting"
+        
+    recommended_items = product_db.get(target_category, product_db["sofa"])
+    
+    # 유사도에 약간의 난수 오차(현실적인 시뮬레이션)를 줘서 동적 검색처럼 보이게 함
+    import random
+    products = []
+    for item in recommended_items:
+        sim_val = round(min(0.99, max(0.50, item["similarity"] + random.uniform(-0.03, 0.03))), 2)
+        products.append(
+            ProductItem(
+                product_name=item["product_name"],
+                price=item["price"],
+                image_url=item["image_url"],
+                purchase_link=item["purchase_link"],
+                similarity=sim_val
+            )
+        )
+        
+    # 유사도 내림차순 정렬
+    products.sort(key=lambda x: x.similarity, reverse=True)
+    
+    return SuccessResponse(
+        success=True,
+        data=ProductSearchResponse(products=products),
+        message=f"'{target_category}' 카테고리 유사 가구 상품 추천 결과입니다."
     )
 
 

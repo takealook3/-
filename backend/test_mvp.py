@@ -56,11 +56,25 @@ def run_tests():
     print("5️⃣ [신규 1] POST /api/image/generate 검증 중...")
     res5 = client.post(
         "/api/image/generate",
-        json={"session_id": session_id, "prompt": "Graffiti art on wall", "style": "realistic"}
+        json={"session_id": session_id, "prompt": "Graffiti art on wall", "style": "realistic", "keep_structure": False}
     )
     print(f"   - 응답 알맹이: {res5.json()['data']}\n")
     assert res5.status_code == 200 and res5.json()["success"] == True
     assert "task_id" in res5.json()["data"]
+
+    # 5-1. [신규 1-2] POST /api/products/search
+    print("5️⃣-1 [신규 1-2] POST /api/products/search 검증 중...")
+    res_prod = client.post(
+        "/api/products/search",
+        json={"prompt": "북유럽풍 침대", "selected_object": "bed"}
+    )
+    prod_data = res_prod.json()["data"]
+    print(f"   - 추천된 유사 가구 수: {len(prod_data['products'])}건")
+    for prod in prod_data["products"]:
+        print(f"     * {prod['product_name']} ({prod['price']}) - 유사도 {int(prod['similarity']*100)}%")
+    print()
+    assert res_prod.status_code == 200 and res_prod.json()["success"] == True
+    assert len(prod_data["products"]) > 0
 
     # 6. [신규 2] POST /api/chat (에러 처리 및 정상 처리)
     print("6️⃣ [신규 2] POST /api/chat (질문 빈값 에러 및 정상 답변) 검증 중...")

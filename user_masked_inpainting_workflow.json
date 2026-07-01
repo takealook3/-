@@ -79,7 +79,7 @@
         {"name": "MASK", "type": "MASK", "links": [12], "slot_index": 0}
       ],
       "properties": {},
-      "widgets_values": ["mask.png", "alpha"]
+      "widgets_values": ["mask.png", "red"]
     },
     {
       "id": 10,
@@ -101,7 +101,8 @@
         {"name": "NEGATIVE", "type": "CONDITIONING", "links": [14], "slot_index": 1},
         {"name": "LATENT", "type": "LATENT", "links": [15], "slot_index": 2}
       ],
-      "properties": {}
+      "properties": {},
+      "widgets_values": [true]
     },
     {
       "id": 6,
@@ -116,6 +117,9 @@
         {"name": "positive", "type": "CONDITIONING", "link": 13},
         {"name": "negative", "type": "CONDITIONING", "link": 14},
         {"name": "latent_image", "type": "LATENT", "link": 15}
+      ],
+      "outputs": [
+        {"name": "LATENT", "type": "LATENT", "links": [11], "slot_index": 0}
       ],
       "properties": {},
       "widgets_values": [
