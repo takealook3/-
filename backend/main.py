@@ -10,6 +10,9 @@ from fastapi.staticfiles import StaticFiles
 from typing import Optional, Dict, Any
 import uuid, os, time, datetime, sys, json, shutil
 
+# 로컬 backend 디렉터리 경로를 최우선 검색 경로로 삽입하여 schemas.py 임포트 충돌 방지
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 # 상위 폴더(프로젝트 루트)에 있는 RAG 엔진(query.py) 임포트를 위한 sys.path 추가
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from dotenv import load_dotenv
