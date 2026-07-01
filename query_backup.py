@@ -38,11 +38,6 @@ from langchain_core.documents import Document
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.prompts import PromptTemplate
 
-# 하이브리드 검색을 위한 패키지 임포트
-from kiwipiepy import Kiwi
-from langchain_classic.retrievers import EnsembleRetriever as LangChainEnsembleRetriever
-from langchain_community.retrievers import BM25Retriever
-
 # ── 상수 ──────────────────────────────────────────────────────────────────
 DB_DIR               = "./chroma_db"
 COLLECTION_CHECKLIST = "interior_checklist"
@@ -154,115 +149,6 @@ def call_llm_stream(llm: ChatGoogleGenerativeAI, prompt_template: str, **kwargs)
     return "".join(full_response).strip()
 
 
-# ── 한국어 형태소 분석기 Kiwi 설정 ─────────────────────────────────────────
-# 한국어 조사를 제거하고 명사/용언만 정확히 추출해 검색 품질을 극대화합니다.
-kiwi = Kiwi()
-
-def kiwi_tokenize(text: str) -> List[str]:
-    """Kiwi를 사용하여 한국어 텍스트를 형태소 단위로 토큰화합니다."""
-    return [token.form for token in kiwi.tokenize(text) if token.tag.startswith(('NN', 'V', 'SL'))]
-
-
-# ── Chroma DB에서 전체 문서 데이터 가져오기 헬퍼 함수 ───────────────────────
-def get_all_documents_from_chroma(db: Chroma) -> List[Document]:
-    """ChromaDB 컬렉션에 적재된 모든 문서를 조회하여 LangChain Document 리스트로 반환합니다."""
-    data = db.get()
-    documents = []
-    if data and "documents" in data and data["documents"]:
-        for text, meta in zip(data["documents"], data["metadatas"]):
-            documents.append(Document(page_content=text, metadata=meta))
-    return documents
-
-
-# ── 커스텀 HybridEnsembleRetriever ─────────────────────────────────────────
-class HybridEnsembleRetriever(BaseRetriever):
-    """
-    법령 + 체크리스트 + FAQ(시공지식) 세 개 컬렉션 각각에 대해
-    BM25(키워드)와 Vector(의미) 하이브리드 검색을 수행하고 이를 병합하는 통합 Retriever.
-    """
-    law_hybrid: BaseRetriever
-    checklist_hybrid: BaseRetriever
-    knowledge_hybrid: BaseRetriever
-
-    def _get_relevant_documents(
-        self,
-        query: str,
-        *,
-        run_manager: CallbackManagerForRetrieverRun,
-    ) -> List[Document]:
-        # 세 개의 하이브리드 검색기에서 각각 RRF 융합된 관련 문서를 가져옵니다.
-        law_docs       = self.law_hybrid.invoke(query)
-        checklist_docs = self.checklist_hybrid.invoke(query)
-        knowledge_docs = self.knowledge_hybrid.invoke(query)
-        
-        # 검색된 모든 문서를 하나로 합쳐서 반환합니다.
-        return law_docs + checklist_docs + knowledge_docs
-
-
-# ── 하이브리드 Retriever 로딩 ──────────────────────────────────────────────────────
-def load_retriever(embeddings: GoogleGenerativeAIEmbeddings) -> HybridEnsembleRetriever:
-    """ChromaDB 세 개 컬렉션을 불러와 BM25와 결합한 하이브리드 검색기로 통합합니다."""
-    # 1. 각 컬렉션 로드
-    law_db = Chroma(
-        collection_name=COLLECTION_LAW,
-        embedding_function=embeddings,
-        persist_directory=DB_DIR,
-    )
-    checklist_db = Chroma(
-        collection_name=COLLECTION_CHECKLIST,
-        embedding_function=embeddings,
-        persist_directory=DB_DIR,
-    )
-    knowledge_db = Chroma(
-        collection_name=COLLECTION_KNOWLEDGE,
-        embedding_function=embeddings,
-        persist_directory=DB_DIR,
-    )
-    
-    # 2. 각 컬렉션의 전체 원본 문서를 긁어와 BM25Retriever 생성
-    print("  - 법령(Law) BM25 인덱스 생성 중...")
-    law_docs = get_all_documents_from_chroma(law_db)
-    law_bm25 = BM25Retriever.from_documents(law_docs, preprocess_func=kiwi_tokenize)
-    law_bm25.k = 2
-    
-    print("  - 체크리스트(Checklist) BM25 인덱스 생성 중...")
-    checklist_docs = get_all_documents_from_chroma(checklist_db)
-    checklist_bm25 = BM25Retriever.from_documents(checklist_docs, preprocess_func=kiwi_tokenize)
-    checklist_bm25.k = 2
-    
-    print("  - FAQ(Knowledge) BM25 인덱스 생성 중...")
-    knowledge_docs = get_all_documents_from_chroma(knowledge_db)
-    knowledge_bm25 = BM25Retriever.from_documents(knowledge_docs, preprocess_func=kiwi_tokenize)
-    knowledge_bm25.k = 2
-    
-    # 3. Vector Retriever 생성
-    law_vector = law_db.as_retriever(search_kwargs={"k": 2})
-    checklist_vector = checklist_db.as_retriever(search_kwargs={"k": 2})
-    knowledge_vector = knowledge_db.as_retriever(search_kwargs={"k": 2})
-    
-    # 4. 각 컬렉션별로 BM25와 Vector를 융합 (RRF 적용, 가중치 4:6)
-    print("  - 컬렉션별 RRF 앙상블 리트리버 결합 중...")
-    law_hybrid = LangChainEnsembleRetriever(
-        retrievers=[law_bm25, law_vector],
-        weights=[0.4, 0.6]
-    )
-    checklist_hybrid = LangChainEnsembleRetriever(
-        retrievers=[checklist_bm25, checklist_vector],
-        weights=[0.4, 0.6]
-    )
-    knowledge_hybrid = LangChainEnsembleRetriever(
-        retrievers=[knowledge_bm25, knowledge_vector],
-        weights=[0.4, 0.6]
-    )
-    
-    # 5. 최종 통합 하이브리드 리트리버 반환
-    return HybridEnsembleRetriever(
-        law_hybrid=law_hybrid,
-        checklist_hybrid=checklist_hybrid,
-        knowledge_hybrid=knowledge_hybrid,
-    )
-
-
 # ── 텍스트 전처리 유틸리티 ──────────────────────────────────────────────────
 def sanitize_text(text: str) -> str:
     """
@@ -372,7 +258,7 @@ def load_retriever(embeddings: GoogleGenerativeAIEmbeddings) -> EnsembleRetrieve
 # ── RAG 파이프라인 (Direct Korean RAG) ───────────────────────────────────
 def answer_question(
     korean_question: str,
-    retriever: HybridEnsembleRetriever,
+    retriever: EnsembleRetriever,
     llm: ChatGoogleGenerativeAI,
 ) -> tuple[str, List[Document]]:
     """
@@ -418,7 +304,7 @@ def print_sources(source_docs: List[Document]) -> None:
 
 
 # ── 인터랙티브 루프 ──────────────────────────────────────────────────────
-def run_interactive_loop(retriever: HybridEnsembleRetriever, llm: ChatGoogleGenerativeAI) -> None:
+def run_interactive_loop(retriever: EnsembleRetriever, llm: ChatGoogleGenerativeAI) -> None:
     print("\n" + "=" * 60)
     print("  실내건축 기준 RAG 질의응답 (Google Gemini API LLM)")
     print("  (종료: 'exit' 또는 'quit' 입력)")
