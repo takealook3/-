@@ -10,10 +10,16 @@ ingest_law.py
 
 import os
 import sys
+import pickle
 from dotenv import load_dotenv
 from langchain_core.documents import Document
 from langchain_community.vectorstores import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.retrievers import BM25Retriever
+
+# 공통 설정 및 유틸 임포트
+import config
+from utils import kiwi_tokenize
 
 # Windows 터미널의 cp949 인코딩 문제 해결: stdout을 UTF-8로 강제 재설정
 if sys.stdout.encoding != "utf-8":
@@ -290,15 +296,34 @@ def main() -> None:
     print("Google Gemini 임베딩 모델 초기화 중...")
     embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
 
+    # ── ChromaDB 데이터 로드 및 초기화 (중복 방지) ──────────────────────
+    print("ChromaDB 데이터 적재 및 초기화 중...")
+    temp_store = Chroma(
+        collection_name=config.COLLECTION_LAW,
+        embedding_function=embeddings,
+        persist_directory=config.DB_DIR
+    )
+    db_get = temp_store.get()
+    if db_get and db_get['ids']:
+        print(f"-> 기존 데이터 {len(db_get['ids'])}개를 감지하여 삭제(초기화)를 진행합니다.")
+        temp_store.delete(ids=db_get['ids'])
+
     # ── ChromaDB에 적재 ──────────────────────────────────────────────────
-    print(f"총 {len(LAW_CHUNKS)}개 조문 청크를 '{COLLECTION_NAME}' 컬렉션에 적재 중...")
+    print(f"총 {len(LAW_CHUNKS)}개 조문 청크를 '{config.COLLECTION_LAW}' 컬렉션에 적재 중...")
     vector_store = Chroma.from_documents(
         documents=LAW_CHUNKS,
         embedding=embeddings,
-        persist_directory=DB_DIR,
-        collection_name=COLLECTION_NAME,
+        persist_directory=config.DB_DIR,
+        collection_name=config.COLLECTION_LAW,
     )
-    print(f"ChromaDB 적재 완료! 저장 경로: {DB_DIR}\n")
+    print(f"ChromaDB 적재 완료! 저장 경로: {config.DB_DIR}\n")
+
+    # ── BM25 색인 파일 사전 빌드 및 직렬화 저장 ───────────────────────
+    print("BM25 리트리버 캐시 인덱스 직렬화 빌드 중...")
+    bm25_retriever = BM25Retriever.from_documents(LAW_CHUNKS, preprocess_func=kiwi_tokenize)
+    with open(config.BM25_LAW_PATH, "wb") as f:
+        pickle.dump(bm25_retriever, f)
+    print(f"-> BM25 파일 저장 완료: {config.BM25_LAW_PATH}\n")
 
     # ── [검증] 유사도 검색 테스트 ────────────────────────────────────────
     print("=" * 50)

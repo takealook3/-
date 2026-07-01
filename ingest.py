@@ -1,10 +1,14 @@
 import os
+import pickle
 from dotenv import load_dotenv
 from langchain_core.documents import Document
-# 에러 나던 langchain_chroma 대신 가장 안정적인 community 패키지 사용
 from langchain_community.vectorstores import Chroma 
-# OpenAI 대신 Google Gemini 임베딩 라이브러리 로드
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.retrievers import BM25Retriever
+
+# 공통 설정 및 유틸 임포트
+import config
+from utils import kiwi_tokenize
 
 # 1. .env 파일로부터 GOOGLE_API_KEY 자동 로드
 load_dotenv()
@@ -108,20 +112,35 @@ chunks = [
 # 3. Google Gemini 임베딩 모델 선언
 embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
 
-# 4. Chroma DB 경로 및 컬렉션 지정
-db_dir = "./chroma_db"
-collection_name = "interior_checklist"
+# 4. Chroma DB 경로 및 컬렉션 로드 (중복 방지 초기화 처리)
+print("Chroma DB 데이터 적재 및 초기화 중...")
+temp_store = Chroma(
+    collection_name=config.COLLECTION_CHECKLIST,
+    embedding_function=embeddings,
+    persist_directory=config.DB_DIR
+)
+db_get = temp_store.get()
+if db_get and db_get['ids']:
+    print(f"-> 기존 데이터 {len(db_get['ids'])}개를 감지하여 삭제(초기화)를 진행합니다.")
+    temp_store.delete(ids=db_get['ids'])
 
-print("Gemini 임베딩 모델을 사용하여 Chroma DB에 데이터 적재 중...")
+# 신규 데이터 적재
 vector_store = Chroma.from_documents(
     documents=chunks,
     embedding=embeddings,
-    persist_directory=db_dir,
-    collection_name=collection_name
+    persist_directory=config.DB_DIR,
+    collection_name=config.COLLECTION_CHECKLIST
 )
-print("Chroma DB 영구 적재 완료! 데이터가 디렉토리에 저장되었습니다.\n")
+print("Chroma DB 영구 적재 완료!\n")
 
-# 5. [검증 단계] Vector Search 테스트 수행
+# 5. BM25 색인 파일 사전 빌드 및 직렬화 저장
+print("BM25 리트리버 캐시 인덱스 직렬화 빌드 중...")
+bm25_retriever = BM25Retriever.from_documents(chunks, preprocess_func=kiwi_tokenize)
+with open(config.BM25_CHECKLIST_PATH, "wb") as f:
+    pickle.dump(bm25_retriever, f)
+print(f"-> BM25 파일 저장 완료: {config.BM25_CHECKLIST_PATH}\n")
+
+# 6. [검증 단계] Vector Search 테스트 수행
 print("=" * 40)
 print("데이터 적재 확인을 위한 검색 테스트를 시작합니다.")
 print("=" * 40)

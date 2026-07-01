@@ -10,7 +10,12 @@ FAQ.py
 
 import os
 import sys
+import pickle # BM25 인덱스 캐시 저장을 위한 라이브러리
 from dotenv import load_dotenv
+
+# 공통 설정 및 형태소 분석 토크나이저 임포트
+import config
+from utils import kiwi_tokenize
 
 # stdout 인코딩 재설정 (Windows 터미널 한글 깨짐 방지)
 try:
@@ -27,6 +32,7 @@ load_dotenv(dotenv_path)
 from langchain_community.vectorstores import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_core.documents import Document
+from langchain_community.retrievers import BM25Retriever # BM25 형태소 검색을 위한 리트리버
 
 CHROMA_PERSIST_DIR = "./chroma_db"
 COLLECTION_NAME = "interior_knowledge"
@@ -504,18 +510,33 @@ def main():
     print("🔧 Gemini 임베딩 모델 초기화 중...")
     embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
 
+    # ── ChromaDB 데이터 로드 및 초기화 (중복 방지) ──────────────────────
+    print("ChromaDB 데이터 적재 및 초기화 중...")
+    temp_store = Chroma(
+        collection_name=config.COLLECTION_KNOWLEDGE,
+        embedding_function=embeddings,
+        persist_directory=config.DB_DIR
+    )
+    db_get = temp_store.get()
+    if db_get and db_get['ids']:
+        print(f"-> 기존 데이터 {len(db_get['ids'])}개를 감지하여 삭제(초기화)를 진행합니다.")
+        temp_store.delete(ids=db_get['ids'])
+
     print(f"💾 ChromaDB 데이터베이스에 {len(CHUNKS)}개 청크 적재 중...")
-    Chroma.from_documents(
+    vector_store = Chroma.from_documents(
         documents=CHUNKS,
         embedding=embeddings,
-        collection_name=COLLECTION_NAME,
-        persist_directory=CHROMA_PERSIST_DIR,
+        collection_name=config.COLLECTION_KNOWLEDGE,
+        persist_directory=config.DB_DIR,
     )
+    print("Chroma DB 영구 적재 완료!\n")
 
-    print("\n✅ 데이터 적재가 완료되었습니다!")
-    print(f"   - 데이터베이스 저장 경로: {CHROMA_PERSIST_DIR}")
-    print(f"   - 새로 생성된 컬렉션 이름: {COLLECTION_NAME}")
-    print(f"   - 총 수집 및 보관된 조각 수: {len(CHUNKS)} 개")
+    # ── BM25 색인 파일 사전 빌드 및 직렬화 저장 ───────────────────────
+    print("BM25 리트리버 캐시 인덱스 직렬화 빌드 중...")
+    bm25_retriever = BM25Retriever.from_documents(CHUNKS, preprocess_func=kiwi_tokenize)
+    with open(config.BM25_KNOWLEDGE_PATH, "wb") as f:
+        pickle.dump(bm25_retriever, f)
+    print(f"-> BM25 파일 저장 완료: {config.BM25_KNOWLEDGE_PATH}\n")
 
 if __name__ == "__main__":
     main()
