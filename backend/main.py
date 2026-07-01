@@ -146,6 +146,119 @@ def log_workflow_execution(workflow_filename: str) -> dict:
         print(f"⚠️ [ComfyUI Sim] 워크플로우 로드 실패: {e}")
         return {"workflow": workflow_filename, "status": "error", "nodes": []}
 
+COMFYUI_API_URL = "http://127.0.0.1:8188"
+
+def check_comfyui_online() -> bool:
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(1.0)
+        s.connect(("127.0.0.1", 8188))
+        s.close()
+        return True
+    except:
+        return False
+
+def convert_webui_to_api_format(webui_data: dict) -> dict:
+    if "nodes" not in webui_data:
+        return webui_data
+    api_format = {}
+    links = {}
+    for node in webui_data["nodes"]:
+        node_id = str(node.get("id"))
+        outputs = node.get("outputs", []) or []
+        for slot_idx, out in enumerate(outputs):
+            out_links = out.get("links") or []
+            if out_links:
+                for link_id in out_links:
+                    links[link_id] = [node_id, slot_idx]
+    for node in webui_data["nodes"]:
+        node_id = str(node.get("id"))
+        node_type = node.get("type")
+        widgets = node.get("widgets_values", []) or []
+        inputs_list = node.get("inputs", []) or []
+        inputs = {}
+        if node_type == "LoadImage" and len(widgets) >= 1:
+            inputs["image"] = widgets[0]
+        elif node_type == "CheckpointLoaderSimple" and len(widgets) >= 1:
+            inputs["ckpt_name"] = widgets[0]
+        elif node_type == "CLIPTextEncode" and len(widgets) >= 1:
+            inputs["text"] = widgets[0]
+        elif node_type == "KSampler" and len(widgets) >= 7:
+            inputs["seed"] = widgets[0]
+            inputs["steps"] = widgets[2]
+            inputs["cfg"] = widgets[3]
+            inputs["sampler_name"] = widgets[4]
+            inputs["scheduler"] = widgets[5]
+            inputs["denoise"] = widgets[6]
+        for inp in inputs_list:
+            inp_name = inp.get("name")
+            link_id = inp.get("link")
+            if link_id in links:
+                src_node_id, src_slot = links[link_id]
+                inputs[inp_name] = [src_node_id, src_slot]
+        api_format[node_id] = {
+            "class_type": node_type,
+            "inputs": inputs
+        }
+    return api_format
+
+def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
+    import requests
+    workflow_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", workflow_filename)
+    if not os.path.exists(workflow_path):
+        return None
+    try:
+        with open(workflow_path, "r", encoding="utf-8") as f:
+            webui_data = json.load(f)
+        for node in webui_data.get("nodes", []):
+            node_type = node.get("type")
+            widgets = node.get("widgets_values", []) or []
+            if node_type == "LoadImage" and len(widgets) >= 1:
+                if "image_filename" in parameters:
+                    widgets[0] = parameters["image_filename"]
+            elif node_type == "CLIPTextEncode" and len(widgets) >= 1:
+                text_val = widgets[0]
+                if "ugly" not in text_val and "bad" not in text_val:
+                    if "prompt" in parameters:
+                        widgets[0] = parameters["prompt"]
+            elif node_type == "KSampler" and len(widgets) >= 7:
+                if "denoise" in parameters:
+                    widgets[6] = float(parameters["denoise"])
+                if "seed" in parameters:
+                    widgets[0] = int(parameters["seed"])
+        prompt_api_data = convert_webui_to_api_format(webui_data)
+        if "image_filename" in parameters:
+            src_img_path = os.path.join("uploads", parameters["image_filename"])
+            comfy_input_dir = os.path.join("..", "ComfyUI", "input")
+            if os.path.exists(comfy_input_dir):
+                shutil.copy(src_img_path, os.path.join(comfy_input_dir, parameters["image_filename"]))
+                print(f"📁 [ComfyUI API] input 복사 완료: {parameters['image_filename']}")
+        res = requests.post(f"{COMFYUI_API_URL}/prompt", json={"prompt": prompt_api_data}, timeout=5)
+        prompt_id = res.json().get("prompt_id")
+        if not prompt_id:
+            return None
+        print(f"🚀 [ComfyUI API] 작업 제출완료. Prompt ID: {prompt_id}")
+        history_url = f"{COMFYUI_API_URL}/history/{prompt_id}"
+        for _ in range(30):
+            h_res = requests.get(history_url, timeout=2)
+            h_data = h_res.json()
+            if prompt_id in h_data:
+                outputs = h_data[prompt_id].get("outputs", {})
+                for node_id, out_data in outputs.items():
+                    if "images" in out_data:
+                        filename = out_data["images"][0].get("filename")
+                        comfy_out_path = os.path.join("..", "ComfyUI", "output", filename)
+                        if os.path.exists(comfy_out_path):
+                            dest_path = os.path.join("results", filename)
+                            shutil.copy(comfy_out_path, dest_path)
+                            print(f"🟢 [ComfyUI API] 완료본 복사완료: {dest_path}")
+                        return filename
+            time.sleep(1)
+    except Exception as e:
+        print(f"⚠️ [ComfyUI API Error] Fallback 작동: {e}")
+    return None
+
 def process_mock_image(
     image_id: str,
     result_id: str,
@@ -368,47 +481,58 @@ async def upload_image(
 def remove_graffiti(req: GraffitiRemoveRequest):
     """
     [낙서 제거 의뢰 및 복원 창구]
-    mode 값에 따라 auto, mask, bbox, hybrid로 분기되며,
-    comfyui-helper-nodes를 이용해 실제로 이미지를 복원 및 가공 처리합니다.
+    comfyui-helper-nodes 및 실제 ComfyUI API 연동을 통해 낙서를 지우고 복원합니다.
     """
     start_time = time.time()
     print(f"Sweep🧹 [낙서 제거 접수됨] 이미지ID: {req.image_id} | 모드: {req.mode} | 프롬프트: '{req.prompt}'")
 
-    # 1. ComfyUI 워크플로우 실행 시뮬레이션
+    comfy_online = check_comfyui_online()
     workflow_info = log_workflow_execution("user_masked_inpainting_workflow.json")
+    workflow_info["comfyui_status"] = "online" if comfy_online else "offline"
 
-    # 2. 결과 이미지 ID 생성 및 파일 가공
     result_id = f"result_{uuid.uuid4().hex[:6]}"
     
-    # 복원 느낌을 주는 밝기/대비 조절 및 워터마크 추가
-    brightness_val = 0.03
-    contrast_val = 1.02
-    overlay_msg = f"ZipPT Anti-Graffiti Restored\nMode: {req.mode}"
-    
-    result_url = process_mock_image(
-        image_id=req.image_id,
-        result_id=result_id,
-        style_name="Anti-graffiti Clean",
-        prompt_text=req.prompt,
-        brightness=brightness_val,
-        contrast=contrast_val,
-        text_overlay=overlay_msg,
-        bbox=req.bbox
-    )
-    
-    # 원본 파일 확장자 탐색
     ext_found = ".jpg"
     for ext in (".jpg", ".jpeg", ".png"):
         if os.path.exists(os.path.join("uploads", f"{req.image_id}{ext}")):
             ext_found = ext
             break
+    input_filename = f"{req.image_id}{ext_found}"
+    
+    parameters = {
+        "image_filename": input_filename,
+        "prompt": req.prompt or "Remove graffiti and restore original wall texture",
+        "denoise": 0.55,
+        "seed": int(time.time()) % 1000000
+    }
+    
+    real_filename = None
+    if comfy_online:
+        real_filename = execute_real_comfyui("user_masked_inpainting_workflow.json", parameters)
+        
+    if real_filename:
+        result_url = f"/static/results/{real_filename}"
+        workflow_info["execution_mode"] = "real_comfyui"
+    else:
+        brightness_val = 0.03
+        contrast_val = 1.02
+        overlay_msg = f"ZipPT Anti-Graffiti Restored\nMode: {req.mode}"
+        result_url = process_mock_image(
+            image_id=req.image_id,
+            result_id=result_id,
+            style_name="Anti-graffiti Clean",
+            prompt_text=req.prompt,
+            brightness=brightness_val,
+            contrast=contrast_val,
+            text_overlay=overlay_msg,
+            bbox=req.bbox
+        )
+        workflow_info["execution_mode"] = "mock_fallback"
+
     original_url = f"/static/uploads/{req.image_id}{ext_found}"
     mask_url = f"/static/masks/mask_{uuid.uuid4().hex[:6]}.png"
-
-    # 작업 처리 소요 시간 계산
     elapsed = round(time.time() - start_time, 2)
 
-    # [세션 장부 기록]
     session_data = get_or_create_session(req.session_id)
     session_data["edits"].append({
         "type": "graffiti_remove",
@@ -422,18 +546,23 @@ def remove_graffiti(req: GraffitiRemoveRequest):
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
-    return SuccessResponse(
-        success=True,
-        data=GraffitiRemoveResponse(
-            result_id=result_id,
-            session_id=req.session_id,
-            original_image_url=original_url,
-            mask_image_url=mask_url,
-            result_image_url=result_url,
-            processing_time=elapsed,
-            status="completed"
-        ),
-        message="낙서 제거가 완료되었습니다. (ComfyUI Workflow: user_masked_inpainting_workflow.json)"
+    # JSONResponse를 사용하여 스키마 제약 없이 workflow 객체를 data 내부에 주입
+    return JSONResponse(
+        status_code=200,
+        content={
+            "success": True,
+            "data": {
+                "result_id": result_id,
+                "session_id": req.session_id,
+                "original_image_url": original_url,
+                "mask_image_url": mask_url,
+                "result_image_url": result_url,
+                "processing_time": elapsed,
+                "status": "completed",
+                "workflow": workflow_info
+            },
+            "message": f"낙서 제거가 완료되었습니다. (ComfyUI Status: {workflow_info['comfyui_status']})"
+        }
     )
 
 
@@ -513,41 +642,60 @@ def generate_image(req: ImageGenerateRequest):
     """
     start_time = time.time()
     
-    # 1. ComfyUI 워크플로우 실행 시뮬레이션
+    comfy_online = check_comfyui_online()
     workflow_info = log_workflow_execution("room_redesign_workflow.json")
+    workflow_info["comfyui_status"] = "online" if comfy_online else "offline"
     
-    # 고유한 작업 접수 번호(UUID) 생성
     task_id = str(uuid.uuid4())
     result_id = f"gen_{task_id[:8]}"
     
-    # 스타일 특성에 맞춰서 밝기/대비 튜닝 시뮬레이션
-    brightness_val = 0.0
-    contrast_val = 1.0
+    ext_found = ".jpg"
+    for ext in (".jpg", ".jpeg", ".png"):
+        if os.path.exists(os.path.join("uploads", f"{req.image_id}{ext}")):
+            ext_found = ext
+            break
+    input_filename = f"{req.image_id}{ext_found}"
     
-    if req.style == "Gallery White":
-        brightness_val = 0.08
-        contrast_val = 1.03
-    elif req.style == "Urban Minimal":
-        brightness_val = -0.02
-        contrast_val = 1.05
-    elif req.style == "Neutral Wall Restore":
-        brightness_val = 0.02
-        contrast_val = 0.98
-
-    # 이미지 가공 수행
-    target_img_id = req.image_id or "img_dummy"
+    denoise_val = float(req.strength or 65.0) / 100.0
+    parameters = {
+        "image_filename": input_filename,
+        "prompt": req.prompt,
+        "denoise": denoise_val,
+        "seed": int(time.time()) % 1000000
+    }
     
-    generated_url = process_mock_image(
-        image_id=target_img_id,
-        result_id=result_id,
-        style_name=req.style,
-        prompt_text=req.prompt,
-        brightness=brightness_val,
-        contrast=contrast_val,
-        text_overlay=f"ZipPT AI Style Generator\nStyle: {req.style}"
-    )
+    real_filename = None
+    if comfy_online:
+        real_filename = execute_real_comfyui("room_redesign_workflow.json", parameters)
+        
+    if real_filename:
+        generated_url = f"/static/results/{real_filename}"
+        workflow_info["execution_mode"] = "real_comfyui"
+    else:
+        brightness_val = 0.0
+        contrast_val = 1.0
+        
+        if req.style == "Gallery White":
+            brightness_val = 0.08
+            contrast_val = 1.03
+        elif req.style == "Urban Minimal":
+            brightness_val = -0.02
+            contrast_val = 1.05
+        elif req.style == "Neutral Wall Restore":
+            brightness_val = 0.02
+            contrast_val = 0.98
 
-    # [세션 장부 기록] 손님의 이미지 생성 활동을 방명록에 적습니다.
+        generated_url = process_mock_image(
+            image_id=req.image_id or "img_dummy",
+            result_id=result_id,
+            style_name=req.style,
+            prompt_text=req.prompt,
+            brightness=brightness_val,
+            contrast=contrast_val,
+            text_overlay=f"ZipPT AI Style Generator\nStyle: {req.style}"
+        )
+        workflow_info["execution_mode"] = "mock_fallback"
+
     session_data = get_or_create_session(req.session_id)
     session_data["generations"].append({
         "task_id": task_id,
@@ -560,15 +708,20 @@ def generate_image(req: ImageGenerateRequest):
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
-    return SuccessResponse(
-        success=True,
-        data=ImageGenerateResponse(
-            task_id=task_id,
-            session_id=req.session_id,
-            generated_image_url=generated_url,
-            status="completed"
-        ),
-        message="이미지 생성이 완료되었습니다. (ComfyUI Workflow: room_redesign_workflow.json)"
+    # JSONResponse를 사용하여 스키마 제약 없이 workflow 객체를 data 내부에 주입
+    return JSONResponse(
+        status_code=200,
+        content={
+            "success": True,
+            "data": {
+                "task_id": task_id,
+                "session_id": req.session_id,
+                "generated_image_url": generated_url,
+                "status": "completed",
+                "workflow": workflow_info
+            },
+            "message": f"이미지 생성이 완료되었습니다. (ComfyUI Status: {workflow_info['comfyui_status']})"
+        }
     )
 
 
@@ -664,32 +817,52 @@ def chat_message(req: ChatMessageRequest):
 def edit_image(req: ImageEditRequest):
     """
     [이미지 정밀 편집 창구]
-    comfyui-helper-nodes를 이용해 이미지의 특정 영역에 가구 인페인팅을 적용합니다.
+    comfyui-helper-nodes 및 실제 ComfyUI API 연동을 통해 이미지의 특정 가구 영역을 편집합니다.
     """
     start_time = time.time()
     
-    # 1. ComfyUI 워크플로우 실행 시뮬레이션
+    comfy_online = check_comfyui_online()
     workflow_info = log_workflow_execution("furniture_inpainting_workflow.json")
+    workflow_info["comfyui_status"] = "online" if comfy_online else "offline"
     
     edit_id = f"edit_{uuid.uuid4().hex[:8]}"
     
-    # 가구 편집 대비/밝기 미세조정 시뮬레이션
-    brightness_val = 0.0
-    contrast_val = 1.02
+    ext_found = ".jpg"
+    for ext in (".jpg", ".jpeg", ".png"):
+        if os.path.exists(os.path.join("uploads", f"{req.image_id}{ext}")):
+            ext_found = ext
+            break
+    input_filename = f"{req.image_id}{ext_found}"
     
-    # 2. 이미지 가공 수행
-    result_url = process_mock_image(
-        image_id=req.image_id,
-        result_id=edit_id,
-        style_name="Furniture Inpaint Style",
-        prompt_text=req.prompt,
-        brightness=brightness_val,
-        contrast=contrast_val,
-        text_overlay=f"ZipPT Furniture Inpainting\nObj: {req.selected_object or 'N/A'}",
-        bbox=req.mask  # mask 필드를 [x1, y1, x2, y2] bbox 정보로 해석
-    )
+    parameters = {
+        "image_filename": input_filename,
+        "prompt": req.prompt,
+        "denoise": 0.60,
+        "seed": int(time.time()) % 1000000
+    }
+    
+    real_filename = None
+    if comfy_online:
+        real_filename = execute_real_comfyui("furniture_inpainting_workflow.json", parameters)
+        
+    if real_filename:
+        result_url = f"/static/results/{real_filename}"
+        workflow_info["execution_mode"] = "real_comfyui"
+    else:
+        brightness_val = 0.0
+        contrast_val = 1.02
+        result_url = process_mock_image(
+            image_id=req.image_id,
+            result_id=edit_id,
+            style_name="Furniture Inpaint Style",
+            prompt_text=req.prompt,
+            brightness=brightness_val,
+            contrast=contrast_val,
+            text_overlay=f"ZipPT Furniture Inpainting\nObj: {req.selected_object or 'N/A'}",
+            bbox=req.mask
+        )
+        workflow_info["execution_mode"] = "mock_fallback"
 
-    # [세션 장부 기록] 이미지 편집 활동을 장부에 적습니다.
     session_data = get_or_create_session(req.session_id)
     session_data["edits"].append({
         "edit_id": edit_id,
@@ -703,15 +876,20 @@ def edit_image(req: ImageEditRequest):
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
-    return SuccessResponse(
-        success=True,
-        data=ImageEditResponse(
-            edit_id=edit_id,
-            session_id=req.session_id,
-            edited_image_url=result_url,
-            status="completed"
-        ),
-        message="이미지 편집 작업이 완료되었습니다. (ComfyUI Workflow: furniture_inpainting_workflow.json)"
+    # JSONResponse를 사용하여 스키마 제약 없이 workflow 객체를 data 내부에 주입
+    return JSONResponse(
+        status_code=200,
+        content={
+            "success": True,
+            "data": {
+                "edit_id": edit_id,
+                "session_id": req.session_id,
+                "edited_image_url": result_url,
+                "status": "completed",
+                "workflow": workflow_info
+            },
+            "message": f"이미지 편집 작업이 완료되었습니다. (ComfyUI Status: {workflow_info['comfyui_status']})"
+        }
     )
 
 

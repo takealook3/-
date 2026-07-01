@@ -60,10 +60,12 @@ def call_api_transform_interior(image_file, style, strength, keep_structure):
                 data = res_json.get("data", {})
                 result_url = BACKEND_URL + data.get("result_image_url")
                 # 워크플로우 실시간 상태 기록
-                st.session_state.last_workflow_info = {
+                st.session_state.last_workflow_info = data.get("workflow") or {
                     "workflow": "user_masked_inpainting_workflow.json",
                     "status": "loaded",
-                    "nodes": ["LoadImage", "MaskImage", "SAMDetector", "SEGSDetailer", "KSampler", "SaveImage"]
+                    "nodes": ["LoadImage", "MaskImage", "SAMDetector", "SEGSDetailer", "KSampler", "SaveImage"],
+                    "comfyui_status": "offline",
+                    "execution_mode": "mock_fallback"
                 }
                 st.toast("✅ 낙서 제거 백엔드 통신 성공!")
                 return result_url
@@ -82,10 +84,12 @@ def call_api_transform_interior(image_file, style, strength, keep_structure):
                 result_url = BACKEND_URL + data.get("generated_image_url")
                 
                 # 워크플로우 시뮬레이션 정보 세션에 저장
-                st.session_state.last_workflow_info = {
+                st.session_state.last_workflow_info = data.get("workflow") or {
                     "workflow": "room_redesign_workflow.json",
                     "status": "loaded",
-                    "nodes": ["LoadImage", "ControlNetLoader", "PromptCLIPEncode", "KSampler", "VAEDecode", "SaveImage"]
+                    "nodes": ["LoadImage", "ControlNetLoader", "PromptCLIPEncode", "KSampler", "VAEDecode", "SaveImage"],
+                    "comfyui_status": "offline",
+                    "execution_mode": "mock_fallback"
                 }
                 st.toast(f"✅ 백엔드 스타일 변환 통신 성공!")
                 return result_url
@@ -113,10 +117,12 @@ def call_api_edit_furniture(image_id, coords, prompt):
         if res_data.get("success"):
             data = res_data.get("data", {})
             result_url = BACKEND_URL + data.get("edited_image_url")
-            st.session_state.last_workflow_info = {
+            st.session_state.last_workflow_info = data.get("workflow") or {
                 "workflow": "furniture_inpainting_workflow.json",
                 "status": "loaded",
-                "nodes": ["LoadImage", "BboxDetectorSEGS", "SAMModelLoader", "SEGSDetailer", "InpaintModelApply", "SaveImage"]
+                "nodes": ["LoadImage", "BboxDetectorSEGS", "SAMModelLoader", "SEGSDetailer", "InpaintModelApply", "SaveImage"],
+                "comfyui_status": "offline",
+                "execution_mode": "mock_fallback"
             }
             return result_url
     except Exception as e:
@@ -177,7 +183,16 @@ if st.session_state.last_workflow_info:
     st.sidebar.divider()
     st.sidebar.subheader("⚙️ 워크플로우 실시간 상태")
     wf = st.session_state.last_workflow_info
+    
+    c_status = wf.get("comfyui_status", "offline")
+    exec_mode = wf.get("execution_mode", "mock_fallback")
+    
+    status_lamp = "🟢 Online" if c_status == "online" else "🔴 Offline"
+    mode_msg = "⚡ Real AI Render" if exec_mode == "real_comfyui" else "🎨 Local Mock Fallback"
+    
     st.sidebar.info(f"📁 **Workflow:**\n`{wf.get('workflow')}`")
+    st.sidebar.write(f"🔌 **ComfyUI Server:** {status_lamp}")
+    st.sidebar.write(f"⚙️ **Run Mode:** {mode_msg}")
     st.sidebar.caption(f"Status: {wf.get('status')}")
     with st.sidebar.expander("실행 노드 보기"):
         for n in wf.get("nodes", []):
@@ -371,15 +386,33 @@ elif st.session_state.current_page == "④ 챗봇 화면":
                     for ref in msg["references"]:
                         st.write(f"- {ref}")
                         
+    # 자주 묻는 질문 RAG 퀵 링크 버튼 배치 (FAQ.py 및 ingest.py에 정의된 지식 연동)
+    st.write("📋 **추천 FAQ 질문 (클릭 시 자동 탐색):**")
+    btn_cols = st.columns(4)
+    faq_questions = [
+        "인테리어 전체 공정 순서가 어떻게 돼?",
+        "공사 기간 줄이는 단축 꿀팁 알려줘",
+        "욕실 타일 시공 시 주의해야 할 체크포인트는?",
+        "리모델링 전 동의서 및 행정 절차는 뭐가 필요해?"
+    ]
+    
+    selected_faq = None
+    for idx, q in enumerate(faq_questions):
+        with btn_cols[idx]:
+            if st.button(f"💬 {q.split(' ')[0]}...", key=f"faq_btn_{idx}", use_container_width=True):
+                selected_faq = q
+
     user_input = st.chat_input("질문을 입력하세요 (예: 피난계단 디딤판 기준이 뭐야?, 방염 기준이 어떻게 돼?)")
-    if user_input:
-        st.session_state.chat_messages.append({"role": "user", "content": user_input, "references": []})
+    query_to_send = selected_faq or user_input
+    
+    if query_to_send:
+        st.session_state.chat_messages.append({"role": "user", "content": query_to_send, "references": []})
         with st.chat_message("user"):
-            st.write(user_input)
+            st.write(query_to_send)
             
         with st.chat_message("assistant"):
             with st.spinner("RAG 문헌 탐색 및 답변 생성 중..."):
-                reply, references = call_api_chat(user_input)
+                reply, references = call_api_chat(query_to_send)
                 st.write(reply)
                 if references:
                     with st.expander("📚 답변의 신뢰도 및 참고 근거 확인"):
@@ -391,3 +424,4 @@ elif st.session_state.current_page == "④ 챗봇 화면":
             "content": reply,
             "references": references
         })
+        st.rerun()
