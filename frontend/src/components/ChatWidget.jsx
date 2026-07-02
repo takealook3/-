@@ -25,6 +25,7 @@ export default function ChatWidget({ sessionId }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
+  const [activeImageUrl, setActiveImageUrl] = useState(null);
 
   // 채팅이 추가될 때마다 자동으로 스크롤을 맨 아래로 이동
   useEffect(() => {
@@ -180,14 +181,19 @@ export default function ChatWidget({ sessionId }) {
                 </div>
 
                 {msg.image_url && (
-                  <div style={{
-                    marginTop: '8px',
-                    maxWidth: '85%',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
-                    border: '1px solid #475569'
-                  }}>
+                  <div 
+                    style={{
+                      marginTop: '8px',
+                      maxWidth: '85%',
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+                      border: '1px solid #475569',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => setActiveImageUrl(msg.image_url)}
+                    title="클릭하여 크게 보기"
+                  >
                     <img 
                       src={msg.image_url} 
                       alt="스타일 이미지" 
@@ -195,8 +201,11 @@ export default function ChatWidget({ sessionId }) {
                         width: '100%',
                         height: 'auto',
                         display: 'block',
-                        objectFit: 'cover'
+                        objectFit: 'cover',
+                        transition: 'transform 0.25s ease'
                       }}
+                      onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
                       onError={(e) => {
                         e.target.style.display = 'none';
                       }}
@@ -295,6 +304,78 @@ export default function ChatWidget({ sessionId }) {
               전송
             </button>
           </form>
+        </div>
+      )}
+
+      {/* 이미지 확대 모달(라이트박스) */}
+      {activeImageUrl && (
+        <div
+          onClick={() => setActiveImageUrl(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            backgroundColor: 'rgba(15, 23, 42, 0.85)',
+            backdropFilter: 'blur(6px)',
+            zIndex: 100000,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            cursor: 'zoom-out'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              maxWidth: '90%',
+              maxHeight: '90%',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+              border: '1px solid #334155',
+              backgroundColor: '#1e293b'
+            }}
+          >
+            <img
+              src={activeImageUrl}
+              alt="확대 이미지"
+              style={{
+                display: 'block',
+                maxWidth: '100%',
+                maxHeight: '80vh',
+                objectFit: 'contain'
+              }}
+            />
+            <button
+              onClick={() => setActiveImageUrl(null)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '50px',
+                backgroundColor: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid #475569',
+                color: 'white',
+                fontSize: '1.1rem',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+                transition: 'background-color 0.2s'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.8)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(15, 23, 42, 0.6)'; }}
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
     </div>

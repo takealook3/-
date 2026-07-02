@@ -598,7 +598,6 @@ def load_style_documents() -> list:
                 page_content += f"- 날씨별 시공 유의사항: {m['precautions']}\n"
                 if m.get("image_url"):
                     image_url = m["image_url"]
-                    page_content += f"- 스타일 이미지 URL: {image_url}\n"
                 
             metadata = {
                 "source": f"Google Spreadsheet ({num})",
