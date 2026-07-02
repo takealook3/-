@@ -79,6 +79,9 @@ class ErrorCode:
     SESSION_NOT_FOUND = "SESSION_NOT_FOUND"         # 옉뾽 꽭뀡쓣 李얠쓣 닔 뾾쓬
 
 
+    PROMPT_REQUIRED = "PROMPT_REQUIRED"             # 프롬프트 필수값 누락
+
+
     INVALID_INPUT = "INVALID_INPUT"                 # 븘닔 엯젰媛(삁: 吏덈Ц 궡슜)씠 鍮꾩뼱엳嫄곕굹 옒紐삳맖
 
 
