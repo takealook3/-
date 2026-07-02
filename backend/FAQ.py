@@ -503,9 +503,48 @@ A/S 절차가 궁금하다면?
     ),
 ]
 
+def load_material_data() -> dict:
+    material_map = {}
+    tsv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style_materials.tsv")
+    if not os.path.exists(tsv_path):
+        print("⚠️ style_materials.tsv 파일이 존재하지 않아 자재 정보 병합을 생략합니다.")
+        return material_map
+        
+    try:
+        with open(tsv_path, "r", encoding="utf-8") as f:
+            reader = csv.reader(f, delimiter="\t")
+            header = next(reader)
+            for row in reader:
+                if not row or len(row) < 10:
+                    continue
+                style_ko = row[1].strip()
+                wallpaper = row[4].strip()
+                flooring = row[5].strip()
+                difficulty = row[6].strip()
+                wallpaper_weather = row[7].strip()
+                flooring_weather = row[8].strip()
+                precautions = row[9].strip()
+                
+                material_map[style_ko] = {
+                    "wallpaper": wallpaper,
+                    "flooring": flooring,
+                    "difficulty": difficulty,
+                    "wallpaper_weather": wallpaper_weather,
+                    "flooring_weather": flooring_weather,
+                    "precautions": precautions
+                }
+        print(f"✅ style_materials.tsv에서 {len(material_map)}개의 자재 매칭 데이터를 로드했습니다.")
+    except Exception as e:
+        print(f"⚠️ 자재 정보 로드 오류: {e}")
+    return material_map
+
 def load_style_documents() -> list:
     url = "https://docs.google.com/spreadsheets/d/1FYOIu_GvwEO-oRIWl5XBlR-PlE13JlYCa4xi6F0PIpM/export?format=csv"
     style_chunks = []
+    
+    # 로컬 자재 데이터 로드
+    material_map = load_material_data()
+    
     try:
         response = requests.get(url, timeout=15)
         response.raise_for_status()
@@ -537,6 +576,16 @@ def load_style_documents() -> list:
             if feat3:
                 page_content += f"- 특징 3: {feat3}\n"
                 
+            # 자재 및 시공 데이터 병합
+            if style_ko in material_map:
+                m = material_map[style_ko]
+                page_content += f"- 어울리는 벽지: {m['wallpaper']}\n"
+                page_content += f"- 어울리는 바닥재: {m['flooring']}\n"
+                page_content += f"- 시공 난이도: {m['difficulty']}\n"
+                page_content += f"- 벽지시공 추천날씨: {m['wallpaper_weather']}\n"
+                page_content += f"- 바닥시공 추천날씨: {m['flooring_weather']}\n"
+                page_content += f"- 날씨별 시공 유의사항: {m['precautions']}\n"
+                
             metadata = {
                 "source": f"Google Spreadsheet ({num})",
                 "category": "interior_style",
@@ -545,7 +594,7 @@ def load_style_documents() -> list:
             }
             style_chunks.append(Document(page_content=page_content.strip(), metadata=metadata))
             
-        print(f"✅ 구글 시트에서 {len(style_chunks)}개의 스타일 더미 데이터를 정상적으로 파싱했습니다.")
+        print(f"✅ 구글 시트 및 로컬 TSV 결합을 통해 {len(style_chunks)}개의 병합된 스타일 데이터를 생성했습니다.")
     except Exception as e:
         print(f"⚠️ 구글 시트 데이터 로드 실패: {e}")
     return style_chunks

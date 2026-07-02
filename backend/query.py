@@ -22,7 +22,7 @@ except AttributeError:
 
 # .env 절대 경로 기반 안전 로드
 current_dir = os.path.dirname(os.path.abspath(__file__))
-dotenv_path = os.path.join(current_dir, ".env")
+dotenv_path = os.path.join(current_dir, "../.env")
 load_dotenv(dotenv_path)
 
 from langchain_community.vectorstores import Chroma
