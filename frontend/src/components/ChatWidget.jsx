@@ -177,32 +177,7 @@ export default function ChatWidget({ sessionId }) {
                   {msg.text}
                 </div>
 
-                {/* 참고 출처 / 취향 데이터 태그 표시 */}
-                {msg.references && msg.references.length > 0 && (
-                  <div style={{
-                    marginTop: '6px',
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: '4px',
-                    maxWidth: '85%'
-                  }}>
-                    {msg.references.map((refText, rIdx) => (
-                      <span
-                        key={rIdx}
-                        style={{
-                          fontSize: '0.7rem',
-                          backgroundColor: 'rgba(99, 102, 241, 0.2)',
-                          color: '#a5b4fc',
-                          border: '1px solid rgba(99, 102, 241, 0.3)',
-                          padding: '2px 6px',
-                          borderRadius: '4px'
-                        }}
-                      >
-                        🏷️ {refText}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                {/* 참고 출처 / 취향 데이터 태그 표시 제거됨 */}
               </div>
             ))}
 
