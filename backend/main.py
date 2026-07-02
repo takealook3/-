@@ -570,24 +570,29 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                     
         prompt_api_data = convert_webui_to_api_format(webui_data)
         
-        # ComfyUI input 디렉터리에 이미지 파일 복사
+        # ComfyUI input 디렉터리에 이미지 파일 복사 (PROJECT_ROOT 절대경로 기준)
         comfy_input_dir = "C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia\\ComfyUI_windows_portable\\ComfyUI\\input"
         if os.path.exists(comfy_input_dir):
-            if "image_filename" in parameters:
-                src_img_path = os.path.join("uploads", parameters["image_filename"])
-                if os.path.exists(src_img_path):
-                    shutil.copy(src_img_path, os.path.join(comfy_input_dir, parameters["image_filename"]))
-                    print(f"📁 [ComfyUI API] input 이미지 복사 완료: {parameters['image_filename']}")
-            if "mask_filename" in parameters:
-                # 마스크는 uploads 또는 masks 디렉터리에 저장됨
-                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-                for mask_dir in ("uploads", "masks"):
-                    src_mask_path = os.path.join(base_dir, mask_dir, parameters["mask_filename"])
-                    if os.path.exists(src_mask_path):
-                        shutil.copy(src_mask_path, os.path.join(comfy_input_dir, parameters["mask_filename"]))
-                        print(f"📁 [ComfyUI API] mask 파일 복사 완료: {parameters['mask_filename']}")
-                        break
-                        
+            for key, filename in parameters.items():
+                if isinstance(filename, str) and (filename.endswith(".jpg") or filename.endswith(".jpeg") or filename.endswith(".png")):
+                    # uploads, results 등 폴더를 순회하며 파일 복사
+                    copied = False
+                    for folder in ("uploads", "results"):
+                        src_path = os.path.join(PROJECT_ROOT, folder, filename)
+                        if os.path.exists(src_path):
+                            shutil.copy(src_path, os.path.join(comfy_input_dir, filename))
+                            print(f"📁 [ComfyUI API] input 파일 복사 완료: {filename} (from {folder})")
+                            copied = True
+                            break
+                    if not copied:
+                        # CWD 등 예외 폴더에서도 찾아 복사 시도
+                        for folder in ("uploads", "results"):
+                            src_path = os.path.join(folder, filename)
+                            if os.path.exists(src_path):
+                                shutil.copy(src_path, os.path.join(comfy_input_dir, filename))
+                                print(f"📁 [ComfyUI API] input 파일 복사 완료: {filename} (CWD {folder})")
+                                break
+                                
         res = requests.post(f"{COMFYUI_API_URL}/prompt", json={"prompt": prompt_api_data}, timeout=5)
         prompt_id = res.json().get("prompt_id")
         if not prompt_id:
@@ -607,9 +612,9 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                             "C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia"
                             "\\ComfyUI_windows_portable\\ComfyUI\\output", filename
                         )
-                        os.makedirs("results", exist_ok=True)
+                        os.makedirs(os.path.join(PROJECT_ROOT, "results"), exist_ok=True)
                         if os.path.exists(comfy_out_path):
-                            dest_path = os.path.join("results", filename)
+                            dest_path = os.path.join(PROJECT_ROOT, "results", filename)
                             shutil.copy(comfy_out_path, dest_path)
                             print(f"🟢 [ComfyUI API] 완료본 복사완료: {dest_path}")
                         return filename
