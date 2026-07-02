@@ -102,13 +102,16 @@ ROUTE_TEMPLATE = """\
 # 취향 및 디자인 스타일 추천을 위한 전용 컨설팅 프롬프트입니다.
 PREFERENCE_TEMPLATE = """\
 당신은 대한민국 대표 인테리어 공간 디자인 및 홈 스타일링 전문가입니다.
-제시된 질문은 사용자의 취향, 선호 스타일, 인테리어 컨셉 및 조화로운 디자인 조합에 관한 것입니다.
-ChromaDB의 법적/체크리스트 문서에 구애받지 않고, 당신이 알고 있는 풍부한 최신 인테리어 디자인 트렌드와 홈 스타일링 노하우를 바탕으로 답변해 주십시오.
+제시된 질문은 사용자의 취향, 선호 스타일, 인테리어 컨셉에 관한 것입니다.
+[참고 데이터]에 사용자가 질문한 특정 인테리어 스타일의 특징이 있다면, 반드시 해당 특징만을 정확하게 매칭하여 답변을 작성하십시오.
 
-답변 규칙:
-1. 너무 장황하거나 방대한 양의 정보를 나열하지 말고, 질문에 대한 핵심 추천 위주로 명확하게 답변하십시오.
-2. 전체 답변의 길이는 가급적 3~5문장 이내로 간결하게 요약하여 정리하십시오.
-3. 실제 사람과 대화하는 것처럼 친근하고 자연스러운 어조(예: ~해보세요, ~하시는 것이 좋습니다)로 부드럽게 조언해 주십시오.
+[답변 규칙]
+1. [참고 데이터]에 있는 다른 인테리어 스타일의 특징들과 절대 서로 섞거나 혼동하여 답변을 지어내지 마십시오. 오직 해당 스타일에 매칭되는 특징만 명확히 진술해야 합니다.
+2. 만약 [참고 데이터]에 질문하신 스타일에 대한 구체적인 정보가 제공되지 않은 경우, 당신의 전문 지식을 활용하여 친절하게 답변하되 사실 왜곡이나 타 스타일과의 혼동이 없도록 정갈하게 설명하십시오.
+3. 너무 장황하지 않게 3~5문장 이내로 간결하고 부드러운 한국어 대화체(~입니다, ~해보세요)로 답변하십시오.
+
+[참고 데이터]
+{context}
 
 [질문]
 {question}
@@ -126,21 +129,31 @@ def check_is_preference_query(question: str, llm: ChatGoogleGenerativeAI) -> boo
 
 def answer_preference_question(
     korean_question: str,
+    retriever: "HybridEnsembleRetriever",
     llm: ChatGoogleGenerativeAI,
-) -> str:
+) -> tuple[str, list]:
     """
     사용자의 인테리어 취향/디자인 스타일에 대한 질문을 처리합니다.
-    ChromaDB 검색 없이 Gemini가 직접 조언 및 추천을 생성하여 스트리밍합니다.
+    ChromaDB에서 관련 스타일 정보를 검색하여 컨텍스트로 제공한 후 답변을 생성합니다.
     """
-    print("  [1/1] Gemini AI가 인테리어 취향 맞춤 컨설팅 답변을 생성 중입니다...\n")
+    print("  [1/2] ChromaDB에서 스타일 및 취향 관련 정보 검색 중...")
+    source_docs = retriever.invoke(korean_question)
+    
+    context = "\n\n---\n\n".join(
+        truncate_to_complete_sentences(sanitize_text(doc.page_content), 3000) 
+        for doc in source_docs
+    )
+    
+    print("  [2/2] Gemini AI가 인테리어 취향 맞춤 컨설팅 답변을 생성 중입니다...\n")
     print("💬 답변:")
     print("─" * 60)
     korean_answer = call_llm_stream(
         llm, PREFERENCE_TEMPLATE,
+        context=context,
         question=korean_question,
     )
     print("\n" + "─" * 60)
-    return korean_answer
+    return korean_answer, source_docs
 
 
 # ── 스트리밍 유틸리티 ───────────────────────────────────────────────────────
@@ -402,7 +415,7 @@ def run_interactive_loop(retriever: HybridEnsembleRetriever, llm: ChatGoogleGene
             
             if is_preference:
                 print("💡 취향/스타일 추천 질문으로 판별되었습니다.")
-                answer = answer_preference_question(user_input, llm)
+                answer, docs = answer_preference_question(user_input, retriever, llm)
                 # 취향 대화도 대화 기록에 누적합니다.
                 chat_history.append(f"User: {user_input}")
                 chat_history.append(f"AI: {answer}")

@@ -1313,8 +1313,20 @@ def chat_message(req: ChatMessageRequest):
             
             if is_preference:
                 print("💡 [RAG API] 취향 조언 유형 판별됨.")
-                answer = query.answer_preference_question(req.question, rag_llm)
-                references = ["자체 인테리어 공간/홈 스타일링 디자인 가이드라인"]
+                answer, docs = query.answer_preference_question(req.question, rag_retriever, rag_llm)
+                
+                # 출처 메타데이터 추출
+                references = []
+                seen = set()
+                for doc in docs:
+                    meta = doc.metadata
+                    label = meta.get("style_name_ko") or meta.get("process") or "N/A"
+                    title = meta.get("style_name_en") or meta.get("title", "")
+                    source = meta.get("source", "")
+                    key = f"[{label}] {title} ({source})"
+                    if key not in seen:
+                        seen.add(key)
+                        references.append(key)
             else:
                 print("📑 [RAG API] 법률/시공/체크리스트 유형 판별됨.")
                 answer, docs = query.answer_question(req.question, chat_history, rag_retriever, rag_llm)

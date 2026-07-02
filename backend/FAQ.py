@@ -11,6 +11,9 @@ FAQ.py
 import os
 import sys
 import pickle # BM25 인덱스 캐시 저장을 위한 라이브러리
+import requests
+import csv
+from io import StringIO
 from dotenv import load_dotenv
 
 # 공통 설정 및 형태소 분석 토크나이저 임포트
@@ -26,7 +29,7 @@ except AttributeError:
 
 # .env 절대 경로 기반 안전 로드
 current_dir = os.path.dirname(os.path.abspath(__file__))
-dotenv_path = os.path.join(current_dir, ".env")
+dotenv_path = os.path.join(current_dir, "../.env")
 load_dotenv(dotenv_path)
 
 from langchain_community.vectorstores import Chroma
@@ -500,6 +503,53 @@ A/S 절차가 궁금하다면?
     ),
 ]
 
+def load_style_documents() -> list:
+    url = "https://docs.google.com/spreadsheets/d/1FYOIu_GvwEO-oRIWl5XBlR-PlE13JlYCa4xi6F0PIpM/export?format=csv"
+    style_chunks = []
+    try:
+        response = requests.get(url, timeout=15)
+        response.raise_for_status()
+        csv_data = response.content.decode('utf-8')
+        f = StringIO(csv_data)
+        reader = csv.reader(f)
+        
+        # 첫 번째 라인은 헤더이므로 건너뜀
+        header = next(reader)
+        
+        for row in reader:
+            if not row or len(row) < 7:
+                continue
+            num = row[0].strip()
+            style_ko = row[1].strip()
+            style_en = row[2].strip()
+            feat1 = row[4].strip()
+            feat2 = row[5].strip()
+            feat3 = row[6].strip()
+            
+            if not style_ko:
+                continue
+                
+            page_content = f"# 인테리어 스타일: {style_ko} ({style_en})\n"
+            if feat1:
+                page_content += f"- 특징 1: {feat1}\n"
+            if feat2:
+                page_content += f"- 특징 2: {feat2}\n"
+            if feat3:
+                page_content += f"- 특징 3: {feat3}\n"
+                
+            metadata = {
+                "source": f"Google Spreadsheet ({num})",
+                "category": "interior_style",
+                "style_name_ko": style_ko,
+                "style_name_en": style_en
+            }
+            style_chunks.append(Document(page_content=page_content.strip(), metadata=metadata))
+            
+        print(f"✅ 구글 시트에서 {len(style_chunks)}개의 스타일 더미 데이터를 정상적으로 파싱했습니다.")
+    except Exception as e:
+        print(f"⚠️ 구글 시트 데이터 로드 실패: {e}")
+    return style_chunks
+
 def main():
     api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -509,6 +559,11 @@ def main():
 
     print("🔧 Gemini 임베딩 모델 초기화 중...")
     embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
+
+    # ── 구글 스프레드시트 더미 데이터 로드 및 병합 ────────────────────────
+    print("📡 구글 스프레드시트 스타일 데이터를 가져오는 중...")
+    style_chunks = load_style_documents()
+    total_chunks = CHUNKS + style_chunks
 
     # ── ChromaDB 데이터 로드 및 초기화 (중복 방지) ──────────────────────
     print("ChromaDB 데이터 적재 및 초기화 중...")
@@ -522,9 +577,9 @@ def main():
         print(f"-> 기존 데이터 {len(db_get['ids'])}개를 감지하여 삭제(초기화)를 진행합니다.")
         temp_store.delete(ids=db_get['ids'])
 
-    print(f"💾 ChromaDB 데이터베이스에 {len(CHUNKS)}개 청크 적재 중...")
+    print(f"💾 ChromaDB 데이터베이스에 {len(total_chunks)}개 청크 적재 중...")
     vector_store = Chroma.from_documents(
-        documents=CHUNKS,
+        documents=total_chunks,
         embedding=embeddings,
         collection_name=config.COLLECTION_KNOWLEDGE,
         persist_directory=config.DB_DIR,
@@ -533,7 +588,7 @@ def main():
 
     # ── BM25 색인 파일 사전 빌드 및 직렬화 저장 ───────────────────────
     print("BM25 리트리버 캐시 인덱스 직렬화 빌드 중...")
-    bm25_retriever = BM25Retriever.from_documents(CHUNKS, preprocess_func=kiwi_tokenize)
+    bm25_retriever = BM25Retriever.from_documents(total_chunks, preprocess_func=kiwi_tokenize)
     with open(config.BM25_KNOWLEDGE_PATH, "wb") as f:
         pickle.dump(bm25_retriever, f)
     print(f"-> BM25 파일 저장 완료: {config.BM25_KNOWLEDGE_PATH}\n")
