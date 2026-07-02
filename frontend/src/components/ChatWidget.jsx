@@ -74,30 +74,36 @@ export default function ChatWidget({ sessionId }) {
   };
 
   return (
-    <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999 }}>
+    <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999, fontFamily: 'Outfit, sans-serif' }}>
       {/* 1. 플로팅 아이콘 버튼 */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
           style={{
-            background: 'linear-gradient(135deg, #6366f1, #ec4899)',
-            color: 'white',
+            backgroundColor: '#2B3530',
+            color: '#FCFAF7',
             border: 'none',
             borderRadius: '50px',
-            padding: '14px 24px',
-            fontSize: '1rem',
-            fontWeight: '700',
+            padding: '14px 26px',
+            fontSize: '0.95rem',
+            fontWeight: '600',
             cursor: 'pointer',
-            boxShadow: '0 10px 25px rgba(99, 102, 241, 0.4)',
+            boxShadow: '0 8px 24px rgba(43, 53, 48, 0.2)',
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
-            transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+            transition: 'all 0.25s ease'
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+          onMouseEnter={(e) => { 
+            e.currentTarget.style.transform = 'translateY(-2px)'; 
+            e.currentTarget.style.backgroundColor = '#19201C';
+          }}
+          onMouseLeave={(e) => { 
+            e.currentTarget.style.transform = 'translateY(0)'; 
+            e.currentTarget.style.backgroundColor = '#2B3530';
+          }}
         >
-          <span style={{ fontSize: '1.3rem' }}>💬</span>
+          <span style={{ fontSize: '1.2rem' }}>💬</span>
           <span>AI 인테리어 취향 상담</span>
         </button>
       )}
@@ -107,28 +113,30 @@ export default function ChatWidget({ sessionId }) {
         <div style={{
           width: '380px',
           height: '560px',
-          backgroundColor: '#1e293b',
-          border: '1px solid #334155',
-          borderRadius: '16px',
-          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
+          backgroundColor: '#FCFAF7',
+          border: '1px solid #CDBCB2',
+          borderRadius: '20px',
+          borderTopLeftRadius: '30px', /* 완만한 아치형 상단 게이트 */
+          borderTopRightRadius: '30px',
+          boxShadow: '0 16px 40px rgba(43, 53, 48, 0.12)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden'
         }}>
           {/* 상단 헤더 바 */}
           <div style={{
-            background: 'linear-gradient(135deg, #312e81, #4c1d95)',
+            backgroundColor: '#2B3530',
             padding: '16px 20px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            borderBottom: '1px solid #4338ca'
+            borderBottom: '1px solid #CDBCB2'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.3rem' }}>🎨</span>
+              <span style={{ fontSize: '1.2rem' }}>🎨</span>
               <div>
-                <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#ffffff' }}>AI 취향 & 추구미 스타일리스트</div>
-                <div style={{ fontSize: '0.75rem', color: '#c7d2fe' }}>나만의 인테리어 취향 맞춤 상담</div>
+                <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#FCFAF7', fontFamily: 'Outfit, sans-serif' }}>AI 취향 & 추구미 스타일리스트</div>
+                <div style={{ fontSize: '0.75rem', color: '#C7B7AE' }}>나만의 인테리어 취향 맞춤 상담</div>
               </div>
             </div>
             <button
@@ -136,11 +144,14 @@ export default function ChatWidget({ sessionId }) {
               style={{
                 background: 'transparent',
                 border: 'none',
-                color: '#cbd5e1',
+                color: '#C7B7AE',
                 fontSize: '1.2rem',
                 cursor: 'pointer',
-                padding: '4px'
+                padding: '4px',
+                transition: 'color 0.2s'
               }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#FCFAF7'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = '#C7B7AE'; }}
               title="닫기"
             >
               ✕
@@ -155,7 +166,7 @@ export default function ChatWidget({ sessionId }) {
             display: 'flex',
             flexDirection: 'column',
             gap: '14px',
-            backgroundColor: '#0f172a'
+            backgroundColor: '#F3EBE5'
           }}>
             {messages.map((msg, idx) => (
               <div
@@ -170,12 +181,13 @@ export default function ChatWidget({ sessionId }) {
                 <div style={{
                   maxWidth: '85%',
                   padding: '12px 16px',
-                  borderRadius: msg.sender === 'user' ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
-                  backgroundColor: msg.sender === 'user' ? '#4f46e5' : '#334155',
-                  color: '#f8fafc',
+                  borderRadius: msg.sender === 'user' ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
+                  backgroundColor: msg.sender === 'user' ? '#2B3530' : '#FCFAF7',
+                  color: msg.sender === 'user' ? '#FCFAF7' : '#2A2825',
+                  border: msg.sender === 'user' ? 'none' : '1px solid #CDBCB2',
                   fontSize: '0.9rem',
-                  lineHeight: '1.45',
-                  boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+                  lineHeight: '1.5',
+                  boxShadow: '0 2px 6px rgba(43, 53, 48, 0.05)'
                 }}>
                   {msg.text}
                 </div>
@@ -187,8 +199,8 @@ export default function ChatWidget({ sessionId }) {
                       maxWidth: '85%',
                       borderRadius: '12px',
                       overflow: 'hidden',
-                      boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
-                      border: '1px solid #475569',
+                      boxShadow: '0 4px 15px rgba(43, 53, 48, 0.1)',
+                      border: '1px solid #CDBCB2',
                       cursor: 'pointer'
                     }}
                     onClick={() => setActiveImageUrl(msg.image_url)}
@@ -212,14 +224,12 @@ export default function ChatWidget({ sessionId }) {
                     />
                   </div>
                 )}
-
-                {/* 참고 출처 / 취향 데이터 태그 표시 제거됨 */}
               </div>
             ))}
 
             {loading && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8', fontSize: '0.85rem', paddingLeft: '8px' }}>
-                <span>✨ AI 스타일리스트가 취향 데이터를 분석하여 답변 작성 중...</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#7A6C62', fontSize: '0.85rem', paddingLeft: '8px' }}>
+                <span>✨ AI 스타일리스트가 공간 정보를 분석하고 있습니다...</span>
               </div>
             )}
 
@@ -229,8 +239,8 @@ export default function ChatWidget({ sessionId }) {
           {/* 추천 질문 칩 (Quick Chips) 영역 */}
           <div style={{
             padding: '10px 14px',
-            backgroundColor: '#1e293b',
-            borderTop: '1px solid #334155',
+            backgroundColor: '#FCFAF7',
+            borderTop: '1px solid #CDBCB2',
             display: 'flex',
             gap: '6px',
             overflowX: 'auto',
@@ -242,18 +252,19 @@ export default function ChatWidget({ sessionId }) {
                 onClick={() => handleSend(qText)}
                 disabled={loading}
                 style={{
-                  background: '#334155',
-                  border: '1px solid #475569',
-                  color: '#e2e8f0',
-                  padding: '6px 10px',
+                  background: '#F3EBE5',
+                  border: '1px solid #CDBCB2',
+                  color: '#2A2825',
+                  padding: '6px 12px',
                   borderRadius: '12px',
                   fontSize: '0.75rem',
                   cursor: 'pointer',
                   flexShrink: 0,
-                  transition: 'background 0.2s'
+                  transition: 'all 0.2s ease',
+                  fontWeight: '500'
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#475569'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#334155'; }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E2D7CF'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F3EBE5'; }}
               >
                 {qText}
               </button>
@@ -265,8 +276,8 @@ export default function ChatWidget({ sessionId }) {
             onSubmit={(e) => { e.preventDefault(); handleSend(); }}
             style={{
               padding: '12px',
-              backgroundColor: '#0f172a',
-              borderTop: '1px solid #334155',
+              backgroundColor: '#FCFAF7',
+              borderTop: '1px solid #CDBCB2',
               display: 'flex',
               gap: '8px'
             }}
@@ -279,27 +290,34 @@ export default function ChatWidget({ sessionId }) {
               disabled={loading}
               style={{
                 flex: 1,
-                backgroundColor: '#1e293b',
-                border: '1px solid #475569',
+                backgroundColor: '#F3EBE5',
+                border: '1px solid #CDBCB2',
                 borderRadius: '8px',
                 padding: '10px 12px',
-                color: 'white',
+                color: '#2A2825',
                 fontSize: '0.85rem',
-                outline: 'none'
+                outline: 'none',
+                transition: 'border-color 0.2s'
               }}
+              onFocus={(e) => e.target.style.borderColor = '#2B3530'}
+              onBlur={(e) => e.target.style.borderColor = '#CDBCB2'}
             />
             <button
               type="submit"
               disabled={loading || !input.trim()}
               style={{
-                backgroundColor: loading || !input.trim() ? '#475569' : '#6366f1',
-                color: 'white',
+                backgroundColor: loading || !input.trim() ? '#C7B7AE' : '#2B3530',
+                color: '#FCFAF7',
                 border: 'none',
                 borderRadius: '8px',
-                padding: '0 16px',
-                fontWeight: '700',
-                cursor: loading || !input.trim() ? 'not-allowed' : 'pointer'
+                padding: '0 18px',
+                fontWeight: '600',
+                fontSize: '0.85rem',
+                cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
+                transition: 'background-color 0.2s'
               }}
+              onMouseEnter={(e) => { if (!loading && input.trim()) e.currentTarget.style.backgroundColor = '#19201C'; }}
+              onMouseLeave={(e) => { if (!loading && input.trim()) e.currentTarget.style.backgroundColor = '#2B3530'; }}
             >
               전송
             </button>
@@ -317,8 +335,8 @@ export default function ChatWidget({ sessionId }) {
             left: 0,
             width: '100vw',
             height: '100vh',
-            backgroundColor: 'rgba(15, 23, 42, 0.85)',
-            backdropFilter: 'blur(6px)',
+            backgroundColor: 'rgba(42, 40, 37, 0.8)',
+            backdropFilter: 'blur(5px)',
             zIndex: 100000,
             display: 'flex',
             justifyContent: 'center',
@@ -332,11 +350,11 @@ export default function ChatWidget({ sessionId }) {
               position: 'relative',
               maxWidth: '90%',
               maxHeight: '90%',
-              borderRadius: '16px',
+              borderRadius: '20px',
               overflow: 'hidden',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
-              border: '1px solid #334155',
-              backgroundColor: '#1e293b'
+              boxShadow: '0 24px 48px rgba(43, 53, 48, 0.25)',
+              border: '1px solid #CDBCB2',
+              backgroundColor: '#FCFAF7'
             }}
           >
             <img
@@ -358,8 +376,8 @@ export default function ChatWidget({ sessionId }) {
                 width: '36px',
                 height: '36px',
                 borderRadius: '50px',
-                backgroundColor: 'rgba(15, 23, 42, 0.6)',
-                border: '1px solid #475569',
+                backgroundColor: 'rgba(43, 53, 48, 0.6)',
+                border: '1px solid #CDBCB2',
                 color: 'white',
                 fontSize: '1.1rem',
                 fontWeight: 'bold',
@@ -367,11 +385,11 @@ export default function ChatWidget({ sessionId }) {
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
-                boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.15)',
                 transition: 'background-color 0.2s'
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.8)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(15, 23, 42, 0.6)'; }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#B05B48'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(43, 53, 48, 0.6)'; }}
             >
               ✕
             </button>

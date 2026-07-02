@@ -16,20 +16,20 @@ export default function Sidebar({ serverStatus, onRefreshHealth, sessionId, onOp
 
       {/* 1. 시스템 연결 상태 */}
       <div className="sidebar-section">
-        <div style={{ fontWeight: '600', fontSize: '0.95rem', color: '#e2e8f0' }}>🔌 시스템 연결 상태</div>
-        <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>백엔드 API 서버 주소:</div>
+        <div style={{ fontWeight: '600', fontSize: '0.95rem', color: 'var(--text-main)' }}>🔌 시스템 연결 상태</div>
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>백엔드 API 서버 주소:</div>
         <div className="code-box">{API_BASE_URL}</div>
       </div>
 
-      <hr style={{ borderColor: '#1f2937' }} />
+      <hr style={{ borderColor: 'var(--border-color)' }} />
 
       {/* 2. 백엔드 연결 확인 (GET /health) */}
       <div className="sidebar-section">
-        <div style={{ fontWeight: '600', fontSize: '0.95rem', color: '#e2e8f0' }}>🏥 백엔드 연결 확인 (GET /health)</div>
+        <div style={{ fontWeight: '600', fontSize: '0.95rem', color: 'var(--text-main)' }}>🏥 백엔드 연결 확인 (GET /health)</div>
         
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           {serverStatus.loading ? (
-            <div className="badge" style={{ backgroundColor: '#1f2937', color: '#94a3b8' }}>⏳ 서버 확인 중...</div>
+            <div className="badge" style={{ backgroundColor: 'var(--bg-card-inner)', color: 'var(--text-muted)' }}>⏳ 서버 확인 중...</div>
           ) : serverStatus.online ? (
             <div className="badge badge-online">🟢 서버 연결됨</div>
           ) : (
@@ -47,26 +47,26 @@ export default function Sidebar({ serverStatus, onRefreshHealth, sessionId, onOp
         </div>
 
         {!serverStatus.online && serverStatus.error && (
-          <div style={{ fontSize: '0.75rem', color: '#f87171', background: '#450a0a', padding: '8px', borderRadius: '6px' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--accent)', background: 'rgba(176, 91, 72, 0.1)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
             원인: {serverStatus.error}
           </div>
         )}
       </div>
 
-      <hr style={{ borderColor: '#1f2937' }} />
+      <hr style={{ borderColor: 'var(--border-color)' }} />
 
       {/* 3. 내 세션 작업 기록 조회 */}
       <div className="sidebar-section">
-        <div style={{ fontWeight: '600', fontSize: '0.95rem', color: '#e2e8f0' }}>📋 세션 작업 관리</div>
+        <div style={{ fontWeight: '600', fontSize: '0.95rem', color: 'var(--text-main)' }}>📋 세션 작업 관리</div>
         {sessionId ? (
           <div>
-            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '8px' }}>현재 세션: <code>{sessionId}</code></div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '8px' }}>현재 세션: <code>{sessionId}</code></div>
             <button onClick={onOpenSessionModal} className="btn btn-primary btn-full" style={{ fontSize: '0.85rem' }}>
               📋 내 세션 작업 기록 조회
             </button>
           </div>
         ) : (
-          <div style={{ fontSize: '0.8rem', color: '#64748b' }}>사진 업로드 시 세션이 시작됩니다.</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>사진 업로드 시 세션이 시작됩니다.</div>
         )}
       </div>
     </aside>

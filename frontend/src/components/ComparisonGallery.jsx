@@ -11,10 +11,10 @@ export default function ComparisonGallery({
 }) {
   if (!resultData || !resultData.resultImageUrl) {
     return (
-      <div className="card" style={{ textAlign: 'center', padding: '40px 20px', borderStyle: 'dashed' }}>
+      <div className="card" style={{ textAlign: 'center', padding: '40px 20px', borderStyle: 'dashed', borderColor: 'var(--border-color)' }}>
         <div style={{ fontSize: '2rem', marginBottom: '12px' }}>💡</div>
-        <div style={{ fontSize: '1rem', fontWeight: '600', color: '#cbd5e1' }}>아직 변환 결과가 없습니다.</div>
-        <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px' }}>위에서 사진 등록 후 [✨ 이미지 변환 실행] 버튼을 눌러주세요!</div>
+        <div style={{ fontSize: '1rem', fontWeight: '600', color: 'var(--text-main)', fontFamily: 'Outfit, sans-serif' }}>아직 변환 결과가 없습니다.</div>
+        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>위에서 사진 등록 후 [✨ 이미지 변환 실행] 버튼을 눌러주세요!</div>
       </div>
     );
   }
@@ -39,7 +39,7 @@ export default function ComparisonGallery({
     <div className="card">
       <div className="card-title">✨ 5. 인테리어 이미지 변환 결과 (Before / After)</div>
       
-      {/* Streamlit 동기화: 초록색 성공 알림 띠 */}
+      {/* Streamlit 동기화: 성공 알림 띠 */}
       <div className="success-banner" style={{ marginBottom: '16px' }}>
         <span>🎉</span>
         <span><strong>맞춤형 인테리어 이미지 변환 완료!</strong> 아래에서 시공 전후 모습을 비교해 보세요.</span>
@@ -49,24 +49,24 @@ export default function ComparisonGallery({
       <div className="grid-4" style={{ marginBottom: '12px' }}>
         <div className="metric-card">
           <div className="metric-label">결과 ID</div>
-          <div className="metric-value" style={{ color: '#818cf8', fontSize: '0.95rem' }}>{resultData.resultId}</div>
+          <div className="metric-value" style={{ color: 'var(--primary)', fontSize: '0.95rem' }}>{resultData.resultId}</div>
         </div>
         <div className="metric-card">
           <div className="metric-label">스타일</div>
-          <div className="metric-value" style={{ color: '#f472b6', textTransform: 'uppercase' }}>{resultData.style}</div>
+          <div className="metric-value" style={{ color: 'var(--accent)', textTransform: 'uppercase' }}>{resultData.style}</div>
         </div>
         <div className="metric-card">
           <div className="metric-label">상태</div>
-          <div className="metric-value" style={{ color: '#34d399' }}>{resultData.status}</div>
+          <div className="metric-value" style={{ color: 'var(--primary)' }}>{resultData.status}</div>
         </div>
         <div className="metric-card">
           <div className="metric-label">소요 시간</div>
-          <div className="metric-value" style={{ color: '#facc15' }}>{resultData.processingTime}초</div>
+          <div className="metric-value" style={{ color: 'var(--accent)' }}>{resultData.processingTime}초</div>
         </div>
       </div>
 
       {/* Streamlit 동기화: 하단 프롬프트 및 결과 파일 서버 경로 표시 */}
-      <div style={{ fontSize: '0.85rem', color: '#94a3b8', background: '#0f172a', padding: '10px 14px', borderRadius: '8px', border: '1px solid #334155', marginBottom: '24px', fontFamily: 'monospace' }}>
+      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', background: 'var(--bg-card-inner)', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '24px', fontFamily: 'monospace' }}>
         프롬프트: <strong>'{resultData.prompt}'</strong> | 결과 경로: <code>{resultData.resultImageUrl}</code>
       </div>
 
@@ -74,24 +74,24 @@ export default function ComparisonGallery({
       <div className="grid-2">
         {/* 좌측 Before */}
         <div>
-          <div style={{ fontSize: '1rem', fontWeight: '700', color: '#cbd5e1', marginBottom: '10px' }}>
+          <div style={{ fontSize: '1rem', fontWeight: '600', color: 'var(--text-main)', marginBottom: '10px', fontFamily: 'Outfit, sans-serif' }}>
             📷 Before (원본 공간)
           </div>
-          <div className="preview-box" style={{ height: '340px', border: '1px solid #334155' }}>
+          <div className="preview-box" style={{ height: '340px', border: '1px solid var(--border-color)' }}>
             {fullOrig ? (
               <img src={fullOrig} alt="Before 원본" className="preview-img" />
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#64748b' }}>원본 이미지 없음</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>원본 이미지 없음</div>
             )}
           </div>
         </div>
 
         {/* 우측 After */}
         <div>
-          <div style={{ fontSize: '1rem', fontWeight: '700', color: '#818cf8', marginBottom: '10px' }}>
+          <div style={{ fontSize: '1rem', fontWeight: '600', color: 'var(--primary)', marginBottom: '10px', fontFamily: 'Outfit, sans-serif' }}>
             🏠 After ({resultData.style?.toUpperCase()} 스타일 리모델링)
           </div>
-          <div className="preview-box" style={{ height: '340px', border: '2px solid #6366f1' }}>
+          <div className="preview-box" style={{ height: '340px', border: '2px solid var(--primary)' }}>
             <img 
               src={fullRes} 
               alt="After 변환 완료" 

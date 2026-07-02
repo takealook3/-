@@ -1,19 +1,20 @@
 /* =====================================================================
- * [index.css: Streamlit 맞춤 100% 순수 Vanilla CSS 디자인 시스템]
- * 비유: 외부 라이브러리에 의존하지 않고, 웹 브라우저가 직접 알아듣는
- * 명확하고 표준적인 도면으로 좌우 레이아웃과 카드 디자인을 설계합니다.
+ * [index.css: 하이엔드 풀스크린 시네마틱 & 글로벌 헤더 디자인 시스템]
+ * 비유: 좌우로 쪼개진 파티션을 부수고, 탁 트인 통유리창으로 외부 전경을 
+ * 비추듯 전체 화면에 소파 룸을 깔고 최상단 메뉴바를 얹습니다.
  * ===================================================================== */
 
 :root {
-  --bg-main: #0b1120;
-  --bg-sidebar: #111827;
-  --bg-card: #1e293b;
-  --bg-card-inner: #0f172a;
-  --border-color: #334155;
-  --primary: #6366f1;
-  --primary-hover: #4f46e5;
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
+  --bg-main: #1C1714;        /* 매우 차분하고 묵직한 에스프레소 다크 브라운 */
+  --bg-sidebar: #28211E;     /* 오크 다크 브라운 */
+  --bg-card: rgba(252, 250, 247, 0.93); /* 반투명 카라멜 크림 아이보리 */
+  --bg-card-inner: rgba(243, 236, 229, 0.85); /* 부드러운 밀크티 샌드 */
+  --border-color: rgba(132, 104, 83, 0.2); /* 브론즈/모래색 보더선 */
+  --primary: #2E2824;        /* 시안 속 어두운 코코아 블랙 버튼 색상 */
+  --primary-hover: #1F1A18;
+  --text-main: #2A2521;      /* 다크 매트 초콜릿 브라운 (카드 본문용) */
+  --text-muted: #7E7065;     /* 옅은 브라운 그레이 */
+  --accent: #C39F7D;         /* 은은한 샴페인 골드 브론즈 (포인트) */
 }
 
 * {
@@ -24,227 +25,290 @@
 
 body {
   background-color: var(--bg-main);
-  color: var(--text-main);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  line-height: 1.6;
+  color: #FCFAF7; /* 메인 배경 글씨는 환한 아이보리 화이트 */
+  font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* 1. 전체 레이아웃 (Streamlit 좌우 분할 구조) */
+/* 1. 전체 레이아웃 (세로 원페이지 스택 구조 - 사이드바 제거) */
 .app-layout {
   display: flex;
+  flex-direction: column;
   min-height: 100vh;
 }
 
-/* 2. 좌측 사이드바 */
-.sidebar {
-  width: 300px;
-  background-color: var(--bg-sidebar);
-  border-right: 1px solid var(--border-color);
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  flex-shrink: 0;
-}
-
-.sidebar-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-bottom: 12px;
+/* 2. 최상단 글로벌 가로형 내비게이션 바 (Top Nav - 시안 이미지 구현) */
+.top-nav {
+  width: 100%;
+  height: 80px;
+  background-color: rgba(28, 23, 20, 0.93);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border-color);
-}
-
-.sidebar-section {
+  padding: 0 64px;
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.code-box {
-  background-color: #030712;
-  border: 1px solid #1f2937;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-family: monospace;
-  font-size: 0.85rem;
-  color: #a5b4fc;
-  word-break: break-all;
-}
-
-.badge {
-  display: inline-flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  transition: all 0.3s ease;
 }
 
-.badge-online {
-  background-color: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+.top-nav-logo {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--accent); /* 골드 로고 */
+  letter-spacing: 0.1em;
 }
 
-.badge-offline {
-  background-color: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-}
-
-/* 3. 우측 메인 작업 영역 */
-.main-content {
-  flex: 1;
-  padding: 40px 56px;
-  max-width: 1150px;
-  margin: 0 auto;
+.top-nav-menu {
   display: flex;
-  flex-direction: column;
   gap: 32px;
 }
 
-.main-header {
-  border-bottom: 1px solid var(--border-color);
-  padding-bottom: 24px;
+.top-nav-link {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #D3C2B5;
+  cursor: pointer;
+  transition: color 0.25s;
+  padding: 8px 4px;
+  border-bottom: 2px solid transparent;
 }
 
-.main-title {
-  font-size: 2.2rem;
+.top-nav-link:hover {
+  color: var(--accent);
+}
+
+.top-nav-link.active {
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+}
+
+.top-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* 3. 우측 메인 작업 영역 - 갤러리 룸 구조 */
+.main-content {
+  flex: 1;
+  padding: 120px 64px 64px 64px; /* 탑 내비 고정 대비 패딩 확보 */
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+
+/* 4. 풀스크린 시네마틱 히어로 섹션 (새로 제공된 고화질 젠 인테리어 마스터 이미지 적용) */
+.hero-fullscreen {
+  width: 100vw;
+  height: 90vh;
+  margin-left: calc(-50vw + 50%); /* 브라우저 뷰포트 꽉 채우기 트릭 */
+  margin-right: calc(-50vw + 50%);
+  position: relative;
+  /* 새로 구워낸 고해상도 젠 인테리어 룸 로컬 이미지 탑재 */
+  background-image: url('/zen_living_room.png');
+  background-size: cover;
+  /* 소파 몸체가 부드럽게 흘러나오고 우측 아치 분재 정원이 온전히 드러나는 황금 포지션 */
+  background-position: 25% center;
+  background-repeat: no-repeat;
+  display: flex;
+  align-items: center;
+  padding: 0 10%;
+  box-shadow: inset 0 0 100px rgba(0,0,0,0.5);
+  margin-bottom: 20px;
+  margin-top: -40px; /* 메인 콘텐츠 탑 여백 조율 */
+}
+
+/* 히어로 내부 텍스트 글래스모피즘 박스 */
+.hero-overlay {
+  max-width: 600px;
+  background-color: rgba(28, 23, 20, 0.72);
+  /* 가려진 부분의 자연스러운 배경 투과를 위해 블러 심도를 24px로 부드럽게 설정 */
+  backdrop-filter: blur(24px) saturate(120%);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+  border: 1px solid var(--border-color);
+  padding: 48px;
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+}
+
+.hero-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 2.8rem;
   font-weight: 800;
-  color: #fff;
-  margin-bottom: 8px;
+  color: #FCFAF7;
+  margin-bottom: 16px;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
 }
 
-.main-subtitle {
-  color: var(--text-muted);
-  font-size: 1rem;
+.hero-subtitle {
+  color: #D3C2B5;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  margin-bottom: 32px;
 }
 
-/* 4. 카드 공통 스타일 */
+.hero-buttons {
+  display: flex;
+  gap: 16px;
+}
+
+/* 5. 카드 공통 스타일 - 포근한 웜 크림 아이보리 */
 .card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  padding: 28px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  padding: 36px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15);
+  color: var(--text-main);
 }
 
 .card-title {
-  font-size: 1.25rem;
+  font-family: 'Playfair Display', serif;
+  font-size: 1.45rem;
   font-weight: 700;
-  color: #fff;
-  margin-bottom: 6px;
+  color: var(--text-main);
+  margin-bottom: 8px;
+  letter-spacing: -0.01em;
 }
 
 .card-desc {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   color: var(--text-muted);
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
-/* 5. 그리드 유틸리티 */
+/* 6. 그리드 레이아웃 */
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  gap: 28px;
 }
 
 .grid-4 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  gap: 16px;
 }
 
 .grid-5 {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
+  gap: 16px;
 }
 
-/* 반응형 모바일 처리 */
-@media (max-width: 900px) {
-  .app-layout {
-    flex-direction: column;
+@media (max-width: 1000px) {
+  .top-nav {
+    padding: 0 24px;
+    height: 70px;
   }
-  .sidebar {
-    width: 100%;
+  .top-nav-menu {
+    display: none; /* 모바일 메뉴 숨김 */
+  }
+  .main-content {
+    padding: 100px 20px 48px 20px;
+  }
+  .hero-fullscreen {
+    height: auto;
+    padding: 80px 24px;
+    margin-top: -30px;
+  }
+  .hero-overlay {
+    padding: 24px;
+  }
+  .hero-title {
+    font-size: 2rem;
   }
   .grid-2, .grid-4, .grid-5 {
     grid-template-columns: 1fr;
   }
-  .main-content {
-    padding: 24px 16px;
-  }
 }
 
-/* 6. 버튼 공통 스타일 */
+/* 7. 버튼 공통 스타일 - 시안의 럭셔리 버튼 재현 */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 24px;
-  border-radius: 10px;
+  padding: 14px 28px;
+  border-radius: 8px;
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
   border: none;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: -0.01em;
 }
 
+/* 시안의 Shop Now 어두운 코코아 버튼 */
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary), #818cf8);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  background-color: #2E2824;
+  color: #FCFAF7;
+  border: 1px solid #4D3F36;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--primary-hover), #6366f1);
+  background-color: #1F1A18;
   transform: translateY(-1px);
 }
 
 .btn-primary:disabled {
-  opacity: 0.5;
+  background-color: var(--bg-card-inner);
+  color: var(--text-muted);
+  opacity: 0.6;
   cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
+/* 시안의 Explore 대리석 연회색 버튼 */
 .btn-secondary {
-  background-color: #334155;
-  color: #fff;
-  border: 1px solid #475569;
+  background-color: #F3ECE5;
+  color: #2A2521;
+  border: 1px solid var(--border-color);
 }
 
 .btn-secondary:hover {
-  background-color: #475569;
+  background-color: #E2D7CF;
 }
 
 .btn-full {
   width: 100%;
 }
 
-/* 7. 업로드 및 이미지 미리보기 */
+/* 8. 업로드 및 이미지 미리보기 - 밀크티 샌드 코너 */
 .dropzone {
-  border: 2px dashed #475569;
+  border: 2px dashed var(--border-color);
   border-radius: 12px;
-  padding: 40px 20px;
+  padding: 50px 30px;
   text-align: center;
   cursor: pointer;
   background-color: var(--bg-card-inner);
-  transition: border-color 0.2s;
+  transition: all 0.25s ease;
   height: 100%;
+  min-height: 280px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  color: var(--text-main);
 }
 
 .dropzone:hover {
   border-color: var(--primary);
+  background-color: rgba(132, 104, 83, 0.05);
 }
 
 .preview-box {
@@ -252,7 +316,7 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 12px;
   overflow: hidden;
-  height: 260px;
+  height: 280px;
 }
 
 .preview-img {
@@ -261,111 +325,124 @@ body {
   object-fit: cover;
 }
 
-/* 8. 스타일 선택 카드 */
+/* 9. 스타일 선택 카드 */
 .style-btn {
   background-color: var(--bg-card-inner);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 14px 12px;
+  border-radius: 8px;
+  padding: 16px 14px;
   text-align: left;
   cursor: pointer;
-  color: #fff;
-  transition: all 0.2s;
+  color: var(--text-main);
+  transition: all 0.25s ease;
 }
 
 .style-btn:hover {
-  border-color: #64748b;
+  border-color: var(--primary);
 }
 
 .style-btn.active {
-  background-color: rgba(99, 102, 241, 0.2);
+  background-color: var(--primary);
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary);
+  color: #FCFAF7;
+  box-shadow: 0 4px 15px rgba(132, 104, 83, 0.25);
 }
 
-/* 9. 입력창 */
+/* 10. 입력창 */
 .input-field {
   width: 100%;
-  padding: 12px 16px;
+  padding: 14px 18px;
   background-color: var(--bg-card-inner);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  color: #fff;
+  border-radius: 8px;
+  color: var(--text-main);
   font-size: 0.95rem;
   outline: none;
+  transition: border-color 0.25s;
+}
+
+.input-field::placeholder {
+  color: var(--text-muted);
 }
 
 .input-field:focus {
   border-color: var(--primary);
 }
 
-/* 10. 지표 카드 및 알람 배너 */
+/* 11. 지표 카드 및 알람 배너 */
 .metric-card {
   background-color: var(--bg-card-inner);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 14px;
+  border-radius: 8px;
+  padding: 16px;
 }
 
 .metric-label {
   font-size: 0.8rem;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  font-weight: 600;
 }
 
 .metric-value {
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-main);
 }
 
 .error-banner {
-  background-color: rgba(185, 28, 28, 0.2);
-  border-left: 4px solid #ef4444;
-  border-top: 1px solid rgba(239, 68, 68, 0.3);
-  border-right: 1px solid rgba(239, 68, 68, 0.3);
-  border-bottom: 1px solid rgba(239, 68, 68, 0.3);
-  padding: 16px;
+  background-color: rgba(176, 91, 72, 0.08);
+  border-left: 4px solid var(--accent);
+  border-top: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  padding: 16px 20px;
   border-radius: 8px;
-  color: #fecaca;
-  margin-bottom: 20px;
+  color: var(--accent);
+  margin-bottom: 24px;
+  font-size: 0.95rem;
 }
 
-/* 11. Streamlit 초록색 성공 알림 띠 (.success-banner) */
+/* 12. 성공 알림 배너 */
 .success-banner {
-  background-color: rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  color: #a7f3d0;
-  padding: 12px 16px;
-  border-radius: 10px;
-  margin: 12px 0;
-  font-size: 0.9rem;
+  background-color: rgba(132, 104, 83, 0.08);
+  border: 1px solid var(--border-color);
+  color: var(--primary);
+  padding: 14px 20px;
+  border-radius: 8px;
+  margin: 16px 0;
+  font-size: 0.95rem;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
-/* 12. 부분 가구 수선 (Inpainting) 스타일 */
+/* 13. 부분 가구 수선 (Inpainting) 스타일 */
 .btn-coral {
-  background: linear-gradient(135deg, #f43f5e, #fb7185);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(244, 63, 94, 0.35);
+  background-color: var(--accent);
+  color: #1C1714;
+  box-shadow: 0 4px 12px rgba(195, 159, 125, 0.25);
+  font-weight: 700;
 }
 
 .btn-coral:hover:not(:disabled) {
-  background: linear-gradient(135deg, #e11d48, #f43f5e);
+  background-color: #b08d6d;
   transform: translateY(-1px);
 }
 
 .btn-coral:disabled {
-  opacity: 0.5;
+  background-color: var(--bg-card-inner);
+  color: var(--text-muted);
+  opacity: 0.6;
   cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 .canvas-container {
   position: relative;
   width: 100%;
-  background-color: #030712;
+  background-color: var(--bg-card-inner);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   overflow: hidden;
@@ -380,28 +457,29 @@ body {
 
 .bbox-rect {
   position: absolute;
-  border: 2px solid #ef4444;
-  background-color: rgba(239, 68, 68, 0.35);
+  border: 2px solid var(--accent);
+  background-color: rgba(195, 159, 125, 0.25);
   pointer-events: none;
 }
 
 .toolbar {
   display: flex;
   gap: 8px;
-  margin: 10px 0;
+  margin: 12px 0;
 }
 
 .toolbar-btn {
-  background-color: #1e293b;
-  border: 1px solid #334155;
-  color: #fff;
-  padding: 8px 12px;
-  border-radius: 8px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 8px 14px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 1.1rem;
-  transition: background-color 0.2s;
+  font-size: 1.15rem;
+  transition: all 0.2s ease;
 }
 
 .toolbar-btn:hover {
-  background-color: #334155;
+  background-color: var(--bg-card-inner);
+  border-color: var(--primary);
 }
