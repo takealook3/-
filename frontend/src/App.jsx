@@ -9,6 +9,7 @@ import StyleSelector from './components/StyleSelector';
 import ImageEditor from './components/ImageEditor';
 import ComparisonGallery from './components/ComparisonGallery';
 import SessionModal from './components/SessionModal';
+import ChatWidget from './components/ChatWidget';
 import { checkHealth } from './services/api';
 
 export default function App() {
@@ -129,6 +130,9 @@ export default function App() {
           onClose={() => setShowSessionModal(false)}
         />
       )}
+
+      {/* 5단계: AI 인테리어 취향 & 추구미 1:1 상담 메신저 위젯 */}
+      <ChatWidget sessionId={sessionId} />
     </div>
   );
 }

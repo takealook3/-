@@ -157,3 +157,38 @@ export async function editImage({ imageId, sessionId, mask = null, selectedObjec
     };
   }
 }
+
+/**
+ * 6번 창구: AI 인테리어 취향 & 추구미 상담 챗봇 호출 (POST /api/chat)
+ * 비유: 내 공간에 어울리는 스타일이나 가구 컬러, 취향 상담 지시서를 AI 스타일리스트에게 전달합니다.
+ */
+export async function sendChatMessage({ sessionId, question }) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        session_id: sessionId || "session_default",
+        question: question
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        errorCode: data.error_code || "CHAT_FAILED",
+        message: data.message || "AI 취향 상담 답변을 가져오는 데 실패했습니다."
+      };
+    }
+    return data;
+  } catch (error) {
+    return {
+      success: false,
+      errorCode: "SERVER_CONNECTION_FAILED",
+      message: `서버 통신 실패: ${error.message}`
+    };
+  }
+}
