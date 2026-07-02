@@ -55,6 +55,7 @@ RAG_TEMPLATE = """\
 2. 당신의 역할은 [참고 문서]에 있는 사실적 내용을 친절하고 자연스러운 한국어 대화체(예: ~입니다, ~해보세요, ~하시는 것이 좋습니다)로 다듬어 말투를 순화하고 가공하는 것으로 제한됩니다.
 3. 답변은 질문에 대한 핵심 요약 위주로 가급적 3~5문장 이내로 간결하게 작성하십시오.
 4. 만약 질문한 내용이 [참고 문서]에 전혀 언급되어 있지 않거나 관련 정보를 찾을 수 없는 경우, 임의로 말을 만들어내지 말고 "제공된 문서에서 관련 정보를 찾을 수 없습니다"라고 정중하게 답변하십시오.
+5. 답변 시 "제공된 문서에 따르면", "참고 데이터에 명시된 바와 같이", "문서에 의하면" 등 참고 문서의 출처를 노출하거나 언급하는 서두 문구를 절대 사용하지 말고, 질문에 대한 결론과 내용 위주로 즉시 자연스럽게 답변하십시오.
 
 [이전 대화 기록]
 {chat_history}
@@ -110,6 +111,10 @@ PREFERENCE_TEMPLATE = """\
 3. 다른 인테리어 스타일의 특징들과 정보를 서로 섞거나 혼동하여 답변을 작성하지 마십시오.
 4. 만약 질문하신 스타일에 대해 [참고 데이터] 내에 구체적인 정보가 전혀 제공되지 않은 경우, 거짓이나 상상으로 채우지 말고 "관련 스타일 취향 정보를 찾을 수 없습니다"라고 정중하게 답변하십시오.
 5. 너무 장황하지 않게 3~5문장 이내로 정리하십시오.
+6. 답변 시 "제공된 문서에 따르면", "참고 데이터에 기재된 바와 같이" 등 참고 출처를 유추할 수 있는 서두 문구를 직접적으로 절대 사용하지 말고, 추천 스타일의 본론과 묘사 내용 위주로 즉시 자연스럽게 답변하십시오.
+
+[이전 대화 기록]
+{chat_history}
 
 [참고 데이터]
 {context}
@@ -130,27 +135,40 @@ def check_is_preference_query(question: str, llm: ChatGoogleGenerativeAI) -> boo
 
 def answer_preference_question(
     korean_question: str,
+    chat_history: list,
     retriever: "HybridEnsembleRetriever",
     llm: ChatGoogleGenerativeAI,
 ) -> tuple[str, list]:
     """
     사용자의 인테리어 취향/디자인 스타일에 대한 질문을 처리합니다.
-    ChromaDB에서 관련 스타일 정보를 검색하여 컨텍스트로 제공한 후 답변을 생성합니다.
+    이전 대화 맥락(chat_history)을 고려하여 검색 쿼리를 결합/재구성한 뒤 관련 스타일 정보를 검색합니다.
     """
-    print("  [1/2] ChromaDB에서 스타일 및 취향 관련 정보 검색 중...")
-    source_docs = retriever.invoke(korean_question)
+    search_query = korean_question
+    if chat_history:
+        print("  [1/3] 이전 대화 맥락을 기반으로 취향 질문을 재구성하는 중...")
+        condense_prompt = CONDENSE_QUESTION_TEMPLATE.format(
+            chat_history="\n".join(chat_history),
+            question=korean_question
+        )
+        response = llm.invoke(condense_prompt)
+        search_query = response.content.strip()
+        print(f"    → 재구성된 검색 쿼리: '{search_query}'")
+        
+    print("  [2/3] ChromaDB에서 스타일 및 취향 관련 정보 검색 중...")
+    source_docs = retriever.invoke(search_query)
     
     context = "\n\n---\n\n".join(
         truncate_to_complete_sentences(sanitize_text(doc.page_content), 3000) 
         for doc in source_docs
     )
     
-    print("  [2/2] Gemini AI가 인테리어 취향 맞춤 컨설팅 답변을 생성 중입니다...\n")
+    print("  [3/3] Gemini AI가 인테리어 취향 맞춤 컨설팅 답변을 생성 중입니다...\n")
     print("💬 답변:")
     print("─" * 60)
     korean_answer = call_llm_stream(
         llm, PREFERENCE_TEMPLATE,
         context=context,
+        chat_history="\n".join(chat_history) if chat_history else "이전 대화 기록 없음",
         question=korean_question,
     )
     print("\n" + "─" * 60)

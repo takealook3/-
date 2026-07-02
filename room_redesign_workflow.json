@@ -31,7 +31,7 @@
         {"name": "VAE", "type": "VAE", "links": [6, 7], "slot_index": 2}
       ],
       "properties": {},
-      "widgets_values": ["v1-5-pruned-emaonly.safetensors"]
+      "widgets_values": ["Realistic_Vision_V5.1_Hyper_pruned.safetensors"]
     },
     {
       "id": 3,

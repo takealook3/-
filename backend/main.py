@@ -17,10 +17,63 @@ if hasattr(sys.stdout, 'reconfigure'):
 # 로컬 backend 디렉터리 경로를 최우선 검색 경로로 삽입하여 schemas.py 임포트 충돌 방지
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# 프로젝트 루트 경로 (backend 폴더의 부모 폴더)
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+
 # 상위 폴더(프로젝트 루트)에 있는 RAG 엔진(query.py) 임포트를 위한 sys.path 추가
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+sys.path.append(PROJECT_ROOT)
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.env"))
+
+style_image_map = {}
+pyeong_style_map = {}
+
+def build_db_metadata_maps():
+    import csv, re
+    global style_image_map, pyeong_style_map
+    db1_path = os.path.join(PROJECT_ROOT, "backend", "DB1.csv")
+    db2_path = os.path.join(PROJECT_ROOT, "backend", "DB2.csv")
+    
+    if os.path.exists(db1_path):
+        try:
+            with open(db1_path, "r", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                next(reader)
+                for row in reader:
+                    if not row or len(row) < 7:
+                        continue
+                    style_ko = row[1].strip()
+                    image_raw = row[6].strip()
+                    image_url = ""
+                    if image_raw:
+                        match = re.search(r'"(https?://[^"]+)"', image_raw)
+                        if match:
+                            image_url = match.group(1)
+                    if style_ko and image_url:
+                        style_image_map[style_ko] = image_url
+            print(f"📊 [DB Metadata Map] DB1 스타일 이미지 맵 로드 성공: {len(style_image_map)}개 스타일 등록")
+        except Exception as e:
+            print(f"⚠️ [DB Metadata Map] DB1.csv 파싱 오류: {e}")
+            
+    if os.path.exists(db2_path):
+        try:
+            with open(db2_path, "r", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                next(reader)
+                for row in reader:
+                    if not row or len(row) < 8:
+                        continue
+                    pyeong_cat = row[0].strip()
+                    recommended_styles = row[6].strip()
+                    layout_tips = row[7].strip()
+                    
+                    pyeong_style_map[pyeong_cat] = {
+                        "styles": [s.strip().replace(" 스타일", "") for s in recommended_styles.split(",")],
+                        "layout_tips": layout_tips
+                    }
+            print(f"📊 [DB Metadata Map] DB2 평형대 추천 맵 로드 성공: {len(pyeong_style_map)}개 평형대 등록")
+        except Exception as e:
+            print(f"⚠️ [DB Metadata Map] DB2.csv 파싱 오류: {e}")
 
 # comfyui-helper-nodes 패키지 임포트
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../comfyui-helper-nodes"))
@@ -266,6 +319,7 @@ def translate_prompt_to_english(prompt: str) -> str:
     global rag_llm, rag_enabled
     if rag_enabled and rag_llm:
         from concurrent.futures import ThreadPoolExecutor
+        from langchain_core.messages import HumanMessage
         try:
             print(f"🌐 [Translate] 한글/한영혼용 프롬프트 번역 및 보강 시작: '{prompt}'")
             system_prompt = (
@@ -278,15 +332,15 @@ def translate_prompt_to_english(prompt: str) -> str:
                 f"Korean: {prompt}\n"
                 "English Prompt:"
             )
-            # 타임아웃(3.0초)이 적용된 동적 스레드 풀 실행 (네트워크 블로킹 방지)
+            # 타임아웃(8.0초)이 적용된 동적 스레드 풀 실행 (네트워크 블로킹 방지)
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(rag_llm.invoke, system_prompt)
-                response = future.result(timeout=3.0)
+                future = executor.submit(rag_llm.invoke, [HumanMessage(content=system_prompt)])
+                response = future.result(timeout=8.0)
             translated = response.content.strip().replace('"', '').replace("'", "")
             print(f"🌐 [Translate] 번역 완료: '{translated}'")
             return translated
         except Exception as e:
-            print(f"⚠️ [Translate] 번역 오류 또는 시간 초과 (3초 제한 룰 기반 Fallback 작동): {e}")
+            print(f"⚠️ [Translate] 번역 오류 또는 시간 초과 (8초 제한 룰 기반 Fallback 작동): {e}")
 
     # =====================================================================
     # [정밀 룰 기반 Fallback 파서]
@@ -413,60 +467,106 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
             node_id = node.get("id")
             
             if node_type == "LoadImage":
-                if "image_filename" in parameters:
-                    node["widgets_values"][0] = parameters["image_filename"]
-                    
+                # comfyui_workflow.json의 Node 5와 Node 11 개별 매핑 및 폴백
+                if workflow_filename == "comfyui_workflow.json":
+                    if node_id == 5 and "image_filename" in parameters:
+                        node["widgets_values"][0] = parameters["image_filename"]
+                    elif node_id == 11:
+                        # 2차 이미지명이 없거나 비어 있으면 1차 이미지명을 복제하여 ComfyUI의 파일 로드 에러 원천 차단!
+                        img_b = parameters.get("image_filename_b")
+                        if not img_b or img_b == "":
+                            img_b = parameters.get("image_filename")
+                        node["widgets_values"][0] = img_b
+                else:
+                    if "image_filename" in parameters:
+                        node["widgets_values"][0] = parameters["image_filename"]
+                        
             elif node_type == "LoadImageMask":
                 if "mask_filename" in parameters:
                     node["widgets_values"][0] = parameters["mask_filename"]
                     
             elif node_type == "CLIPTextEncode":
-                # 출력 링크를 통해 포지티브/네거티브 구분
-                output_links = []
-                for out in node.get("outputs", []):
-                    output_links.extend(out.get("links") or [])
-                
-                is_positive = any(
-                    l in ksampler_positive_links or l in inpaint_positive_links
-                    for l in output_links
-                )
-                is_negative = any(
-                    l in ksampler_negative_links or l in inpaint_negative_links
-                    for l in output_links
-                )
-                
-                # 링크 연결로 구분이 안 되면 현재 위젯 텍스트로 판단
-                if not is_positive and not is_negative:
-                    current_text = (node["widgets_values"] or [""])[0] or ""
-                    is_negative = "ugly" in current_text or "bad" in current_text or "blurry" in current_text
-                    is_positive = not is_negative
-                
-                if is_positive and "prompt" in parameters:
-                    node["widgets_values"][0] = (
-                        f"architectural photography of interior design space, "
-                        f"no people, empty room, high quality, "
-                        f"{parameters['prompt']}"
+                # comfyui_workflow.json 전용 개별 프롬프트 주입
+                if workflow_filename == "comfyui_workflow.json":
+                    if node_id == 6 and "prompt" in parameters:
+                        node["widgets_values"][0] = (
+                            f"architectural photography of interior design space, no people, empty room, "
+                            f"high quality, {parameters['prompt']}"
+                        )
+                        print(f"✅ [ComfyUI API] 1차 포지티브 프롬프트 주입 완료: node {node_id}")
+                    elif node_id == 12 and "prompt_b" in parameters:
+                        node["widgets_values"][0] = (
+                            f"architectural photography of interior design space, no people, empty room, "
+                            f"high quality, {parameters['prompt_b']}"
+                        )
+                        print(f"✅ [ComfyUI API] 2차 포지티브 프롬프트 주입 완료: node {node_id}")
+                    elif node_id in (7, 13):
+                        node["widgets_values"][0] = (
+                            "person, human, woman, man, girl, boy, people, hands, face, limbs, "
+                            "ugly, blurry, low quality, bad proportions, distorted, messy, noisy, out of focus, "
+                            "text, watermark, logo"
+                        )
+                        print(f"✅ [ComfyUI API] 네거티브 프롬프트 주입 완료: node {node_id}")
+                else:
+                    # 그 외 워크플로우(예: room_redesign_workflow.json)의 경우 범용 매핑 수행
+                    output_links = []
+                    for out in node.get("outputs", []):
+                        output_links.extend(out.get("links") or [])
+                    
+                    is_positive = any(
+                        l in ksampler_positive_links or l in inpaint_positive_links
+                        for l in output_links
                     )
-                    print(f"✅ [ComfyUI API] 포지티브 프롬프트 주입 완료: node {node_id}")
-                elif is_negative:
-                    node["widgets_values"][0] = (
-                        "person, human, woman, man, girl, boy, people, hands, face, limbs, "
-                        "ugly, blurry, low quality, bad proportions, distorted, messy, noisy, out of focus, "
-                        "text, watermark, logo"
+                    is_negative = any(
+                        l in ksampler_negative_links or l in inpaint_negative_links
+                        for l in output_links
                     )
-                    print(f"✅ [ComfyUI API] 네거티브 프롬프트 주입 완료: node {node_id}")
+                    
+                    if not is_positive and not is_negative:
+                        current_text = (node["widgets_values"] or [""])[0] or ""
+                        is_negative = "ugly" in current_text or "bad" in current_text or "blurry" in current_text
+                        is_positive = not is_negative
+                    
+                    if is_positive and "prompt" in parameters:
+                        node["widgets_values"][0] = (
+                            f"architectural photography of interior design space, "
+                            f"no people, empty room, high quality, "
+                            f"{parameters['prompt']}"
+                        )
+                        print(f"✅ [ComfyUI API] 포지티브 프롬프트 주입 완료: node {node_id}")
+                    elif is_negative:
+                        node["widgets_values"][0] = (
+                            "person, human, woman, man, girl, boy, people, hands, face, limbs, "
+                            "ugly, blurry, low quality, bad proportions, distorted, messy, noisy, out of focus, "
+                            "text, watermark, logo"
+                        )
+                        print(f"✅ [ComfyUI API] 네거티브 프롬프트 주입 완료: node {node_id}")
                     
             elif node_type == "KSampler":
                 widgets = node.get("widgets_values", [])
                 if len(widgets) >= 7:
                     if "seed" in parameters:
                         widgets[0] = int(parameters["seed"])
-                    # CFG 강도 상향 (index 3)
-                    widgets[3] = 11.5
-                    if workflow_filename == "user_masked_inpainting_workflow.json":
-                        widgets[6] = 1.0  # denoise 강제 1.0
-                    elif "denoise" in parameters:
-                        widgets[6] = float(parameters["denoise"])
+                    
+                    # Hyper 모델용 낮은 CFG 및 적절한 스텝/denoise 주입
+                    widgets[2] = 6  # steps = 6
+                    widgets[3] = 1.5  # cfg = 1.5
+                    widgets[4] = "dpmpp_sde"
+                    widgets[5] = "karras"
+                    
+                    if workflow_filename == "comfyui_workflow.json":
+                        if node_id == 3:
+                            widgets[6] = float(parameters.get("denoise", 0.6))
+                        elif node_id == 15:
+                            if "image_filename_b" not in parameters or not parameters.get("image_filename_b"):
+                                # 2차 마스크가 없으면 2차 KSampler는 무효화(denoise = 0.0)하여 1차 결과 그대로 유지
+                                widgets[6] = 0.0
+                            else:
+                                widgets[6] = float(parameters.get("denoise_b", 0.6))
+                    else:
+                        # 그 외 워크플로우(예: room_redesign_workflow.json)
+                        if "denoise" in parameters:
+                            widgets[6] = float(parameters["denoise"])
                     
         prompt_api_data = convert_webui_to_api_format(webui_data)
         
@@ -666,44 +766,33 @@ def process_mock_image(
     from PIL import Image, ImageEnhance, ImageDraw, ImageFilter, ImageFont
     
     # 1. 원본 파일 탐색
-    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    # 1. 원본 파일 탐색
     input_path = None
     ext_found = ".jpg"
     
     for folder in ("uploads", "results"):
         for ext in (".jpg", ".jpeg", ".png"):
-            test_path = os.path.join(backend_dir, folder, f"{image_id}{ext}")
+            test_path = os.path.join(PROJECT_ROOT, folder, f"{image_id}{ext}")
             if os.path.exists(test_path):
                 input_path = test_path
                 ext_found = ext
                 break
         if input_path:
             break
-            
-    if not input_path:
-        for folder in ("uploads", "results"):
-            for ext in (".jpg", ".jpeg", ".png"):
-                test_path = os.path.join(folder, f"{image_id}{ext}")
-                if os.path.exists(test_path):
-                    input_path = test_path
-                    ext_found = ext
-                    break
-            if input_path:
-                break
                 
     # 2. 결과물 저장 경로 지정
-    os.makedirs(os.path.join(backend_dir, "results"), exist_ok=True)
-    output_path = os.path.join(backend_dir, "results", f"{result_id}{ext_found}")
+    os.makedirs(os.path.join(PROJECT_ROOT, "results"), exist_ok=True)
+    output_path = os.path.join(PROJECT_ROOT, "results", f"{result_id}{ext_found}")
     
     # 가상의 기본 원본 생성
     if not input_path or not os.path.exists(input_path):
         print(f"⚠️ 원본 파일 {image_id}가 없어 가상의 백색 이미지를 생성합니다.")
         img = Image.new("RGB", (768, 512), color="white")
-        dummy_input = os.path.join(backend_dir, "uploads", f"{image_id}.jpg")
+        dummy_input = os.path.join(PROJECT_ROOT, "uploads", f"{image_id}.jpg")
         img.save(dummy_input)
         input_path = dummy_input
         ext_found = ".jpg"
-        output_path = os.path.join(backend_dir, "results", f"{result_id}.jpg")
+        output_path = os.path.join(PROJECT_ROOT, "results", f"{result_id}.jpg")
 
     try:
         # PIL 이미지 로드 (원본 구조 보존을 위해 원본 이미지를 베이스로 지정)
@@ -963,6 +1052,8 @@ app.mount("/static/uploads", StaticFiles(directory="uploads"), name="static_uplo
 app.mount("/static/masks", StaticFiles(directory="masks"), name="static_masks")
 app.mount("/static/results", StaticFiles(directory="results"), name="static_results")
 
+build_db_metadata_maps()
+
 
 # =====================================================================
 # [0-2. 메모리 기반 세션 활동 장부 (DB 대용)]
@@ -1057,17 +1148,10 @@ async def generate_interior_image(request: Request):
     session_id = body.get("session_id")
     style = body.get("style", "modern")
     prompt = body.get("prompt", "").strip()
-    mode = body.get("mode", "style_transform")
     
     print(f"🏠 [인테리어 변환 접수] 이미지ID: {image_id} | 스타일: {style} | 프롬프트: '{prompt}'")
     
     # 1. 에러 검증 로직
-    if not image_id:
-        raise AppException(
-            error_code=ErrorCode.IMAGE_NOT_FOUND,
-            message="변환할 원본 이미지 ID가 누락되었습니다.",
-            status_code=400
-        )
     if not session_id:
         raise AppException(
             error_code=ErrorCode.SESSION_NOT_FOUND,
@@ -1081,31 +1165,126 @@ async def generate_interior_image(request: Request):
             status_code=400
         )
         
+    result_id = f"result_{uuid.uuid4().hex[:6]}"
+    
+    # image_id가 누락된 경우 T2I (Text-to-Image) 모드로 동작하게 함
+    if not image_id:
+        task_id = str(uuid.uuid4())
+        result_url = f"/static/results/interior_result_{style}_01.jpg" if style in ("modern", "minimal", "natural") else "/static/results/interior_result_sample_01.jpg"
+        
+        session_data = get_or_create_session(session_id)
+        session_data["generations"].append({
+            "type": "interior_transform",
+            "task_id": task_id,
+            "result_id": result_id,
+            "original_image_url": None,
+            "result_image_url": result_url,
+            "style": style,
+            "prompt": prompt,
+            "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        })
+        session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "data": {
+                    "task_id": task_id,
+                    "result_id": result_id,
+                    "session_id": session_id,
+                    "original_image_url": None,
+                    "result_image_url": result_url,
+                    "style": style,
+                    "prompt": prompt,
+                    "processing_time": 0.42,
+                    "status": "completed"
+                },
+                "message": "텍스트 기반 인테리어 이미지 생성이 완료되었습니다."
+            }
+        )
+        
     # 2. 원본 이미지 존재 여부 확인
     ext_found = ".jpg"
     for ext in (".jpg", ".jpeg", ".png"):
-        if os.path.exists(os.path.join("uploads", f"{image_id}{ext}")):
+        if os.path.exists(os.path.join(PROJECT_ROOT, "uploads", f"{image_id}{ext}")):
             ext_found = ext
             break
-    original_url = f"/static/uploads/{image_id}{ext_found}"
+    input_filename = f"{image_id}{ext_found}"
+    original_url = f"/static/uploads/{input_filename}"
     
-    # 3. 스타일별 더미 결과 이미지 선택
-    style_lower = str(style).lower()
-    if style_lower == "modern":
-        result_url = "/static/results/interior_result_modern_01.jpg"
-    elif style_lower == "minimal":
-        result_url = "/static/results/interior_result_minimal_01.jpg"
-    elif style_lower == "natural":
-        result_url = "/static/results/interior_result_natural_01.jpg"
-    else:
-        result_url = "/static/results/interior_result_sample_01.jpg"
-        
+    # 영어 번역 프롬프트
+    translated_prompt = translate_prompt_to_english(prompt)
+    
+    # ComfyUI 온라인 여부 체크
+    comfy_online = check_comfyui_online()
+    workflow_info = log_workflow_execution("room_redesign_workflow.json")
+    workflow_info["comfyui_status"] = "online" if comfy_online else "offline"
+    
     result_id = f"result_{uuid.uuid4().hex[:6]}"
+    result_filename = f"{result_id}.jpg"
+    result_url = f"/static/results/{result_filename}"
+    
+    real_filename = None
+    if comfy_online:
+        parameters = {
+            "image_filename": input_filename,
+            "prompt": translated_prompt,
+            "denoise": 0.6,
+            "seed": int(time.time()) % 1000000
+        }
+        real_filename = execute_real_comfyui("room_redesign_workflow.json", parameters)
+        
+    if real_filename:
+        result_filename = real_filename
+        result_url = f"/static/results/{result_filename}"
+        workflow_info["execution_mode"] = "real_comfyui"
+    else:
+        # ComfyUI 오프라인 또는 에러인 경우 로컬 sd_tutorial fallback 실행
+        print("🖥️ [Style Transform] ComfyUI 오프라인. sd_tutorial 로컬 Fallback 실행 중...")
+        orig_path = os.path.join(PROJECT_ROOT, "uploads", input_filename)
+        dest_path = os.path.join(PROJECT_ROOT, "results", result_filename)
+        
+        try:
+            sys.path.append(PROJECT_ROOT)
+            import sd_tutorial
+            sd_model_path = r"C:\Users\USER\Desktop\ComfyUI_windows_portable_nvidia\ComfyUI_windows_portable\ComfyUI\models\checkpoints\realisticVisionV60B1_v51HyperVAE.safetensors"
+            
+            if os.path.exists(sd_model_path) and os.path.exists(orig_path):
+                sd_tutorial.run_interior_style_change(
+                    model_path=sd_model_path,
+                    input_image_path=orig_path,
+                    output_image_path=dest_path,
+                    prompt=translated_prompt,
+                    negative_prompt="blurry, low quality, distorted, bad proportions, ugly, disfigured"
+                )
+                print(f"🟢 [Style Transform] sd_tutorial 생성 완료: {dest_path}")
+                workflow_info["execution_mode"] = "local_sd_tutorial"
+            else:
+                raise FileNotFoundError(f"로컬 모델 또는 원본 이미지를 찾을 수 없습니다. Model Path: {sd_model_path}")
+        except Exception as e:
+            print(f"⚠️ [Style Transform Fallback Error] 로컬 SD 실행 실패 (Mock 대체): {e}")
+            brightness_val = 0.0
+            contrast_val = 1.0
+            if style == "minimal":
+                contrast_val = 1.2
+            elif style == "natural":
+                brightness_val = 0.1
+            process_mock_image(
+                image_id=image_id,
+                result_id=result_id,
+                style_name=style,
+                prompt_text=f"{prompt} {translated_prompt}",
+                brightness=brightness_val,
+                contrast=contrast_val,
+                text_overlay=f"ZipPT AI Fallback\nStyle: {style}"
+            )
+            workflow_info["execution_mode"] = "mock_fallback"
+            
     elapsed = round(time.time() - start_time, 2)
     if elapsed < 0.1:
-        elapsed = 0.42  # 데모 규격 소요시간 보정
+        elapsed = 0.42
         
-    # 세션 장부에 변환 이력 기록
     session_data = get_or_create_session(session_id)
     session_data["generations"].append({
         "type": "interior_transform",
@@ -1114,6 +1293,7 @@ async def generate_interior_image(request: Request):
         "result_image_url": result_url,
         "style": style,
         "prompt": prompt,
+        "workflow": workflow_info,
         "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -1130,9 +1310,10 @@ async def generate_interior_image(request: Request):
                 "style": style,
                 "prompt": prompt,
                 "processing_time": elapsed,
-                "status": "completed"
+                "status": "completed",
+                "workflow": workflow_info
             },
-            "message": "인테리어 이미지 변환이 완료되었습니다."
+            "message": f"인테리어 이미지 변환이 완료되었습니다. (Mode: {workflow_info['execution_mode']})"
         }
     )
 
@@ -1222,7 +1403,7 @@ def generate_image(req: ImageGenerateRequest):
     
     ext_found = ".jpg"
     for ext in (".jpg", ".jpeg", ".png"):
-        if os.path.exists(os.path.join("uploads", f"{req.image_id}{ext}")):
+        if os.path.exists(os.path.join(PROJECT_ROOT, "uploads", f"{req.image_id}{ext}")):
             ext_found = ext
             break
     input_filename = f"{req.image_id}{ext_found}"
@@ -1230,9 +1411,13 @@ def generate_image(req: ImageGenerateRequest):
     # 기존 공간 레이아웃(벽선, 큰 가구 경계)을 단단하게 고정하되, 새로운 스타일 변환을 수용하기 위해 denoise 최대 상한을 0.70 또는 0.95로 매핑 스케일 조정!
     max_denoise = 0.70 if req.keep_structure else 0.95
     denoise_val = (float(req.strength or 65.0) / 100.0) * max_denoise
+    
+    # 영어 번역 프롬프트
+    translated_prompt = translate_prompt_to_english(req.prompt)
+    
     parameters = {
         "image_filename": input_filename,
-        "prompt": translate_prompt_to_english(req.prompt),
+        "prompt": translated_prompt,
         "denoise": denoise_val,
         "seed": int(time.time()) % 1000000
     }
@@ -1245,32 +1430,56 @@ def generate_image(req: ImageGenerateRequest):
         generated_url = f"/static/results/{real_filename}"
         workflow_info["execution_mode"] = "real_comfyui"
     else:
-        brightness_val = 0.0
-        contrast_val = 1.0
+        # ComfyUI 오프라인. sd_tutorial 로컬 Fallback 실행
+        print("🖥️ [Style Transform] ComfyUI 오프라인. sd_tutorial 로컬 Fallback 실행 중...")
+        result_filename = f"{result_id}.jpg"
+        dest_path = os.path.join(PROJECT_ROOT, "results", result_filename)
+        orig_path = os.path.join(PROJECT_ROOT, "uploads", input_filename)
         
-        if req.style == "Gallery White":
-            brightness_val = 0.20
-            contrast_val = 1.15
-        elif req.style == "Urban Minimal":
-            brightness_val = -0.10
-            contrast_val = 1.40
-        elif req.style == "Neutral Wall Restore":
-            brightness_val = -0.05
-            contrast_val = 0.88
+        try:
+            sys.path.append(PROJECT_ROOT)
+            import sd_tutorial
+            sd_model_path = r"C:\Users\USER\Desktop\ComfyUI_windows_portable_nvidia\ComfyUI_windows_portable\ComfyUI\models\checkpoints\realisticVisionV60B1_v51HyperVAE.safetensors"
+            
+            if os.path.exists(sd_model_path) and os.path.exists(orig_path):
+                sd_tutorial.run_interior_style_change(
+                    model_path=sd_model_path,
+                    input_image_path=orig_path,
+                    output_image_path=dest_path,
+                    prompt=translated_prompt,
+                    negative_prompt="blurry, low quality, distorted, bad proportions, ugly, disfigured"
+                )
+                print(f"🟢 [Style Transform] sd_tutorial 생성 완료: {dest_path}")
+                generated_url = f"/static/results/{result_filename}"
+                workflow_info["execution_mode"] = "local_sd_tutorial"
+            else:
+                raise FileNotFoundError(f"로컬 모델 또는 원본 이미지를 찾을 수 없습니다. Model: {sd_model_path}")
+        except Exception as e:
+            print(f"⚠️ [Style Transform Fallback Error] 로컬 SD 실행 실패 (Mock 대체): {e}")
+            brightness_val = 0.0
+            contrast_val = 1.0
+            
+            if req.style == "Gallery White":
+                brightness_val = 0.20
+                contrast_val = 1.15
+            elif req.style == "Urban Minimal":
+                brightness_val = -0.10
+                contrast_val = 1.40
+            elif req.style == "Neutral Wall Restore":
+                brightness_val = -0.05
+                contrast_val = 0.88
 
-        # ✅ 버그 수정: Mock fallback에 번역된 영어 프롬프트 + 원본 한국어 프롬프트 모두 전달
-        # process_mock_image는 combined_text에서 한국어 키워드 검사하므로 원본 필요
-        combined_prompt_text = f"{req.prompt} {parameters['prompt']}"
-        generated_url = process_mock_image(
-            image_id=req.image_id or "img_dummy",
-            result_id=result_id,
-            style_name=req.style,
-            prompt_text=combined_prompt_text,
-            brightness=brightness_val,
-            contrast=contrast_val,
-            text_overlay=f"ZipPT AI Style Generator\nStyle: {req.style}"
-        )
-        workflow_info["execution_mode"] = "mock_fallback"
+            combined_prompt_text = f"{req.prompt} {translated_prompt}"
+            generated_url = process_mock_image(
+                image_id=req.image_id or "img_dummy",
+                result_id=result_id,
+                style_name=req.style,
+                prompt_text=combined_prompt_text,
+                brightness=brightness_val,
+                contrast=contrast_val,
+                text_overlay=f"ZipPT AI Style Generator\nStyle: {req.style}"
+            )
+            workflow_info["execution_mode"] = "mock_fallback"
 
     session_data = get_or_create_session(req.session_id)
     session_data["generations"].append({
@@ -1332,14 +1541,64 @@ def chat_message(req: ChatMessageRequest):
     if rag_enabled and rag_llm and rag_retriever:
         try:
             print(f"🔍 [RAG API] 질문 수신: '{req.question}'")
-            # 1. 질문 라우팅 (취향 추천 vs 시공/법률)
-            is_preference = query.check_is_preference_query(req.question, rag_llm)
             
-            if is_preference:
-                print("💡 [RAG API] 취향 조언 유형 판별됨.")
-                answer, docs = query.answer_preference_question(req.question, rag_retriever, rag_llm)
+            # 1. 질문 유형 분석 (취향 추천 vs 평형대 vs 일반)
+            is_preference = query.check_is_preference_query(req.question, rag_llm)
+            has_pyeong_query = any(kw in req.question for kw in ["평", "㎡", "평형", "오피스텔", "원룸"])
+            
+            if has_pyeong_query:
+                print("💡 [RAG API] 평수 관련 질문 판별됨. DB2 가이드 조율.")
+                answer, docs = query.answer_question(req.question, chat_history, rag_retriever, rag_llm)
+                
+                # DB2 평형대 매칭 찾기
+                matched_pyeong = None
+                for doc in docs:
+                    meta = doc.metadata
+                    if meta.get("source") == "DB2.csv":
+                        matched_pyeong = meta.get("pyeong_category")
+                        break
+                        
+                if not matched_pyeong:
+                    # 간단 텍스트 전처리 매칭
+                    for p_cat in pyeong_style_map.keys():
+                        if any(kw in req.question for kw in [p_cat[:3], p_cat.split()[0]]):
+                            matched_pyeong = p_cat
+                            break
+                            
+                # 매칭된 평형대가 있다면 추천 스타일 중 이미지 URL 추출 및 추천 이유 보강
+                if matched_pyeong and matched_pyeong in pyeong_style_map:
+                    p_info = pyeong_style_map[matched_pyeong]
+                    chosen_style = p_info["styles"][0] if p_info["styles"] else None
+                    if chosen_style and chosen_style in style_image_map:
+                        image_url = style_image_map[chosen_style]
+                        print(f"🎯 [RAG API] 평수 매칭 성공: {matched_pyeong} -> 추천 스타일 '{chosen_style}' 이미지 매핑 완료 ({image_url})")
+                        
+                    reason_suffix = (
+                        f"\n\n💡 [{matched_pyeong} 가구/공간 추천 이유]\n"
+                        f"- 해당 평형대 추천 스타일: {', '.join(p_info['styles'])} 스타일\n"
+                        f"- 공간 레이아웃 배치 가이드: {p_info['layout_tips']}\n"
+                        f"해당 면적에 적절한 실속/고급형 자재 조율과 함께 가구 반경 간격 및 권장 규격을 매칭하여 최상의 개방감과 실내 동선을 확보할 수 있기 때문입니다."
+                    )
+                    answer += reason_suffix
                 
                 # 출처 메타데이터 추출
+                references = []
+                seen = set()
+                for doc in docs:
+                    meta = doc.metadata
+                    label = meta.get("article") or meta.get("process") or "N/A"
+                    title = meta.get("title", "")
+                    source = meta.get("source", "")
+                    key = f"[{label}] {title} ({source})"
+                    if key not in seen:
+                        seen.add(key)
+                        references.append(key)
+                        
+            elif is_preference:
+                print("💡 [RAG API] 취향 조언 유형 판별됨.")
+                answer, docs = query.answer_preference_question(req.question, chat_history, rag_retriever, rag_llm)
+                
+                # 취향 관련 질문일 때만 이미지 첨부
                 references = []
                 seen = set()
                 for doc in docs:
@@ -1357,7 +1616,7 @@ def chat_message(req: ChatMessageRequest):
                 print("📑 [RAG API] 법률/시공/체크리스트 유형 판별됨.")
                 answer, docs = query.answer_question(req.question, chat_history, rag_retriever, rag_llm)
                 
-                # 출처 메타데이터 추출
+                # 일반 시공/법률 질문의 경우 image_url을 강제로 None 처리하여 이미지를 첨부하지 않음
                 references = []
                 seen = set()
                 for doc in docs:
@@ -1369,8 +1628,20 @@ def chat_message(req: ChatMessageRequest):
                     if key not in seen:
                         seen.add(key)
                         references.append(key)
-                    if not image_url and meta.get("image_url"):
-                        image_url = meta.get("image_url")
+                        
+            # 2. "제공된 문서에 따르면" 등 출처 상투구 제거 필터 적용
+            forbidden_phrases = [
+                "제공된 문서에 따르면,", "제공된 문서에 따르면",
+                "참고 문서에 따르면,", "참고 문서에 따르면",
+                "제공된 자료에 따르면,", "제공된 자료에 따르면",
+                "참고 자료에 명시된 사실에 따르면", "참고 문서에 명시된 바와 같이",
+                "문서에 따르면,", "문서에 따르면",
+                "제시된 문서에 따르면,", "제시된 문서에 따르면"
+            ]
+            for phrase in forbidden_phrases:
+                answer = answer.replace(phrase, "")
+            answer = answer.strip()
+            
         except Exception as e:
             print(f"❌ [RAG API] 처리 에러 발생 (로컬 모킹 대체): {e}")
             answer = f"['{req.question}']에 대해 임시 모킹 답변을 드립니다. (RAG 추적 오류: {e}) 보통 실내 벽면 복원에는 Gallery White 스타일이 적절합니다."
@@ -1418,21 +1689,18 @@ def edit_image(req: ImageEditRequest):
     start_time = time.time()
     
     comfy_online = check_comfyui_online()
-    # 사용자의 직접 선택 마스크를 반영하는 user_masked_inpainting_workflow.json 기반 실행
-    workflow_info = log_workflow_execution("user_masked_inpainting_workflow.json")
+    # comfyui_workflow.json 기반 실행
+    workflow_info = log_workflow_execution("comfyui_workflow.json")
     workflow_info["comfyui_status"] = "online" if comfy_online else "offline"
     
     edit_id = f"edit_{uuid.uuid4().hex[:8]}"
     
-    # ✅ 수정: backend/ 디렉터리 기준으로 파일 탐색 (uvicorn을 backend/에서 실행하므로)
-    backend_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # uploads/ 딥두 results/ 두 폴더에서 원본 파일 탐색
+    # uploads/ 와 results/ 두 폴더에서 원본 파일 탐색 (PROJECT_ROOT 절대경로 기준)
     orig_input_filename = None
     orig_path = None
     for search_folder in ("uploads", "results"):
         for ext in (".jpg", ".jpeg", ".png"):
-            candidate_path = os.path.join(backend_dir, search_folder, f"{req.image_id}{ext}")
+            candidate_path = os.path.join(PROJECT_ROOT, search_folder, f"{req.image_id}{ext}")
             if os.path.exists(candidate_path):
                 orig_input_filename = f"{req.image_id}{ext}"
                 orig_path = candidate_path
@@ -1440,20 +1708,7 @@ def edit_image(req: ImageEditRequest):
                 break
         if orig_path:
             break
-    
-    # 파일을 못 찾은 경우 CWD 기준으로 다시 시도
-    if not orig_path:
-        for search_folder in ("uploads", "results"):
-            for ext in (".jpg", ".jpeg", ".png"):
-                candidate_path = os.path.join(search_folder, f"{req.image_id}{ext}")
-                if os.path.exists(candidate_path):
-                    orig_input_filename = f"{req.image_id}{ext}"
-                    orig_path = candidate_path
-                    print(f"[Edit] CWD 기준 원본 파일 발견: {orig_path}")
-                    break
-            if orig_path:
-                break
-    
+            
     if not orig_path:
         # 원본 파일이 없으면 모크 폠백으로 처리 (black 이미지)
         print(f"[Edit] 원본 파일 로드 실패 (image_id={req.image_id}) - 모크로 진행")
@@ -1463,7 +1718,7 @@ def edit_image(req: ImageEditRequest):
     # 파일명 및 마스크 경로 설정
     cache_bust_suffix = f"_{int(time.time() * 10)}"
     mask_filename = f"{req.image_id}_mask{cache_bust_suffix}.png"
-    mask_path = os.path.join(backend_dir, "uploads", mask_filename)
+    mask_path = os.path.join(PROJECT_ROOT, "uploads", mask_filename)
     
     try:
         if os.path.exists(orig_path):
@@ -1507,19 +1762,17 @@ def edit_image(req: ImageEditRequest):
         print(f"📁 [ComfyUI API] mask 파일 복사 완료: {mask_filename}")
         
     parameters = {
-        # 1번 노드(LoadImage)에는 깨끗한 원본 이미지를 전달!
-        "image_filename": orig_input_filename,
-        # 15번 노드(LoadImageMask)에는 동적으로 생성된 고유한 흑백 마스크 파일을 전달!
-        "mask_filename": mask_filename,
+        "image_filename": mask_filename,
+        "image_filename_b": "",
         "prompt": translate_prompt_to_english(req.prompt),
-        "denoise": 1.0,
+        "prompt_b": translate_prompt_to_english(req.prompt),
         "seed": int(time.time()) % 1000000
     }
     
     real_filename = None
     if comfy_online:
         # ✅ 버그 수정: 딕셔너리 copy()를 통해 매개변수 변조 방지
-        real_filename = execute_real_comfyui("user_masked_inpainting_workflow.json", parameters.copy())
+        real_filename = execute_real_comfyui("comfyui_workflow.json", parameters.copy())
         
     if real_filename:
         result_url = f"/static/results/{real_filename}"

@@ -584,13 +584,19 @@ class ImageEditRequest(BaseModel):
     session_id: str = Field(..., description="궗슜옄 옉뾽 꽭뀡 ID")
 
 
-    mask: Optional[List[int]] = Field(None, description="留덉뒪겕 궗媛곹삎 쁺뿭 醫뚰몴 [x1, y1, x2, y2]")
+    mask: Optional[List[int]] = Field(None, description="1차 留덉뒪겕 궗媛곹삎 쁺뿭 醫뚰몴 [x1, y1, x2, y2]")
+
+
+    mask_b: Optional[List[int]] = Field(None, description="2차 留덉뒪겕 궗媛곹삎 쁺뿭 醫뚰몴 [x1, y1, x2, y2]")
 
 
     selected_object: Optional[str] = Field(None, description="꽑깮맂 媛앹껜 紐낆묶 (삁: graffiti, sign)")
 
 
-    prompt: str = Field("Replace graffiti with clean brick texture", description="렪吏 吏떆臾")
+    prompt: str = Field("Replace graffiti with clean brick texture", description="1차 렪吏 吏떆臾")
+
+
+    prompt_b: Optional[str] = Field(None, description="2차 렪吏 吏떆臾")
 
 
 
