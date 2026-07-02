@@ -34,3 +34,7 @@ chroma_db/
 # 업로드 및 임시 결과 이미지 폴더
 uploads/
 results/
+
+# 노드 모듈 및 프론트엔드 빌드 결과물
+node_modules/
+dist/
