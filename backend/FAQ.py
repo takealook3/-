@@ -504,6 +504,7 @@ A/S 절차가 궁금하다면?
 ]
 
 def load_material_data() -> dict:
+    import re
     material_map = {}
     tsv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "style_materials.tsv")
     if not os.path.exists(tsv_path):
@@ -518,6 +519,14 @@ def load_material_data() -> dict:
                 if not row or len(row) < 10:
                     continue
                 style_ko = row[1].strip()
+                image_raw = row[3].strip() if len(row) > 3 else ""
+                image_url = ""
+                if image_raw:
+                    # =IMAGE("https://...") 또는 유사 이미지 태그에서 따옴표 안의 URL 추출
+                    match = re.search(r'"(https?://[^"]+)"', image_raw)
+                    if match:
+                        image_url = match.group(1)
+                
                 wallpaper = row[4].strip()
                 flooring = row[5].strip()
                 difficulty = row[6].strip()
@@ -526,6 +535,7 @@ def load_material_data() -> dict:
                 precautions = row[9].strip()
                 
                 material_map[style_ko] = {
+                    "image_url": image_url,
                     "wallpaper": wallpaper,
                     "flooring": flooring,
                     "difficulty": difficulty,
@@ -533,7 +543,7 @@ def load_material_data() -> dict:
                     "flooring_weather": flooring_weather,
                     "precautions": precautions
                 }
-        print(f"✅ style_materials.tsv에서 {len(material_map)}개의 자재 매칭 데이터를 로드했습니다.")
+        print(f"✅ style_materials.tsv에서 {len(material_map)}개의 자재 및 이미지 매칭 데이터를 로드했습니다.")
     except Exception as e:
         print(f"⚠️ 자재 정보 로드 오류: {e}")
     return material_map
@@ -577,6 +587,7 @@ def load_style_documents() -> list:
                 page_content += f"- 특징 3: {feat3}\n"
                 
             # 자재 및 시공 데이터 병합
+            image_url = ""
             if style_ko in material_map:
                 m = material_map[style_ko]
                 page_content += f"- 어울리는 벽지: {m['wallpaper']}\n"
@@ -585,6 +596,9 @@ def load_style_documents() -> list:
                 page_content += f"- 벽지시공 추천날씨: {m['wallpaper_weather']}\n"
                 page_content += f"- 바닥시공 추천날씨: {m['flooring_weather']}\n"
                 page_content += f"- 날씨별 시공 유의사항: {m['precautions']}\n"
+                if m.get("image_url"):
+                    image_url = m["image_url"]
+                    page_content += f"- 스타일 이미지 URL: {image_url}\n"
                 
             metadata = {
                 "source": f"Google Spreadsheet ({num})",
@@ -592,6 +606,9 @@ def load_style_documents() -> list:
                 "style_name_ko": style_ko,
                 "style_name_en": style_en
             }
+            if image_url:
+                metadata["image_url"] = image_url
+                
             style_chunks.append(Document(page_content=page_content.strip(), metadata=metadata))
             
         print(f"✅ 구글 시트 및 로컬 TSV 결합을 통해 {len(style_chunks)}개의 병합된 스타일 데이터를 생성했습니다.")

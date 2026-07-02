@@ -545,6 +545,9 @@ class ChatMessageResponse(BaseModel):
     references: List[str] = Field(default_factory=list, description="떟蹂 옉꽦뿉 李멸퀬븳 異쒖쿂 紐⑸줉 諛곗뿴")
 
 
+    image_url: Optional[str] = Field(None, description="스타일 참고 이미지 URL")
+
+
 
 
 

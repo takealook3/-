@@ -56,7 +56,8 @@ export default function ChatWidget({ sessionId }) {
         {
           sender: 'ai',
           text: respData.answer || res.message || "답변이 도착했습니다.",
-          references: respData.references || []
+          references: respData.references || [],
+          image_url: respData.image_url || null
         }
       ]);
     } else {
@@ -161,7 +162,8 @@ export default function ChatWidget({ sessionId }) {
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start'
+                  alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+                  width: '100%'
                 }}
               >
                 <div style={{
@@ -176,6 +178,31 @@ export default function ChatWidget({ sessionId }) {
                 }}>
                   {msg.text}
                 </div>
+
+                {msg.image_url && (
+                  <div style={{
+                    marginTop: '8px',
+                    maxWidth: '85%',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+                    border: '1px solid #475569'
+                  }}>
+                    <img 
+                      src={msg.image_url} 
+                      alt="스타일 이미지" 
+                      style={{
+                        width: '100%',
+                        height: 'auto',
+                        display: 'block',
+                        objectFit: 'cover'
+                      }}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                )}
 
                 {/* 참고 출처 / 취향 데이터 태그 표시 제거됨 */}
               </div>

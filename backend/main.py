@@ -1328,6 +1328,7 @@ def chat_message(req: ChatMessageRequest):
         chat_history.append(f"AI: {c['answer']}")
 
     # RAG 실제 동작 여부에 따른 분기 처리
+    image_url = None
     if rag_enabled and rag_llm and rag_retriever:
         try:
             print(f"🔍 [RAG API] 질문 수신: '{req.question}'")
@@ -1350,6 +1351,8 @@ def chat_message(req: ChatMessageRequest):
                     if key not in seen:
                         seen.add(key)
                         references.append(key)
+                    if not image_url and meta.get("image_url"):
+                        image_url = meta.get("image_url")
             else:
                 print("📑 [RAG API] 법률/시공/체크리스트 유형 판별됨.")
                 answer, docs = query.answer_question(req.question, chat_history, rag_retriever, rag_llm)
@@ -1366,6 +1369,8 @@ def chat_message(req: ChatMessageRequest):
                     if key not in seen:
                         seen.add(key)
                         references.append(key)
+                    if not image_url and meta.get("image_url"):
+                        image_url = meta.get("image_url")
         except Exception as e:
             print(f"❌ [RAG API] 처리 에러 발생 (로컬 모킹 대체): {e}")
             answer = f"['{req.question}']에 대해 임시 모킹 답변을 드립니다. (RAG 추적 오류: {e}) 보통 실내 벽면 복원에는 Gallery White 스타일이 적절합니다."
@@ -1383,6 +1388,7 @@ def chat_message(req: ChatMessageRequest):
         "question": req.question,
         "answer": answer,
         "references": references,
+        "image_url": image_url,
         "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -1392,7 +1398,8 @@ def chat_message(req: ChatMessageRequest):
         data=ChatMessageResponse(
             session_id=req.session_id,
             answer=answer,
-            references=references
+            references=references,
+            image_url=image_url
         ),
         message="대화 응답이 완료되었습니다."
     )
