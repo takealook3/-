@@ -148,6 +148,7 @@ def _load_db1_style_context(style_keyword: str) -> str:
     ChromaDB 검색 실패 시 fallback 컨텍스트로 사용합니다.
     """
     import csv
+    
     db1_path = os.path.join(current_dir, "DB1.csv")
     if not os.path.exists(db1_path):
         return ""

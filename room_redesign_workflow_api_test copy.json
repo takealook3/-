@@ -1,0 +1,166 @@
+{
+  "1": {
+    "inputs": {
+      "image": "img_505ed557.jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "이미지 로드"
+    }
+  },
+  "2": {
+    "inputs": {
+      "ckpt_name": "realisticVisionV60B1_v51HyperVAE.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "체크포인트 로드"
+    }
+  },
+  "3": {
+    "inputs": {
+      "text": "architectural photography of interior design space, no people, empty room, high quality, photorealistic, 4k, (warm wooden texture interior:1.25), (scandinavian cozy style:1.25), (warm cozy mood:1.15), (warm cozy mood:1.15), living room design, with (modern fabric sofa:1.25), no people, empty room, realistic, architectural photography, highly detailed, photorealistic, 4k",
+      "clip": [
+        "2",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP 텍스트 인코딩 (프롬프트)"
+    }
+  },
+  "4": {
+    "inputs": {
+      "text": "person, human, woman, man, girl, boy, people, hands, face, limbs, ugly, blurry, low quality, bad proportions, distorted, messy, noisy, out of focus, text, watermark, logo, cartoon, painting",
+      "clip": [
+        "2",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP 텍스트 인코딩 (프롬프트)"
+    }
+  },
+  "5": {
+    "inputs": {
+      "pixels": [
+        "1",
+        0
+      ],
+      "vae": [
+        "2",
+        2
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE 인코드"
+    }
+  },
+  "6": {
+    "inputs": {
+      "seed": 989255,
+      "steps": 20,
+      "cfg": 8.0,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 0.6,
+      "model": [
+        "2",
+        0
+      ],
+      "positive": [
+        "11",
+        0
+      ],
+      "negative": [
+        "4",
+        0
+      ],
+      "latent_image": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "7": {
+    "inputs": {
+      "samples": [
+        "6",
+        0
+      ],
+      "vae": [
+        "2",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE 디코드"
+    }
+  },
+  "8": {
+    "inputs": {
+      "filename_prefix": "ComfyUI_room_redesign_1782989255",
+      "images": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "이미지 저장"
+    }
+  },
+  "9": {
+    "inputs": {
+      "control_net_name": "control_v11p_sd15_mlsd.safetensors"
+    },
+    "class_type": "ControlNetLoader",
+    "_meta": {
+      "title": "컨트롤넷 모델 로드"
+    }
+  },
+  "11": {
+    "inputs": {
+      "strength": 1,
+      "conditioning": [
+        "3",
+        0
+      ],
+      "control_net": [
+        "9",
+        0
+      ],
+      "image": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "ControlNetApply",
+    "_meta": {
+      "title": "컨트롤넷 적용 (구형)"
+    }
+  },
+  "12": {
+    "inputs": {
+      "score_threshold": 0.1,
+      "dist_threshold": 0.1,
+      "resolution": 512,
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "M-LSDPreprocessor",
+    "_meta": {
+      "title": "M-LSD Lines"
+    }
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "img_505ed557.jpg",
+      "upload_format": "image"
+    }
+  },
+  "2": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "Realistic_Vision_V5.1_Hyper_pruned.safetensors"
+    }
+  },
+  "3": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "scandinavian cozy style, warm wooden textures, light fabric sofa",
+      "clip": [
+        "2",
+        1
+      ]
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "ugly, blurry, low quality",
+      "clip": [
+        "2",
+        1
+      ]
+    }
+  },
+  "5": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "1",
+        0
+      ],
+      "vae": [
+        "2",
+        2
+      ]
+    }
+  },
+  "9": {
+    "class_type": "ControlNetLoader",
+    "inputs": {
+      "control_net_name": "control_v11p_sd15_mlsd.safetensors"
+    }
+  },
+  "10": {
+    "class_type": "M-LSD Lines",
+    "inputs": {
+      "score_threshold": 0.1,
+      "dist_threshold": 0.1,
+      "process_res": 512,
+      "image": [
+        "1",
+        0
+      ]
+    }
+  },
+  "11": {
+    "class_type": "ControlNetApply",
+    "inputs": {
+      "conditioning": [
+        "3",
+        0
+      ],
+      "control_net": [
+        "9",
+        0
+      ],
+      "image": [
+        "10",
+        0
+      ]
+    }
+  },
+  "6": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 1234567,
+      "control_after_generate": "randomize",
+      "steps": 20,
+      "cfg": 8.0,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 0.6,
+      "model": [
+        "2",
+        0
+      ],
+      "positive": [
+        "11",
+        0
+      ],
+      "negative": [
+        "4",
+        0
+      ],
+      "latent_image": [
+        "5",
+        0
+      ]
+    }
+  },
+  "7": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "6",
+        0
+      ],
+      "vae": [
+        "2",
+        2
+      ]
+    }
+  },
+  "8": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "ComfyUI_room_redesign_minimalist",
+      "images": [
+        "7",
+        0
+      ]
+    }
+  }
+}

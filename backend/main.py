@@ -236,17 +236,23 @@ WIDGET_MAP = {
     "CheckpointLoaderSimple": ["ckpt_name"],
     "CLIPTextEncode": ["text"],
     "KSampler": ["seed", "control_after_generate", "steps", "cfg", "sampler_name", "scheduler", "denoise"],
+    "VAEEncode": [],
+    "VAEDecode": [],
+    "SaveImage": ["filename_prefix"],
+    "PreviewImage": ["filename_prefix"],
+    # ControlNet 관련 노드 (room_redesign_workflow.json)
+    "ControlNetLoader": ["control_net_name"],
+    "M-LSD Lines": ["score_threshold", "dist_threshold", "process_res"],
+    "ControlNetApply": ["strength"],
+    "ControlNetApplyAdvanced": ["strength", "start_percent", "end_percent"],
+    # 기존 노드
     "UltralyticsDetectorProvider": ["model_name"],
     "SAMLoader": ["model_name", "device_mode"],
     "ImpactSimpleDetectorSEGS": ["threshold", "dilation_factor", "crop_factor", "drop_size", "sub_threshold", "sub_dilation_factor", "sub_crop_factor", "sub_drop_size", "noise_mask"],
     "ImpactSEGSLabelFilter": ["label_list_mode", "label_list"],
     "SEGSPreview": ["show_mask", "dilation"],
-    "PreviewImage": ["filename_prefix"],
-    "SaveImage": ["filename_prefix"],
     "SEGSPaste": ["threshold", "feather"],
     "ToBasicPipe": [],
-    "VAEDecode": [],
-    "VAEEncode": [],
     "SEGSDetailer": [
         "guide_size", "guide_size_for", "max_size", "seed", "control_after_generate", 
         "steps", "cfg", "sampler_name", "scheduler", "denoise", "noise_mask", 
@@ -294,6 +300,10 @@ def convert_webui_to_api_format(webui_data: dict) -> dict:
             if link_id in links:
                 src_node_id, src_slot = links[link_id]
                 inputs[inp_name] = [src_node_id, src_slot]
+                
+        # 🎯 [ComfyUI API 스펙 보정] KSampler는 control_after_generate 인자를 받지 않으므로 API JSON 전송 전 삭제
+        if node_type == "KSampler":
+            inputs.pop("control_after_generate", None)
                 
         api_format[node_id] = {
             "class_type": node_type,
@@ -424,152 +434,130 @@ def translate_prompt_to_english(prompt: str) -> str:
 
 def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
     import requests
-    workflow_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", workflow_filename)
-    if not os.path.exists(workflow_path):
-        return None
     try:
-        with open(workflow_path, "r", encoding="utf-8") as f:
-            webui_data = json.load(f)
-        
-        # ✅ 버그 수정: widgets 리스트를 직접 node["widgets_values"]에서 수정해야 함
-        # (로컬 변수 widgets에 할당하면 참조가 끊겨 변경이 반영되지 않음)
-        positive_node_ids = []  # 포지티브 CLIP 노드 ID 수집 (CLIPTextEncode)
-        negative_node_ids = []  # 네거티브 CLIP 노드 ID 수집 (CLIPTextEncode)
-        
-        # 1단계: 링크 정보로 포지티브/네거티브 CLIP 노드 구분
-        # links 배열: [link_id, src_node_id, src_slot, dst_node_id, dst_slot, type]
-        ksampler_positive_links = set()
-        ksampler_negative_links = set()
-        inpaint_positive_links = set()
-        inpaint_negative_links = set()
-        
-        for link in webui_data.get("links", []):
-            link_id, src_node, src_slot, dst_node, dst_slot, link_type = link
-            # KSampler 포지티브 conditioning은 slot 1, 네거티브는 slot 2
-            # InpaintModelConditioning 포지티브는 slot 0, 네거티브는 slot 1
-            if link_type == "CONDITIONING":
-                for node in webui_data.get("nodes", []):
-                    if node.get("id") == dst_node:
-                        if node.get("type") == "KSampler":
-                            if dst_slot == 1:  # positive
-                                ksampler_positive_links.add(link_id)
-                            elif dst_slot == 2:  # negative
-                                ksampler_negative_links.add(link_id)
-                        elif node.get("type") == "InpaintModelConditioning":
-                            if dst_slot == 0:  # positive
-                                inpaint_positive_links.add(link_id)
-                            elif dst_slot == 1:  # negative
-                                inpaint_negative_links.add(link_id)
-        
-        # 2단계: 각 노드별 파라미터 직접 패치
-        for node in webui_data.get("nodes", []):
-            node_type = node.get("type")
-            node_id = node.get("id")
+        # ── [NEW] room_redesign_workflow.json은 직접 API format JSON을 사용하여 다이렉트 바인딩 ──
+        if workflow_filename == "room_redesign_workflow.json":
+            api_workflow_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "room_redesign_workflow_API.json")
+            if not os.path.exists(api_workflow_path):
+                print(f"⚠️ [ComfyUI API] API format 파일이 존재하지 않습니다: {api_workflow_path}")
+                return None
             
-            if node_type == "LoadImage":
-                # comfyui_workflow.json의 Node 5와 Node 11 개별 매핑 및 폴백
-                if workflow_filename == "comfyui_workflow.json":
-                    if node_id == 5 and "image_filename" in parameters:
-                        node["widgets_values"][0] = parameters["image_filename"]
-                    elif node_id == 11:
-                        # 2차 이미지명이 없거나 비어 있으면 1차 이미지명을 복제하여 ComfyUI의 파일 로드 에러 원천 차단!
-                        img_b = parameters.get("image_filename_b")
-                        if not img_b or img_b == "":
-                            img_b = parameters.get("image_filename")
-                        node["widgets_values"][0] = img_b
-                else:
-                    if "image_filename" in parameters:
-                        node["widgets_values"][0] = parameters["image_filename"]
-                        
-            elif node_type == "LoadImageMask":
-                if "mask_filename" in parameters:
-                    node["widgets_values"][0] = parameters["mask_filename"]
-                    
-            elif node_type == "CLIPTextEncode":
-                # comfyui_workflow.json 전용 개별 프롬프트 주입
-                if workflow_filename == "comfyui_workflow.json":
-                    if node_id == 6 and "prompt" in parameters:
-                        node["widgets_values"][0] = (
-                            f"architectural photography of interior design space, no people, empty room, "
-                            f"high quality, {parameters['prompt']}"
-                        )
-                        print(f"✅ [ComfyUI API] 1차 포지티브 프롬프트 주입 완료: node {node_id}")
-                    elif node_id == 12 and "prompt_b" in parameters:
-                        node["widgets_values"][0] = (
-                            f"architectural photography of interior design space, no people, empty room, "
-                            f"high quality, {parameters['prompt_b']}"
-                        )
-                        print(f"✅ [ComfyUI API] 2차 포지티브 프롬프트 주입 완료: node {node_id}")
-                    elif node_id in (7, 13):
-                        node["widgets_values"][0] = (
-                            "person, human, woman, man, girl, boy, people, hands, face, limbs, "
-                            "ugly, blurry, low quality, bad proportions, distorted, messy, noisy, out of focus, "
-                            "text, watermark, logo"
-                        )
-                        print(f"✅ [ComfyUI API] 네거티브 프롬프트 주입 완료: node {node_id}")
-                else:
-                    # 그 외 워크플로우(예: room_redesign_workflow.json)의 경우 범용 매핑 수행
-                    output_links = []
-                    for out in node.get("outputs", []):
-                        output_links.extend(out.get("links") or [])
-                    
-                    is_positive = any(
-                        l in ksampler_positive_links or l in inpaint_positive_links
-                        for l in output_links
-                    )
-                    is_negative = any(
-                        l in ksampler_negative_links or l in inpaint_negative_links
-                        for l in output_links
-                    )
-                    
-                    if not is_positive and not is_negative:
-                        current_text = (node["widgets_values"] or [""])[0] or ""
-                        is_negative = "ugly" in current_text or "bad" in current_text or "blurry" in current_text
-                        is_positive = not is_negative
-                    
-                    if is_positive and "prompt" in parameters:
-                        node["widgets_values"][0] = (
-                            f"architectural photography of interior design space, "
-                            f"no people, empty room, high quality, "
-                            f"{parameters['prompt']}"
-                        )
-                        print(f"✅ [ComfyUI API] 포지티브 프롬프트 주입 완료: node {node_id}")
-                    elif is_negative:
-                        node["widgets_values"][0] = (
-                            "person, human, woman, man, girl, boy, people, hands, face, limbs, "
-                            "ugly, blurry, low quality, bad proportions, distorted, messy, noisy, out of focus, "
-                            "text, watermark, logo"
-                        )
-                        print(f"✅ [ComfyUI API] 네거티브 프롬프트 주입 완료: node {node_id}")
-                    
-            elif node_type == "KSampler":
-                widgets = node.get("widgets_values", [])
-                if len(widgets) >= 7:
-                    if "seed" in parameters:
-                        widgets[0] = int(parameters["seed"])
-                    
-                    # Hyper 모델용 낮은 CFG 및 적절한 스텝/denoise 주입
-                    widgets[2] = 6  # steps = 6
-                    widgets[3] = 1.5  # cfg = 1.5
-                    widgets[4] = "dpmpp_sde"
-                    widgets[5] = "karras"
-                    
-                    if workflow_filename == "comfyui_workflow.json":
-                        if node_id == 3:
-                            widgets[6] = float(parameters.get("denoise", 0.6))
-                        elif node_id == 15:
-                            if "image_filename_b" not in parameters or not parameters.get("image_filename_b"):
-                                # 2차 마스크가 없으면 2차 KSampler는 무효화(denoise = 0.0)하여 1차 결과 그대로 유지
-                                widgets[6] = 0.0
-                            else:
-                                widgets[6] = float(parameters.get("denoise_b", 0.6))
-                    else:
-                        # 그 외 워크플로우(예: room_redesign_workflow.json)
-                        if "denoise" in parameters:
-                            widgets[6] = float(parameters["denoise"])
-                    
-        prompt_api_data = convert_webui_to_api_format(webui_data)
-        
+            with open(api_workflow_path, "r", encoding="utf-8") as f:
+                prompt_api_data = json.load(f)
+            
+            # 1. 입력 이미지 파일명 주입 (LoadImage: Node 1)
+            if "image_filename" in parameters:
+                prompt_api_data["1"]["inputs"]["image"] = parameters["image_filename"]
+                print(f"✅ [room_redesign_API] 이미지 주입 완료: {parameters['image_filename']}")
+            
+            # 2. 포지티브 프롬프트 주입 (CLIPTextEncode: Node 3)
+            if "prompt" in parameters:
+                prompt_api_data["3"]["inputs"]["text"] = (
+                    f"{parameters['prompt']}, high quality, photorealistic, 4k"
+                )
+                print(f"✅ [room_redesign_API] 포지티브 프롬프트 주입 완료: {parameters['prompt'][:50]}...")
+                
+            # # 3. 네거티브 프롬프트 주입 (CLIPTextEncode: Node 4)
+            # prompt_api_data["4"]["inputs"]["text"] = (
+            #     "person, human, woman, man, girl, boy, people, hands, face, limbs, "
+            #     "ugly, blurry, low quality, bad proportions, distorted, messy, noisy, out of focus, "
+            #     "text, watermark, logo, cartoon, painting"
+            # )
+            
+            # 4. KSampler 파라미터 주입 (KSampler: Node 6)
+            if "seed" in parameters:
+                prompt_api_data["6"]["inputs"]["seed"] = int(parameters["seed"])
+            
+            # prompt_api_data["6"]["inputs"]["scheduler"] = "normal"
+            print(f"✅ [room_redesign_API] KSampler 설정 완료: seed={prompt_api_data['6']['inputs']['seed']}, denoise={prompt_api_data['6']['inputs']['denoise']}")
+            
+            # 5. 아웃풋 파일명 접두사 설정 (SaveImage: Node 8)
+            prompt_api_data["8"]["inputs"]["filename_prefix"] = f"ComfyUI_room_redesign_{int(time.time())}"
+                
+        else:
+            # ── [NEW] comfyui_workflow_api.json 직접 로딩 및 다이렉트 바인딩 ──
+            api_workflow_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "comfyui_workflow_api.json")
+            if not os.path.exists(api_workflow_path):
+                print(f"⚠️ [ComfyUI API] API format 파일이 존재하지 않습니다: {api_workflow_path}")
+                return None
+            
+            with open(api_workflow_path, "r", encoding="utf-8") as f:
+                prompt_api_data = json.load(f)
+            
+            # 1. 입력 이미지 파일명 주입 (LoadImage: Node 5 & Node 11)
+            if "image_filename" in parameters:
+                mask_filename = parameters["image_filename"]
+                mask_full_path = os.path.join(PROJECT_ROOT, "uploads", mask_filename)
+                if os.path.exists(mask_full_path):
+                    try:
+                        from PIL import Image
+                        import shutil
+                        with Image.open(mask_full_path) as mask_img:
+                            # L 채널(흑백)을 추출하여 RGB의 R 채널로 병합 (G, B 채널은 0으로 채움)
+                            l_channel = mask_img.convert("L")
+                            zero_channel = Image.new("L", l_channel.size, 0)
+                            rgb_mask = Image.merge("RGB", (l_channel, zero_channel, zero_channel))
+                            rgb_mask.save(mask_full_path, "PNG")
+                            print(f"🎨 [comfyui_API] 마스크 이미지를 RGB(R채널 마스크)로 변환 완료: {mask_filename}")
+                            
+                            # 변환된 마스크 파일을 ComfyUI input 폴더에 덮어쓰기 복사
+                            comfy_input_dir = "C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia\\ComfyUI_windows_portable\\ComfyUI\\input"
+                            if os.path.exists(comfy_input_dir):
+                                shutil.copy(mask_full_path, os.path.join(comfy_input_dir, mask_filename))
+                                print(f"📁 [comfyui_API] 변환된 마스크 파일을 ComfyUI input 폴더에 복사 완료.")
+                    except Exception as e:
+                        print(f"⚠️ [comfyui_API] 마스크 이미지 RGB 변환 중 에러: {e}")
+
+                # [노드 17] 첫 번째 마스크 이미지 주입 (LoadImageMask)
+                prompt_api_data["17"]["inputs"]["image"] = mask_filename
+                print(f"✅ [comfyui_API] 첫 번째 마스크 주입 완료: {mask_filename}")
+
+            # [노드 5] 원본 입력 이미지 주입 (LoadImage)
+            if "orig_image" in parameters:
+                prompt_api_data["5"]["inputs"]["image"] = parameters["orig_image"]
+                print(f"✅ [comfyui_API] 원본 입력 이미지 주입 완료: {parameters['orig_image']}")
+
+            # [노드 18] 두 번째 마스크 이미지 주입 (LoadImageMask)
+            img_b = parameters.get("image_filename_b")
+            if not img_b or img_b == "":
+                img_b = parameters.get("image_filename")
+            if img_b:
+                prompt_api_data["18"]["inputs"]["image"] = img_b
+                print(f"✅ [comfyui_API] 두 번째 마스크 주입 완료: {img_b}")
+            
+            # 2. 포지티브 프롬프트 주입 (CLIPTextEncode: Node 6 & Node 12)
+            if "prompt" in parameters:
+                prompt_api_data["6"]["inputs"]["text"] = (
+                    f"{parameters['prompt']}, high quality, 4k"
+                )
+                print(f"✅ [comfyui_API] 첫 번째 포지티브 프롬프트 주입 완료: {parameters['prompt'][:50]}...")
+            
+            if "prompt_b" in parameters and parameters["prompt_b"]:
+                prompt_api_data["12"]["inputs"]["text"] = (
+                    f"{parameters['prompt_b']}, high quality, 4k"
+                )
+                print(f"✅ [comfyui_API] 두 번째 포지티브 프롬프트 주입 완료: {parameters['prompt_b'][:50]}...")
+            
+            # 3. KSampler 파라미터 주입 (KSampler: Node 3 & Node 15)
+            if "seed" in parameters:
+                seed_val = int(parameters["seed"])
+                prompt_api_data["3"]["inputs"]["seed"] = seed_val
+                prompt_api_data["15"]["inputs"]["seed"] = seed_val
+            
+            # 첫 번째 KSampler denoise
+            # denoise_val = float(parameters.get("denoise", 0.6))
+            # prompt_api_data["3"]["inputs"]["denoise"] = denoise_val
+            
+            # 두 번째 KSampler denoise (image_filename_b가 없으면 0.0으로 비활성화)
+            # if "image_filename_b" not in parameters or not parameters.get("image_filename_b"):
+            #     prompt_api_data["15"]["inputs"]["denoise"] = 0.0
+            # else:
+            #     prompt_api_data["15"]["inputs"]["denoise"] = float(parameters.get("denoise_b", 0.6))
+            
+            print(f"✅ [comfyui_API] KSampler 설정 완료: seed={prompt_api_data['3']['inputs']['seed']}, denoise={prompt_api_data['3']['inputs']['denoise']}, denoise_b={prompt_api_data['15']['inputs']['denoise']}")
+            
+            # 4. 아웃풋 파일명 접두사 설정 (SaveImage: Node 9)
+            prompt_api_data["9"]["inputs"]["filename_prefix"] = f"ComfyUI_inpaint_{int(time.time())}"
         # ComfyUI input 디렉터리에 이미지 파일 복사 (PROJECT_ROOT 절대경로 기준)
         comfy_input_dir = "C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia\\ComfyUI_windows_portable\\ComfyUI\\input"
         if os.path.exists(comfy_input_dir):
@@ -592,7 +580,16 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                                 shutil.copy(src_path, os.path.join(comfy_input_dir, filename))
                                 print(f"📁 [ComfyUI API] input 파일 복사 완료: {filename} (CWD {folder})")
                                 break
-                                
+                                    
+        # [디버그 저장] 컴피유아이 전송 직전의 API 데이터를 로컬 파일로 저장
+        try:
+            debug_path = os.path.join(PROJECT_ROOT, "room_redesign_workflow_api_test.json")
+            with open(debug_path, "w", encoding="utf-8") as df:
+                json.dump(prompt_api_data, df, ensure_ascii=False, indent=2)
+            print(f"💾 [ComfyUI API Debug] 전송 직전 페이로드 파일 저장 완료: {debug_path}")
+        except Exception as de:
+            print(f"⚠️ [ComfyUI API Debug] 디버그 파일 저장 실패: {de}")
+
         res = requests.post(f"{COMFYUI_API_URL}/prompt", json={"prompt": prompt_api_data}, timeout=5)
         prompt_id = res.json().get("prompt_id")
         if not prompt_id:
@@ -1230,15 +1227,14 @@ async def generate_interior_image(request: Request):
     result_filename = f"{result_id}.jpg"
     result_url = f"/static/results/{result_filename}"
     
-    real_filename = None
-    if comfy_online:
-        parameters = {
-            "image_filename": input_filename,
-            "prompt": translated_prompt,
-            "denoise": 0.6,
-            "seed": int(time.time()) % 1000000
-        }
-        real_filename = execute_real_comfyui("room_redesign_workflow.json", parameters)
+    # [디버그 보정] 덤프 파일 추출을 위해 ComfyUI 온라인 상태와 상관없이 API 변환 함수 강제 호출
+    parameters = {
+        "image_filename": input_filename,
+        "prompt": translated_prompt,
+        "denoise": 0.6,
+        "seed": int(time.time()) % 1000000
+    }
+    real_filename = execute_real_comfyui("room_redesign_workflow.json", parameters)
         
     if real_filename:
         result_filename = real_filename
@@ -1769,6 +1765,7 @@ def edit_image(req: ImageEditRequest):
     parameters = {
         "image_filename": mask_filename,
         "image_filename_b": "",
+        "orig_image": orig_input_filename,
         "prompt": translate_prompt_to_english(req.prompt),
         "prompt_b": translate_prompt_to_english(req.prompt),
         "seed": int(time.time()) % 1000000
