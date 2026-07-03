@@ -164,7 +164,7 @@ export async function editImage({ imageId, sessionId, mask = null, mask_b = null
  * 6번 창구: AI 인테리어 취향 & 추구미 상담 챗봇 호출 (POST /api/chat)
  * 비유: 내 공간에 어울리는 스타일이나 가구 컬러, 취향 상담 지시서를 AI 스타일리스트에게 전달합니다.
  */
-export async function sendChatMessage({ sessionId, question }) {
+export async function sendChatMessage({ sessionId, question, imageId = null, style = null }) {
   try {
     const response = await fetch(`${API_BASE_URL}/api/chat`, {
       method: "POST",
@@ -173,7 +173,9 @@ export async function sendChatMessage({ sessionId, question }) {
       },
       body: JSON.stringify({
         session_id: sessionId || "session_default",
-        question: question
+        question: question,
+        image_id: imageId,
+        style: style
       }),
     });
 

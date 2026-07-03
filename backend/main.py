@@ -161,9 +161,40 @@ COMFYUI_PATH = os.getenv(
     "COMFYUI_PATH",
     r"C:\Users\USER\Desktop\ComfyUI_windows_portable_nvidia\ComfyUI_windows_portable"
 )
+
+# [진단] ComfyUI 디렉터리 경로 존재성 진단 루틴
+if not os.path.exists(COMFYUI_PATH):
+    print("=" * 70)
+    print(f"❌ [경고] COMFYUI_PATH 디렉터리가 실존하지 않습니다: {COMFYUI_PATH}")
+    print("   다른 컴퓨터에서 구동 중이라면 프로젝트 루트의 `.env` 파일 내")
+    print("   COMFYUI_PATH 변수 설정을 실제 ComfyUI 홈 폴더 경로로 일치시켜 주세요.")
+    print("   예: COMFYUI_PATH=c:\\study\\Mini-Project\\ComfyUI")
+    print("=" * 70)
+else:
+    print(f"✅ [경로 확인] ComfyUI 홈 디렉터리 탐색 성공: {COMFYUI_PATH}")
+
+# Git 버전(alt) 및 포터블 버전 동시 대응형 경로 설정
 COMFYUI_INPUT_DIR = os.path.join(COMFYUI_PATH, "ComfyUI", "input")
+if os.path.exists(COMFYUI_PATH) and not os.path.exists(COMFYUI_INPUT_DIR):
+    alt_input = os.path.join(COMFYUI_PATH, "input")
+    if os.path.exists(alt_input):
+        COMFYUI_INPUT_DIR = alt_input
+        print(f"📁 [경로 보정] Git버전 ComfyUI input 디렉터리 매칭 완료: {COMFYUI_INPUT_DIR}")
+
 COMFYUI_OUTPUT_DIR = os.path.join(COMFYUI_PATH, "ComfyUI", "output")
+if os.path.exists(COMFYUI_PATH) and not os.path.exists(COMFYUI_OUTPUT_DIR):
+    alt_output = os.path.join(COMFYUI_PATH, "output")
+    if os.path.exists(alt_output):
+        COMFYUI_OUTPUT_DIR = alt_output
+        print(f"📁 [경로 보정] Git버전 ComfyUI output 디렉터리 매칭 완료: {COMFYUI_OUTPUT_DIR}")
+
 COMFYUI_MODEL_PATH = os.path.join(COMFYUI_PATH, "ComfyUI", "models", "checkpoints", "realisticVisionV60B1_v51HyperVAE.safetensors")
+if os.path.exists(COMFYUI_PATH) and not os.path.exists(COMFYUI_MODEL_PATH):
+    alt_model = os.path.join(COMFYUI_PATH, "models", "checkpoints", "realisticVisionV60B1_v51HyperVAE.safetensors")
+    if os.path.exists(alt_model):
+        COMFYUI_MODEL_PATH = alt_model
+        print(f"📁 [경로 보정] Git버전 ComfyUI 모델 파일 매칭 완료: {COMFYUI_MODEL_PATH}")
+
 
 
 # =====================================================================
@@ -849,98 +880,47 @@ def process_mock_image(
         elif any(x in combined_text for x in ["어두운", "dark", "밤", "moody", "블랙", "black"]):
             selected_style_key = "dark"
 
-        # 3. 🎨 공간 구조를 100% 보존하면서 스타일 전이(Before/After 전후 변화)를 확연하게 느끼도록 설계한 하이브리드 블렌딩 기법
-        # (원본 이미지와 고화질 템플릿의 색채/질감 믹싱 + 톤앤톤 소프트 펜선 오버레이 적용)
-        style_templates = {
-            "wood": "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=1024&auto=format&fit=crop",
-            "white": "https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=1024&auto=format&fit=crop",
-            "minimal": "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=1024&auto=format&fit=crop",
-            "dark": "https://images.unsplash.com/photo-1507089947368-19c1da9775ae?w=1024&auto=format&fit=crop"
-        }
-        
-        template_img = None
-        if selected_style_key:
-            print(f"🎨 [Mock Style] '{selected_style_key}' 테마 매칭 성공. 고화질 템플릿 로드...")
-            template_img = download_and_cache_image(style_templates[selected_style_key], f"template_{selected_style_key}")
-            
-        if template_img:
-            # 템플릿 이미지를 원본 이미지 해상도로 리사이징
-            template_img = template_img.resize((w, h), Image.Resampling.LANCZOS)
-            
-            # [A] 기본 구조 믹스: 원본 55% + 템플릿 질감/색상 45% 합성 (원본 가구 레이아웃 100% 유지)
-            blended_base = Image.blend(img, template_img, 0.45)
-            
-            # [B] 에지 노이즈 필터링: 원본 이미지에서 윤곽선 추출 후 지글지글한 세로줄 노이즈 억제
-            edges = img.filter(ImageFilter.FIND_EDGES).convert("L")
-            edges = ImageEnhance.Contrast(edges).enhance(1.4)
-            edges_inverted = Image.eval(edges, lambda x: 255 - x)
-            # 메디안 필터 및 가우시안 소프트 블러로 에지 경계를 얇고 부드럽게 다듬음
-            edges_smooth = edges_inverted.filter(ImageFilter.MedianFilter(3)).filter(ImageFilter.GaussianBlur(1))
-            
-            # [C] 톤앤톤 드로잉 채색: 시커먼 에지 대신 스타일에 맞는 우아한 배색선 사용
-            pen_color = (130, 95, 65)  # wood: 따뜻한 우드 브라운
-            if selected_style_key == "white":
-                pen_color = (160, 160, 162)  # white: 모던 실버 그레이
-            elif selected_style_key == "minimal":
-                pen_color = (80, 80, 85)     # minimal: 어반 차콜
-            elif selected_style_key == "dark":
-                pen_color = (50, 50, 55)     # dark: 차분한 딥그레이
-                
-            pen_layer = Image.new("RGB", (w, h), pen_color)
-            
-            # 부드러운 스케치 펜선 얹기 (약 12% 수준의 은은한 투명도 오버레이)
-            sketched_img = Image.composite(blended_base, pen_layer, edges_smooth)
-            img = Image.blend(blended_base, sketched_img, 0.12)
-            
-            # [D] 스타일별 시그니처 명암/대비 픽셀 튜닝
-            if selected_style_key == "wood":
-                img = ImageEnhance.Color(img).enhance(1.15)
-                img = ImageEnhance.Contrast(img).enhance(1.05)
-            elif selected_style_key == "white":
-                img = ImageEnhance.Brightness(img).enhance(1.20)
-                img = ImageEnhance.Color(img).enhance(0.9)
-            elif selected_style_key == "minimal":
-                img = ImageEnhance.Color(img).enhance(0.40)
-                img = ImageEnhance.Contrast(img).enhance(1.25)
-            elif selected_style_key == "dark":
-                img = ImageEnhance.Brightness(img).enhance(0.70)
-                img = ImageEnhance.Contrast(img).enhance(1.1)
-                
-            print(f"🎨 [Mock Style] 하이브리드 블렌딩 기법 및 '{selected_style_key}' 톤앤톤 얇은 에지 오버레이 완료.")
-            
+        # 3. 🎨 공간 구조를 100% 보존하면서 스타일 필터링 적용 (이미지 겹침 및 투명 왜곡 현상 제거)
+        # 외부 이미지 템플릿과 블렌딩하는 방식을 제거하여 다른 방 사진이 유령처럼 어긋나게 겹쳐 나오는 버그를 패치했습니다.
+        # 오직 사용자의 업로드 이미지 자체를 픽셀 필터 연산하여 구조적 일치성을 완전히 유지합니다.
+        if selected_style_key == "wood":
+            print("🎨 [Mock Style] 우드/북유럽 테마: 따뜻한 웜톤 보정 및 전구색 소프트 광원 레이어 결합")
+            r, g, b = img.split()
+            r = ImageEnhance.Contrast(r).enhance(1.15)
+            g = ImageEnhance.Contrast(g).enhance(1.05)
+            b = ImageEnhance.Contrast(b).enhance(0.9)
+            img = Image.merge("RGB", (r, g, b))
+            img = ImageEnhance.Contrast(img).enhance(1.1)
+            glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            glow_draw = ImageDraw.Draw(glow)
+            for radius in range(max(w, h), 0, -10):
+                alpha = int((1.0 - (radius / max(w, h))) * 45)
+                glow_draw.ellipse([w//2 - radius, -radius, w//2 + radius, radius], fill=(255, 190, 100, alpha))
+            img = Image.alpha_composite(img.convert("RGBA"), glow).convert("RGB")
+        elif selected_style_key == "white":
+            print("🎨 [Mock Style] 갤러리 화이트 테마: 밝고 화사하게 고조도 화이트닝 명암 보정")
+            img = ImageEnhance.Brightness(img).enhance(1.30)
+            img = ImageEnhance.Contrast(img).enhance(0.98)
+            img = ImageEnhance.Color(img).enhance(0.85)
+        elif selected_style_key == "minimal":
+            print("🎨 [Mock Style] 어반 미니멀 테마: 명도 조절 및 채도를 차분하게 깎은 차콜 무드")
+            img = ImageEnhance.Color(img).enhance(0.20)
+            img = ImageEnhance.Contrast(img).enhance(1.35)
+            img = ImageEnhance.Brightness(img).enhance(0.95)
+        elif selected_style_key == "dark":
+            print("🎨 [Mock Style] 차분한 다크 테마: 저조도 톤다운 및 코랄빛 간접 무드등 연출")
+            img = ImageEnhance.Brightness(img).enhance(0.55)
+            img = ImageEnhance.Contrast(img).enhance(1.2)
+            glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            glow_draw = ImageDraw.Draw(glow)
+            for radius in range(int(h * 0.8), 0, -8):
+                alpha = int((1.0 - (radius / (h * 0.8))) * 60)
+                glow_draw.ellipse([-radius, h//2 - radius, radius, h//2 + radius], fill=(255, 160, 60, alpha))
+            img = Image.alpha_composite(img.convert("RGBA"), glow).convert("RGB")
         else:
-            # 템플릿 다운로드 실패 시 Fallback (기존 필터 그레이딩 및 간접 조명 합성)
-            if selected_style_key == "wood":
-                print("🎨 [Mock Style Fallback] 우드/북유럽 테마: 따뜻한 웜톤 보정 및 전구색 소프트 광원 레이어 결합")
-                r, g, b = img.split()
-                r = ImageEnhance.Contrast(r).enhance(1.15)
-                g = ImageEnhance.Contrast(g).enhance(1.05)
-                b = ImageEnhance.Contrast(b).enhance(0.9)
-                img = Image.merge("RGB", (r, g, b))
-                img = ImageEnhance.Contrast(img).enhance(1.1)
-                glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-                glow_draw = ImageDraw.Draw(glow)
-                for radius in range(max(w, h), 0, -10):
-                    alpha = int((1.0 - (radius / max(w, h))) * 45)
-                    glow_draw.ellipse([w//2 - radius, -radius, w//2 + radius, radius], fill=(255, 190, 100, alpha))
-                img = Image.alpha_composite(img.convert("RGBA"), glow).convert("RGB")
-            elif selected_style_key == "white":
-                img = ImageEnhance.Brightness(img).enhance(1.30)
-                img = ImageEnhance.Contrast(img).enhance(0.98)
-                img = ImageEnhance.Color(img).enhance(0.85)
-            elif selected_style_key == "minimal":
-                img = ImageEnhance.Color(img).enhance(0.20)
-                img = ImageEnhance.Contrast(img).enhance(1.35)
-                img = ImageEnhance.Brightness(img).enhance(0.95)
-            elif selected_style_key == "dark":
-                img = ImageEnhance.Brightness(img).enhance(0.55)
-                img = ImageEnhance.Contrast(img).enhance(1.2)
-                glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-                glow_draw = ImageDraw.Draw(glow)
-                for radius in range(int(h * 0.8), 0, -8):
-                    alpha = int((1.0 - (radius / (h * 0.8))) * 60)
-                    glow_draw.ellipse([-radius, h//2 - radius, radius, h//2 + radius], fill=(255, 160, 60, alpha))
-                img = Image.alpha_composite(img.convert("RGBA"), glow).convert("RGB")
+            print("🎨 [Mock Style] 기본 스타일: 가벼운 명도/대비 보정 필터")
+            img = ImageEnhance.Brightness(img).enhance(1.05)
+            img = ImageEnhance.Contrast(img).enhance(1.05)
 
         # 4. 가구 인페인팅 정밀 합성 (BBox)
         if bbox and len(bbox) == 4:
@@ -1168,39 +1148,9 @@ async def upload_image(
 # =====================================================================
 # [3번 창구] 인테리어 이미지 변환 API (POST /api/image/generate)
 # =====================================================================
-@app.post("/api/image/generate")
-async def generate_interior_image(request: Request):
-    """
-    [인테리어 이미지 변환 창구]
-    사용자가 업로드한 방/공간 사진과 스타일, 프롬프트를 입력받아 인테리어 변환 결과를 반환합니다.
-    """
+def internal_generate_interior_image(image_id: str, session_id: str, style: str, prompt: str) -> dict:
+    """인테리어 이미지 변환 처리를 수행하는 공통 핵심 비즈니스 로직 함수입니다."""
     start_time = time.time()
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-        
-    image_id = body.get("image_id")
-    session_id = body.get("session_id")
-    style = body.get("style", "modern")
-    prompt = body.get("prompt", "").strip()
-    
-    print(f"🏠 [인테리어 변환 접수] 이미지ID: {image_id} | 스타일: {style} | 프롬프트: '{prompt}'")
-    
-    # 1. 에러 검증 로직
-    if not session_id:
-        raise AppException(
-            error_code=ErrorCode.SESSION_NOT_FOUND,
-            message="세션 ID가 누락되었습니다.",
-            status_code=400
-        )
-    if not prompt:
-        raise AppException(
-            error_code=ErrorCode.PROMPT_REQUIRED,
-            message="인테리어 변환을 위한 프롬프트를 입력해 주세요.",
-            status_code=400
-        )
-        
     result_id = f"result_{uuid.uuid4().hex[:6]}"
     
     # image_id가 누락된 경우 T2I (Text-to-Image) 모드로 동작하게 함
@@ -1221,26 +1171,20 @@ async def generate_interior_image(request: Request):
         })
         session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         
-        return JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "data": {
-                    "task_id": task_id,
-                    "result_id": result_id,
-                    "session_id": session_id,
-                    "original_image_url": None,
-                    "result_image_url": result_url,
-                    "style": style,
-                    "prompt": prompt,
-                    "processing_time": 0.42,
-                    "status": "completed"
-                },
-                "message": "텍스트 기반 인테리어 이미지 생성이 완료되었습니다."
-            }
-        )
-        
-    # 2. 원본 이미지 존재 여부 확인
+        return {
+            "task_id": task_id,
+            "result_id": result_id,
+            "session_id": session_id,
+            "original_image_url": None,
+            "result_image_url": result_url,
+            "style": style,
+            "prompt": prompt,
+            "processing_time": 0.42,
+            "status": "completed",
+            "is_t2i": True
+        }
+
+    # 원본 이미지 존재 여부 확인
     ext_found = ".jpg"
     for ext in (".jpg", ".jpeg", ".png"):
         if os.path.exists(os.path.join(PROJECT_ROOT, "uploads", f"{image_id}{ext}")):
@@ -1257,7 +1201,6 @@ async def generate_interior_image(request: Request):
     workflow_info = log_workflow_execution("room_redesign_workflow_api.json")
     workflow_info["comfyui_status"] = "online" if comfy_online else "offline"
     
-    result_id = f"result_{uuid.uuid4().hex[:6]}"
     result_filename = f"{result_id}.jpg"
     result_url = f"/static/results/{result_filename}"
     
@@ -1333,22 +1276,69 @@ async def generate_interior_image(request: Request):
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     
+    return {
+        "result_id": result_id,
+        "session_id": session_id,
+        "original_image_url": original_url,
+        "result_image_url": result_url,
+        "style": style,
+        "prompt": prompt,
+        "processing_time": elapsed,
+        "status": "completed",
+        "workflow": workflow_info,
+        "is_t2i": False
+    }
+
+
+# =====================================================================
+# [3번 창구] 인테리어 이미지 변환 API (POST /api/image/generate)
+# =====================================================================
+@app.post("/api/image/generate")
+async def generate_interior_image(request: Request):
+    """
+    [인테리어 이미지 변환 창구]
+    사용자가 업로드한 방/공간 사진과 스타일, 프롬프트를 입력받아 인테리어 변환 결과를 반환합니다.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+        
+    image_id = body.get("image_id")
+    session_id = body.get("session_id")
+    style = body.get("style", "modern")
+    prompt = body.get("prompt", "").strip()
+    
+    print(f"🏠 [인테리어 변환 접수] 이미지ID: {image_id} | 스타일: {style} | 프롬프트: '{prompt}'")
+    
+    if not session_id:
+        raise AppException(
+            error_code=ErrorCode.SESSION_NOT_FOUND,
+            message="세션 ID가 누락되었습니다.",
+            status_code=400
+        )
+    if not prompt:
+        raise AppException(
+            error_code=ErrorCode.PROMPT_REQUIRED,
+            message="인테리어 변환을 위한 프롬프트를 입력해 주세요.",
+            status_code=400
+        )
+        
+    res_data = internal_generate_interior_image(
+        image_id=image_id,
+        session_id=session_id,
+        style=style,
+        prompt=prompt
+    )
+    
+    msg = "텍스트 기반 인테리어 이미지 생성이 완료되었습니다." if res_data.get("is_t2i") else f"인테리어 이미지 변환이 완료되었습니다. (Mode: {res_data['workflow']['execution_mode']})"
+    
     return JSONResponse(
         status_code=200,
         content={
             "success": True,
-            "data": {
-                "result_id": result_id,
-                "session_id": session_id,
-                "original_image_url": original_url,
-                "result_image_url": result_url,
-                "style": style,
-                "prompt": prompt,
-                "processing_time": elapsed,
-                "status": "completed",
-                "workflow": workflow_info
-            },
-            "message": f"인테리어 이미지 변환이 완료되었습니다. (Mode: {workflow_info['execution_mode']})"
+            "data": res_data,
+            "message": msg
         }
     )
 
@@ -1553,8 +1543,9 @@ def generate_image(req: ImageGenerateRequest):
 @app.post("/api/chat", response_model=SuccessResponse[ChatMessageResponse])
 def chat_message(req: ChatMessageRequest):
     """
-    [AI 챗봇 상담 창구]
-    RAG 엔진(query.py)을 구동하여 실시간 실내건축 법률 및 인테리어 지식 기반 답변과 출처를 반환합니다.
+    [AI 챗봇 상담 창구 (이미지 변환 연동 통합)]
+    이미지 ID가 함께 유입되면 인테리어 변환(internal_generate_interior_image)을 수행하고,
+    그와 동시에 RAG 지식 기반의 데코 스타일링 추천 답변을 생성하여 결합 반환합니다.
     """
     if not req.question or not req.question.strip():
         raise AppException(
@@ -1571,7 +1562,120 @@ def chat_message(req: ChatMessageRequest):
         chat_history.append(f"User: {c['question']}")
         chat_history.append(f"AI: {c['answer']}")
 
-    # RAG 실제 동작 여부에 따른 분기 처리
+    # =====================================================================
+    # [인테리어 이미지 변환 연동 분기 처리]
+    # =====================================================================
+    if req.image_id:
+        print(f"🏠 [챗봇 연동 이미지 변환] 원본이미지: {req.image_id} | 사용자 요구사항: '{req.question}'")
+        
+        # 1. 사용자 질문 텍스트에서 스타일 유추
+        style = req.style
+        if not style:
+            style = "modern"  # Default
+            q_lower = req.question.lower()
+            if any(kw in q_lower for kw in ["우드", "나무", "내추럴", "네추럴", "natural", "wood"]):
+                style = "natural"
+            elif any(kw in q_lower for kw in ["북유럽", "스칸디", "scandinavian"]):
+                style = "scandinavian"
+            elif any(kw in q_lower for kw in ["미니멀", "minimal", "깔끔한", "정돈"]):
+                style = "minimal"
+            elif any(kw in q_lower for kw in ["빈티지", "vintage", "레트로", "retro"]):
+                style = "vintage"
+            elif any(kw in q_lower for kw in ["모던", "modern", "도시", "세련"]):
+                style = "modern"
+        
+        # 2. 공통 이미지 변환 파이프라인 수행
+        res_data = internal_generate_interior_image(
+            image_id=req.image_id,
+            session_id=req.session_id,
+            style=style,
+            prompt=req.question
+        )
+        
+        # 3. RAG 텍스트 믹싱 (스타일에 최적화된 인테리어 팁 검색)
+        rag_answer = ""
+        references = []
+        if rag_enabled and rag_llm and rag_retriever:
+            try:
+                rag_query = f"{style} 스타일 인테리어 데코 스타일링 가이드 팁"
+                rag_answer, docs = query.answer_question(rag_query, chat_history, rag_retriever, rag_llm)
+                
+                # 출처 추출
+                seen = set()
+                for doc in docs:
+                    meta = doc.metadata
+                    label = meta.get("article") or meta.get("process") or "N/A"
+                    title = meta.get("title", "")
+                    source = meta.get("source", "")
+                    key = f"[{label}] {title} ({source})"
+                    if key not in seen:
+                        seen.add(key)
+                        references.append(key)
+            except Exception as e:
+                print(f"⚠️ [RAG API in Chat Integration] RAG 조회 실패: {e}")
+                
+        # RAG 답변 내 금지 어구 정화
+        forbidden_phrases = [
+            "제공된 문서에 따르면,", "제공된 문서에 따르면",
+            "참고 문서에 따르면,", "참고 문서에 따르면",
+            "제공된 자료에 따르면,", "제공된 자료에 따르면",
+            "참고 자료에 명시된 사실에 따르면", "참고 문서에 명시된 바와 같이"
+        ]
+        for phrase in forbidden_phrases:
+            rag_answer = rag_answer.replace(phrase, "")
+        rag_answer = rag_answer.strip()
+        
+        # 한국어 스타일 명칭 매핑
+        style_ko_map = {
+            "modern": "모던",
+            "minimal": "미니멀",
+            "natural": "내추럴 우드",
+            "vintage": "빈티지 레트로",
+            "scandinavian": "북유럽 스칸디나비안"
+        }
+        style_ko = style_ko_map.get(style, "모던")
+        
+        mode_label = "로컬 AI 모형" if res_data.get("workflow", {}).get("execution_mode") == "local_sd_tutorial" else ("로컬 가상 시뮬레이션" if res_data.get("workflow", {}).get("execution_mode") == "mock_fallback" else "ComfyUI API")
+        
+        main_msg = f"🎨 요청하신 요구사항 **'{req.question}'**에 맞춰 **{style_ko}** 테마로 이미지 변환을 완료했습니다! (구동 모드: {mode_label})"
+        
+        if rag_answer:
+            answer = f"{main_msg}\n\n💡 **{style_ko} 인테리어 공간 스타일링 팁:**\n{rag_answer}"
+        else:
+            answer = f"{main_msg}\n\n선택하신 '{style_ko}' 스타일에 맞춰 가구 톤과 전반적인 데코 질감을 조화롭게 배치하였습니다. 변환된 모습은 아래 이미지 및 Before/After 갤러리에서 실시간으로 비교 확인해 보실 수 있습니다."
+            references = ["ZipPT 인테리어 스타일링 기본 가이드북"]
+            
+        image_url = res_data.get("result_image_url")
+        
+        # 세션 대화기록 기록
+        session_data["chats"].append({
+            "question": req.question,
+            "answer": answer,
+            "references": references,
+            "image_url": image_url,
+            "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        })
+        session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        
+        return SuccessResponse(
+            success=True,
+            data=ChatMessageResponse(
+                session_id=req.session_id,
+                answer=answer,
+                references=references,
+                image_url=image_url,
+                result_id=res_data.get("result_id"),
+                original_image_url=res_data.get("original_image_url"),
+                style=res_data.get("style"),
+                prompt=res_data.get("prompt"),
+                processing_time=res_data.get("processing_time")
+            ),
+            message="인테리어 변환 및 스타일 상담이 완료되었습니다."
+        )
+
+    # =====================================================================
+    # [일반 RAG 질의응답 분기 처리] - image_id가 없을 때 기존 로직 유지
+    # =====================================================================
     image_url = None
     if rag_enabled and rag_llm and rag_retriever:
         try:

@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from './components/Sidebar';
 import ErrorBanner from './components/ErrorBanner';
 import ImageUploader from './components/ImageUploader';
-import StyleSelector from './components/StyleSelector';
+// StyleSelector는 ChatWidget 통합으로 인해 제거되었습니다.
 import ImageEditor from './components/ImageEditor';
 import ComparisonGallery from './components/ComparisonGallery';
 import SessionModal from './components/SessionModal';
@@ -187,15 +187,25 @@ export default function App() {
           />
         </div>
 
-        {/* 2단계: 스타일 및 프롬프트 설정 (사진 등록 후 노출) */}
-        <div id="transform-card">
-          <StyleSelector
-            imageId={imageId}
-            sessionId={sessionId}
-            onGenerateSuccess={handleGenerateSuccess}
-            onError={setCurrentError}
-          />
-        </div>
+        {/* 2단계: 챗봇 연동 안내 가이드 (StyleSelector 통합 대체) */}
+        {imageId && (
+          <div id="transform-card" className="card" style={{ border: '1px solid #C7B7AE', background: '#FCFAF7', color: '#2A2825', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div className="card-title" style={{ color: '#2B3530', fontSize: '1.25rem', fontWeight: '800' }}>
+              🎨 3. 챗봇 연동형 AI 인테리어 리모델링
+            </div>
+            <div className="card-desc" style={{ color: '#7A6C62', lineHeight: '1.5' }}>
+              사진 업로드가 성공적으로 완료되었습니다! <br />
+              이제 **우측 하단의 [💬 AI 인테리어 취향 상담] 버튼**을 눌러 메신저 창을 열고, 원하는 리모델링 요구사항을 채팅으로 입력해 주세요. <br />
+              입력하는 즉시 AI가 이미지를 분석하고 인테리어를 변환하여 쇼룸에 갱신해 드립니다.
+            </div>
+            <div style={{ background: '#F3EBE5', padding: '12px 16px', borderRadius: '8px', borderLeft: '4px solid #2B3530', fontSize: '0.85rem', color: '#2A2825', marginTop: '6px' }}>
+              <strong>추천 명령 예시:</strong> <br />
+              • "화사한 북유럽 스타일로 변환해줘" <br />
+              • "따뜻한 우드 감성의 내추럴 룸으로 꾸며줄래?" <br />
+              • "도시적이고 시크한 그레이톤 미니멀 공간으로 바꿔줘"
+            </div>
+          </div>
+        )}
 
         {/* 3단계: 부분 가구 교체 및 수선 - Image Inpainting (사진 등록 후 노출) */}
         <div id="editor-card">
@@ -230,8 +240,13 @@ export default function App() {
         />
       )}
 
-      {/* 5단계: AI 인테리어 취향 & 추구미 1:1 상담 메신저 위젯 */}
-      <ChatWidget sessionId={sessionId} />
+      {/* 5단계: AI 인테리어 취향 & 추구미 1:1 상담 메신저 위젯 (이미지 변환 연동) */}
+      <ChatWidget 
+        sessionId={sessionId} 
+        imageId={imageId}
+        onGenerateSuccess={handleGenerateSuccess}
+        onError={setCurrentError}
+      />
     </div>
   );
 }

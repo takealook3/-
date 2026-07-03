@@ -515,6 +515,12 @@ class ChatMessageRequest(BaseModel):
     question: str = Field(..., description="궗슜옄 吏덈Ц 궡슜 (鍮꾩뼱엳쑝硫 뿉윭 泥섎━맖)")
 
 
+    image_id: Optional[str] = Field(None, description="인테리어 원본 이미지 ID (변환용)")
+
+
+    style: Optional[str] = Field(None, description="변환할 인테리어 스타일")
+
+
 
 
 
@@ -546,6 +552,21 @@ class ChatMessageResponse(BaseModel):
 
 
     image_url: Optional[str] = Field(None, description="스타일 참고 이미지 URL")
+
+
+    result_id: Optional[str] = Field(None, description="인테리어 변환 결과 이미지 ID")
+
+
+    original_image_url: Optional[str] = Field(None, description="원본 이미지 URL")
+
+
+    style: Optional[str] = Field(None, description="변환 스타일")
+
+
+    prompt: Optional[str] = Field(None, description="변환 프롬프트")
+
+
+    processing_time: Optional[float] = Field(None, description="변환 소요 시간")
 
 
 

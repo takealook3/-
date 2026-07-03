@@ -4,7 +4,7 @@
 // 조언해 주는 1:1 전담 인테리어 스타일리스트 카카오톡 채팅창입니다!
 // =====================================================================
 import React, { useState, useRef, useEffect } from 'react';
-import { sendChatMessage } from '../services/api';
+import { sendChatMessage, API_BASE_URL } from '../services/api';
 
 const QUICK_QUESTIONS = [
   "✨ 화사하고 밝은 미니멀 거실에 어울리는 소파 컬러는?",
@@ -13,7 +13,7 @@ const QUICK_QUESTIONS = [
   "🕶️ 차분하고 도시적인 모던 서재 공간 꾸미는 가이드"
 ];
 
-export default function ChatWidget({ sessionId }) {
+export default function ChatWidget({ sessionId, imageId, onGenerateSuccess, onError }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -34,6 +34,12 @@ export default function ChatWidget({ sessionId }) {
     }
   }, [messages, isOpen, loading]);
 
+  const getFullUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    return `${API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+  };
+
   const handleSend = async (questionText) => {
     const q = questionText || input;
     if (!q || !q.trim() || loading) return;
@@ -42,25 +48,41 @@ export default function ChatWidget({ sessionId }) {
     setMessages((prev) => [...prev, userMsg]);
     if (!questionText) setInput('');
     setLoading(true);
+    if (onError) onError(null);
 
     const res = await sendChatMessage({
       sessionId: sessionId || "session_default",
-      question: q.trim()
+      question: q.trim(),
+      imageId: imageId || null
     });
 
     setLoading(false);
 
     if (res.success) {
       const respData = res.data || {};
+      const fullImgUrl = getFullUrl(respData.image_url);
+      
       setMessages((prev) => [
         ...prev,
         {
           sender: 'ai',
           text: respData.answer || res.message || "답변이 도착했습니다.",
           references: respData.references || [],
-          image_url: respData.image_url || null
+          image_url: fullImgUrl
         }
       ]);
+
+      // 만약 이미지 변환 결과 메타데이터가 응답 봉투에 들어있으면 ComparisonGallery 갱신 콜백 발동
+      if (respData.result_id && onGenerateSuccess) {
+        onGenerateSuccess({
+          resultId: respData.result_id,
+          resultImageUrl: fullImgUrl,
+          style: respData.style,
+          prompt: respData.prompt,
+          processingTime: respData.processing_time || 0.42,
+          status: "completed"
+        });
+      }
     } else {
       setMessages((prev) => [
         ...prev,
@@ -70,6 +92,12 @@ export default function ChatWidget({ sessionId }) {
           isError: true
         }
       ]);
+      if (onError) {
+        onError({
+          errorCode: res.errorCode || "PROCESSING_FAILED",
+          message: res.message
+        });
+      }
     }
   };
 
@@ -229,7 +257,7 @@ export default function ChatWidget({ sessionId }) {
 
             {loading && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#7A6C62', fontSize: '0.85rem', paddingLeft: '8px' }}>
-                <span>✨ AI 스타일리스트가 공간 정보를 분석하고 있습니다...</span>
+                <span>{imageId ? "✨ AI가 인테리어를 분석하고 새 스타일로 변환하는 중입니다..." : "✨ AI 스타일리스트가 공간 정보를 분석하고 있습니다..."}</span>
               </div>
             )}
 
