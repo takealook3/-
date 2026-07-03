@@ -30,7 +30,7 @@ echo 3. ComfyUI AI 가속 서버 구동 중... (포트 8188)
 if exist "%COMFYUI_PATH%\run_nvidia_gpu.bat" (
     start "ComfyUI Server" cmd /k "cd /d "%COMFYUI_PATH%" && run_nvidia_gpu.bat"
 ) else (
-    echo [경고] 로컬 ComfyUI 포터블 실행 파일("%COMFYUI_PATH%\run_nvidia_gpu.bat")을 찾을 수 없습니다. 이미 켜져 있거나 경로를 확인해 주세요.
+    echo [경고] 로컬 ComfyUI 포터블 실행 파일 %COMFYUI_PATH%\run_nvidia_gpu.bat 을 찾을 수 없습니다. 이미 켜져 있거나 경로를 확인해 주세요.
 )
 echo ==================================================
 echo 서버 초기 기동을 위해 4초 대기 후 브라우저를 실행합니다...
