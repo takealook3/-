@@ -4,7 +4,7 @@
 // 원하는 가구를 입력해 마스크 픽셀 이미지를 백엔드로 직접 송신하여 수선하는 컴포넌트입니다.
 // =====================================================================
 import React, { useState, useRef } from 'react';
-import { editImage, API_BASE_URL } from '../services/api';
+import { editImage, searchProducts, API_BASE_URL } from '../services/api';
 
 export default function ImageEditor({ imageId, sessionId, originalImageUrl, onError }) {
   // 드래그 원형 마스킹 좌표 (정규화된 비율값)
@@ -17,6 +17,10 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
   const [promptText, setPromptText] = useState("현대적이고 고급스러운 가죽 소파");
   const [editing, setEditing] = useState(false);
   const [editedResultUrl, setEditedResultUrl] = useState(null);
+
+  // 유사 가구 검색 상태 변수
+  const [searchingProducts, setSearchingProducts] = useState(false);
+  const [productsList, setProductsList] = useState([]);
 
   const containerRef = useRef(null);
   const imgRef = useRef(null);
@@ -79,6 +83,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
     setBboxNorm(null);
     setMaskPixels(null);
     setEditedResultUrl(null);
+    setProductsList([]);
     onError(null);
   };
 
@@ -147,6 +152,38 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
       onError({ errorCode: "CANVAS_ERROR", message: `마스크 이미지 추출 중 장애가 발생했습니다: ${err.message}` });
     } finally {
       setEditing(false);
+    }
+  };
+
+  // 유사 가구 쇼핑 정보 검색
+  const handleSearchProducts = async () => {
+    if (!maskPixels) {
+      onError({ errorCode: "MASK_REQUIRED", message: "캔버스에 검색할 가구 영역을 드래그하여 원형으로 지정해 주세요." });
+      return;
+    }
+    
+    onError(null);
+    setSearchingProducts(true);
+    setProductsList([]);
+
+    try {
+      const res = await searchProducts({
+        imageId,
+        sessionId,
+        maskPixels,
+        prompt: promptText.trim() // 한글 주석: 사용자가 입력한 가구 스타일 텍스트 전달 추가
+      });
+
+      if (res.success) {
+        setProductsList(res.data?.products || []);
+      } else {
+        onError({ errorCode: res.errorCode || "SEARCH_FAILED", message: res.message });
+      }
+    } catch (err) {
+      console.error(err);
+      onError({ errorCode: "SEARCH_ERROR", message: `상품 검색 중 장애가 발생했습니다: ${err.message}` });
+    } finally {
+      setSearchingProducts(false);
     }
   };
 
@@ -262,6 +299,28 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
             {editing ? "✨ AI 원형 마스킹 인페인팅 적용 중..." : "✨ AI 가구 영역 교체 실행"}
           </button>
 
+          <button
+            type="button"
+            onClick={handleSearchProducts}
+            disabled={searchingProducts || !maskPixels}
+            className="btn btn-full"
+            style={{ 
+              padding: '14px', 
+              fontSize: '1rem', 
+              fontWeight: '700',
+              cursor: (!maskPixels || searchingProducts) ? 'not-allowed' : 'pointer',
+              background: (!maskPixels) ? '#334155' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              transition: 'all 0.3s',
+              boxShadow: maskPixels ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none',
+              marginTop: '4px'
+            }}
+          >
+            {searchingProducts ? "🛍️ AI 유사 가구 정보 수집 중..." : "🛍️ 유사 가구 쇼핑 정보 검색"}
+          </button>
+
           <hr style={{ borderColor: '#334155', margin: '4px 0' }} />
 
           <div>
@@ -310,6 +369,74 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
               </div>
             )}
           </div>
+
+          {/* 쇼핑 정보 카드 리스트 출력 영역 */}
+          {productsList.length > 0 && (
+            <div style={{ marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '16px' }}>
+              <div style={{ fontSize: '1.05rem', fontWeight: '800', color: '#38bdf8', marginBottom: '12px' }}>
+                🛍️ 실시간 매칭 유사 상품 정보 (Gemini 검색)
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {productsList.map((item, idx) => (
+                  <div 
+                    key={idx} 
+                    style={{ 
+                      display: 'flex', 
+                      background: '#1e293b', 
+                      borderRadius: '8px', 
+                      overflow: 'hidden', 
+                      border: '1px solid #334155',
+                      padding: '8px',
+                      gap: '12px'
+                    }}
+                  >
+                    <img 
+                      src={item.image_url} 
+                      alt={item.product_name} 
+                      style={{ 
+                        width: '80px', 
+                        height: '80px', 
+                        objectFit: 'cover', 
+                        borderRadius: '6px',
+                        border: '1px solid #475569'
+                      }} 
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1 }}>
+                      <div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#f8fafc', lineHeight: '1.2', marginBottom: '4px' }}>
+                          {item.product_name}
+                        </div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#38bdf8' }}>
+                          {item.price}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                        <span style={{ fontSize: '0.7rem', color: '#94a3b8', background: '#334155', padding: '2px 6px', borderRadius: '4px' }}>
+                          유사도 {Math.round(item.similarity * 100)}%
+                        </span>
+                        <a 
+                          href={item.purchase_link} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          style={{ 
+                            fontSize: '0.75rem', 
+                            fontWeight: '700', 
+                            color: '#fff', 
+                            background: '#0284c7', 
+                            padding: '4px 10px', 
+                            borderRadius: '4px',
+                            textDecoration: 'none'
+                          }}
+                        >
+                          구매하러 가기 ↗
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

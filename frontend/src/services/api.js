@@ -196,3 +196,42 @@ export async function sendChatMessage({ sessionId, question, imageId = null, sty
     };
   }
 }
+
+/**
+ * 9번 창구: 유사 상품 검색 호출 (POST /api/products/search)
+ * @param {string} imageId - 이미지 ID
+ * @param {string} sessionId - 세션 ID
+ * @param {Array<number>} maskPixels - 드래그 마스크 영역의 픽셀 좌표 [px1, py1, px2, py2]
+ */
+export async function searchProducts({ imageId, sessionId, maskPixels, prompt }) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/products/search`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        image_id: imageId,
+        session_id: sessionId,
+        mask_pixels: maskPixels,
+        prompt: prompt, // 한글 주석: 사용자가 입력한 검색 텍스트 전달 추가
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        errorCode: data.error_code || "SEARCH_FAILED",
+        message: data.message || "유사 상품 검색에 실패했습니다."
+      };
+    }
+    return data;
+  } catch (error) {
+    return {
+      success: false,
+      errorCode: "SERVER_CONNECTION_FAILED",
+      message: `서버 통신 실패: ${error.message}`
+    };
+  }
+}
