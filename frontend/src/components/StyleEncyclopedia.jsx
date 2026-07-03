@@ -33,17 +33,25 @@ const STYLE_CATEGORIES = {
   28: ['침대', '소파', '조명', '오브제']  // 에클레틱
 };
 
-// 4가지 카테고리 아이콘 정의 (SVG 인라인 벡터)
+// 4가지 카테고리 아이콘 정의 — 감성 가구 일러스트 스타일 SVG
 const CATEGORY_ICONS = [
   {
     key: '침대',
     label: '침대',
     svg: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M2 20v-6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6" />
-        <path d="M2 20h20" />
-        <path d="M2 14V8a2 2 0 0 1 2-2h4v8" />
-        <rect x="10" y="8" width="12" height="6" rx="1" />
+      // 더블 침대 + 헤드보드 + 베개 2개 형태
+      <svg width="36" height="36" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        {/* 헤드보드 */}
+        <path d="M8 28V16a3 3 0 0 1 3-3h26a3 3 0 0 1 3 3v12" />
+        {/* 매트리스 */}
+        <rect x="6" y="28" width="36" height="10" rx="2" />
+        {/* 베개 왼쪽 */}
+        <rect x="11" y="20" width="10" height="7" rx="2" />
+        {/* 베개 오른쪽 */}
+        <rect x="27" y="20" width="10" height="7" rx="2" />
+        {/* 다리 */}
+        <line x1="10" y1="38" x2="10" y2="42" />
+        <line x1="38" y1="38" x2="38" y2="42" />
       </svg>
     )
   },
@@ -51,11 +59,21 @@ const CATEGORY_ICONS = [
     key: '소파',
     label: '소파',
     svg: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v3" />
-        <path d="M2 11a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5H2v-5z" />
-        <path d="M6 19v2" />
-        <path d="M18 19v2" />
+      // 3인 소파 + 팔걸이 + 쿠션 형태
+      <svg width="36" height="36" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        {/* 소파 등받이 */}
+        <path d="M10 26V18a2 2 0 0 1 2-2h24a2 2 0 0 1 2 2v8" />
+        {/* 좌석 쿠션 */}
+        <rect x="8" y="26" width="32" height="10" rx="2" />
+        {/* 왼쪽 팔걸이 */}
+        <rect x="5" y="22" width="5" height="14" rx="2" />
+        {/* 오른쪽 팔걸이 */}
+        <rect x="38" y="22" width="5" height="14" rx="2" />
+        {/* 쿠션 경계선 */}
+        <line x1="24" y1="26" x2="24" y2="36" />
+        {/* 다리 */}
+        <line x1="12" y1="36" x2="12" y2="41" />
+        <line x1="36" y1="36" x2="36" y2="41" />
       </svg>
     )
   },
@@ -63,10 +81,20 @@ const CATEGORY_ICONS = [
     key: '조명',
     label: '조명',
     svg: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 18h6" />
-        <path d="M10 22h4" />
-        <path d="M12 2a7 7 0 0 1 7 7c0 2.5-1.5 4.5-3 6H8C6.5 13.5 5 11.5 5 9a7 7 0 0 1 7-7z" />
+      // 펜던트 램프 (천장 행잉 조명) 형태
+      <svg width="36" height="36" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        {/* 천장 고정부 */}
+        <line x1="24" y1="4" x2="24" y2="12" />
+        <line x1="18" y1="4" x2="30" y2="4" />
+        {/* 갓 (쉐이드) */}
+        <path d="M14 24 L18 12 L30 12 L34 24 Z" />
+        {/* 갓 하단 */}
+        <line x1="14" y1="24" x2="34" y2="24" />
+        {/* 전구 */}
+        <circle cx="24" cy="28" r="3" />
+        {/* 빛 효과 */}
+        <path d="M16 36 Q24 32 32 36" strokeDasharray="2 2" opacity="0.5" />
+        <path d="M12 40 Q24 35 36 40" strokeDasharray="2 2" opacity="0.3" />
       </svg>
     )
   },
@@ -74,11 +102,22 @@ const CATEGORY_ICONS = [
     key: '오브제',
     label: '오브제',
     svg: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="8" r="4" />
-        <path d="M8 12v2a4 4 0 0 0 8 0v-2" />
-        <path d="M9 20h6" />
-        <path d="M12 16v4" />
+      // 꽃병 + 꽃가지 형태 (인테리어 오브제의 전형)
+      <svg width="36" height="36" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        {/* 꽃병 몸통 */}
+        <path d="M18 40 Q14 34 16 26 Q18 18 24 18 Q30 18 32 26 Q34 34 30 40 Z" />
+        {/* 꽃병 입구 */}
+        <line x1="19" y1="18" x2="29" y2="18" />
+        {/* 꽃줄기 */}
+        <line x1="24" y1="18" x2="24" y2="10" />
+        <path d="M24 10 Q20 6 17 8" />
+        <path d="M24 10 Q28 6 31 8" />
+        {/* 꽃봉오리 */}
+        <circle cx="17" cy="8" r="2.5" />
+        <circle cx="31" cy="8" r="2.5" />
+        <circle cx="24" cy="6" r="3" />
+        {/* 바닥 */}
+        <line x1="16" y1="40" x2="32" y2="40" />
       </svg>
     )
   }
@@ -317,7 +356,7 @@ export default function StyleEncyclopedia({ activeId, setActiveId }) {
               textTransform: 'uppercase',
               marginBottom: '2px'
             }}>공간 카테고리</span>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '12px' }}>
               {CATEGORY_ICONS.map(cat => {
                 // 이 스타일이 해당 카테고리를 포함하는지 확인
                 const hasCategory = (STYLE_CATEGORIES[activeStyle.id] || []).includes(cat.key);
@@ -330,9 +369,9 @@ export default function StyleEncyclopedia({ activeId, setActiveId }) {
                     title={cat.label}
                     onClick={() => setSelectedCategory(prev => prev === cat.key ? null : cat.key)}
                     style={{
-                      width: '52px',
-                      height: '52px',
-                      borderRadius: '14px',
+                      width: '72px',
+                      height: '72px',
+                      borderRadius: '18px',
                       border: isSelected
                         ? '2px solid var(--primary)'
                         : hasCategory
@@ -341,7 +380,7 @@ export default function StyleEncyclopedia({ activeId, setActiveId }) {
                       backgroundColor: isSelected
                         ? 'var(--primary)'
                         : hasCategory
-                          ? 'rgba(255,255,255,0.75)'
+                          ? 'rgba(255,255,255,0.85)'
                           : 'rgba(235,228,224,0.4)',
                       color: isSelected
                         ? '#FCFAF7'
@@ -353,31 +392,32 @@ export default function StyleEncyclopedia({ activeId, setActiveId }) {
                       flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      gap: '3px',
+                      gap: '0',
+                      padding: '0',
                       transition: 'all 0.22s ease',
                       backdropFilter: 'blur(4px)',
                       boxShadow: isSelected
-                        ? '0 4px 16px rgba(43,53,48,0.18)'
+                        ? '0 6px 20px rgba(43,53,48,0.22)'
                         : hasCategory
-                          ? '0 2px 8px rgba(43,53,48,0.07)'
+                          ? '0 2px 10px rgba(43,53,48,0.08)'
                           : 'none',
-                      transform: isSelected ? 'translateY(-2px)' : 'none'
+                      transform: isSelected ? 'translateY(-3px)' : 'none'
                     }}
                     onMouseEnter={e => {
                       if (!isSelected) {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(43,53,48,0.12)';
+                        e.currentTarget.style.transform = 'translateY(-3px)';
+                        e.currentTarget.style.boxShadow = '0 6px 16px rgba(43,53,48,0.14)';
                       }
                     }}
                     onMouseLeave={e => {
                       if (!isSelected) {
                         e.currentTarget.style.transform = 'none';
-                        e.currentTarget.style.boxShadow = hasCategory ? '0 2px 8px rgba(43,53,48,0.07)' : 'none';
+                        e.currentTarget.style.boxShadow = hasCategory ? '0 2px 10px rgba(43,53,48,0.08)' : 'none';
                       }
                     }}
                   >
                     {cat.svg}
-                    <span style={{ fontSize: '0.6rem', fontWeight: '700', letterSpacing: '0' }}>{cat.label}</span>
+                    <span style={{ fontSize: '0.62rem', fontWeight: '700', marginTop: '4px' }}>{cat.label}</span>
                   </button>
                 );
               })}

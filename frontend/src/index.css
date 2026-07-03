@@ -130,33 +130,32 @@ body {
 
 /* 히어로 내부 텍스트 글래스모피즘 박스 */
 .hero-overlay {
-  max-width: 420px; /* 기존 600px에서 420px로 감축 */
+  max-width: 560px; /* 420px × 4/3 확대 */
   background-color: rgba(28, 23, 20, 0.72);
-  /* 가려진 부분의 자연스러운 배경 투과를 위해 블러 심도를 24px로 부드럽게 설정 */
   backdrop-filter: blur(24px) saturate(120%);
   -webkit-backdrop-filter: blur(24px) saturate(120%);
   border: 1px solid var(--border-color);
-  padding: 28px 36px; /* 기존 48px에서 축소 */
-  border-radius: 12px; /* 볼륨감 축소에 맞춘 샤프한 라운딩 */
+  padding: 38px 48px; /* 28×4/3, 36×4/3 */
+  border-radius: 16px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
   z-index: 10;
 }
 
 .hero-title {
   font-family: 'Playfair Display', serif;
-  font-size: 1.8rem; /* 기존 2.8rem에서 컴팩트하게 감축 */
+  font-size: 2.4rem; /* 1.8 × 4/3 = 2.4rem */
   font-weight: 800;
   color: #FCFAF7;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   letter-spacing: -0.01em;
   line-height: 1.2;
 }
 
 .hero-subtitle {
   color: #D3C2B5;
-  font-size: 0.85rem; /* 기존 1.05rem에서 슬림 축소 */
-  line-height: 1.55;
-  margin-bottom: 20px; /* 여백 감축 */
+  font-size: 1.13rem; /* 0.85 × 4/3 = 1.13rem */
+  line-height: 1.6;
+  margin-bottom: 28px;
 }
 
 .hero-buttons {
@@ -166,9 +165,9 @@ body {
 
 /* 좁아진 히어로 상자 내부에 알맞은 컴팩트 버튼 패딩 적용 */
 .hero-overlay .btn {
-  padding: 10px 20px;
-  font-size: 0.82rem;
-  border-radius: 6px;
+  padding: 14px 28px; /* 10×4/3, 20×4/3 */
+  font-size: 1.09rem; /* 0.82 × 4/3 = 1.09rem */
+  border-radius: 8px;
 }
 
 /* 5. 카드 공통 스타일 - 포근한 웜 크림 아이보리 */
