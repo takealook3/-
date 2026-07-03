@@ -378,6 +378,7 @@ def translate_prompt_to_english(prompt: str) -> str:
             system_prompt = (
                 "You are an expert interior designer and prompt engineer for Stable Diffusion.\n"
                 "Your task is to translate and expand the following Korean interior/furniture prompt into a highly descriptive English prompt suitable for inpainting/redesign.\n"
+                "CRITICAL: Ensure that the main object or furniture (e.g. bookshelf, carpet, table, sofa) is placed at the very beginning of the prompt.\n"
                 "Improve prompt understanding and clarity by expanding the core style with details such as textures (e.g. boucle fabric, oak wood, brushed brass), lighting (e.g. soft indirect ambient lighting, warm LED strip), color palette, and decor accessories.\n"
                 "Use Stable Diffusion weight syntax like (keyword:weight) for key objects or style words to emphasize them (e.g., '(cozy scandinavian bedroom:1.25)', '(warm wooden textures:1.2)').\n"
                 "Do NOT include any humans, people, man, woman, child, or animals. The scene must represent a completely empty, uninhabited architectural room design space.\n"
@@ -465,13 +466,21 @@ def translate_prompt_to_english(prompt: str) -> str:
         if kw in prompt:
             detected_furniture.append(eng)
 
-    # 기본값 보정
+    # 기본값 보정 및 가구/핵심 오브젝트 앞단 강제 배치
+    furniture_prefix = ", ".join(detected_furniture) if detected_furniture else ""
     style_str = ", ".join(detected_styles) if detected_styles else "(modern clean style:1.2)"
     room_str = ", ".join(detected_rooms) if detected_rooms else "interior space"
-    furniture_str = f", with {', '.join(detected_furniture)}" if detected_furniture else ""
 
-    # 문장 조합
-    fallback_prompt = f"{style_str}, {room_str}{furniture_str}, no people, empty room, realistic, architectural photography, highly detailed, photorealistic, 4k"
+    parts = []
+    if furniture_prefix:
+        parts.append(furniture_prefix)
+    if style_str:
+        parts.append(style_str)
+    if room_str:
+        parts.append(room_str)
+        
+    parts.extend(["no people", "empty room", "realistic", "architectural photography", "highly detailed", "photorealistic", "4k"])
+    fallback_prompt = ", ".join(parts)
     print(f"⚙️ [Translate Fallback] 조합 완료: '{fallback_prompt}'")
     return fallback_prompt
 
@@ -534,6 +543,76 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                             print(f"📐 [room_redesign_API] ImageScale (Node 20) 해상도 주입: {target_w}x1080")
                     except Exception as e:
                         print(f"⚠️ [room_redesign_API] 해상도 주입 중 에러: {e}")
+
+        elif workflow_filename == "inpainting.json":
+            # ── [NEW] inpainting.json 직접 로딩 및 1/2단계 동적 분기 바인딩 ──
+            api_workflow_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "inpainting.json")
+            if not os.path.exists(api_workflow_path):
+                print(f"⚠️ [ComfyUI API] inpainting.json 파일이 존재하지 않습니다: {api_workflow_path}")
+                return None
+            
+            with open(api_workflow_path, "r", encoding="utf-8") as f:
+                prompt_api_data = json.load(f)
+                
+            # 1. 원본 이미지 로드 설정 (Node 5)
+            if "orig_image" in parameters:
+                prompt_api_data["5"]["inputs"]["image"] = parameters["orig_image"]
+                print(f"✅ [inpainting_API] 원본 이미지 주입: {parameters['orig_image']}")
+                
+            # 2. 마스크 1 로드 설정 (Node 17)
+            if "image_filename" in parameters:
+                prompt_api_data["17"]["inputs"]["image"] = parameters["image_filename"]
+                print(f"✅ [inpainting_API] 마스크 1 주입: {parameters['image_filename']}")
+                
+            # 3. 긍정 프롬프트 1 주입 (Node 6)
+            if "prompt" in parameters:
+                prompt_api_data["6"]["inputs"]["text"] = f"{parameters['prompt']}, high quality, 8k"
+                print(f"✅ [inpainting_API] 긍정 프롬프트 1 주입: {parameters['prompt'][:50]}...")
+                
+            # 4. KSampler 1 파라미터 주입 (Node 3)
+            # parameters에 명시적인 값이 제공되면 덮어쓰고, 없으면 기존 워크플로우(inpainting.json)의 기본값을 보존합니다.
+            if "seed" in parameters:
+                prompt_api_data["3"]["inputs"]["seed"] = int(parameters["seed"])
+            if "steps" in parameters:
+                prompt_api_data["3"]["inputs"]["steps"] = int(parameters["steps"])
+            if "cfg" in parameters:
+                prompt_api_data["3"]["inputs"]["cfg"] = float(parameters["cfg"])
+            if "denoise" in parameters:
+                prompt_api_data["3"]["inputs"]["denoise"] = float(parameters["denoise"])
+                
+            # ─── 동적 1/2단계 분기 판별 ───
+            img_b = parameters.get("image_filename_b")
+            if img_b and img_b != "":
+                # 2단계 활성화 상태: 마스크 2가 정상 유입됨
+                print("🔗 [inpainting_API] 2차 수선 활성화 (2단계 릴레이 파이프라인)")
+                prompt_api_data["18"]["inputs"]["image"] = img_b
+                if "prompt_b" in parameters and parameters["prompt_b"]:
+                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt_b']}, high quality, 8k"
+                else:
+                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt']}, high quality, 8k"
+                
+                if "seed" in parameters:
+                    prompt_api_data["15"]["inputs"]["seed"] = int(parameters["seed"]) + 13
+                if "steps" in parameters:
+                    prompt_api_data["15"]["inputs"]["steps"] = int(parameters["steps"])
+                if "cfg" in parameters:
+                    prompt_api_data["15"]["inputs"]["cfg"] = float(parameters["cfg"])
+                if "denoise" in parameters:
+                    prompt_api_data["15"]["inputs"]["denoise"] = float(parameters["denoise"])
+                # 최종 저장은 Node 16 (2단계 디코드) 결과물 사용
+                prompt_api_data["9"]["inputs"]["images"] = ["16", 0]
+            else:
+                # 1단계 활성화 상태: 마스크 2가 없으므로 1단계 결과물을 최종 결과로 우회
+                print("🔗 [inpainting_API] 1차 수선 단독 동작 (1단계 단축 파이프라인)")
+                # Node 9 (SaveImage)의 입력을 Node 8 (1단계 디코드) 결과물로 리다이렉트
+                prompt_api_data["9"]["inputs"]["images"] = ["8", 0]
+                # 미사용 2단계 노드 제거하여 ComfyUI 연산 낭비 차단
+                for unused_node in ["11", "14", "15", "16", "18"]:
+                    if unused_node in prompt_api_data:
+                        del prompt_api_data[unused_node]
+                        
+            # 아웃풋 파일명 접두사 설정
+            prompt_api_data["9"]["inputs"]["filename_prefix"] = f"ComfyUI_inpaint_{int(time.time())}"
         else:
             # ── [NEW] gemini-code-1783051694407.json 직접 로딩 및 다이렉트 바인딩 ──
             api_workflow_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gemini-code-1783051694407.json")
@@ -833,18 +912,16 @@ def process_mock_image(
     bbox: list = None
 ) -> str:
     """
-    ComfyUI 오프라인/Fallback 모드 시 사용자의 공간 구조를 100% 보존하면서 프롬프트 스타일 톤을 가미합니다.
-    - 스타일 변환 시, 원본 이미지 자체를 기반으로 삼아 우드, 화이트, 미니멀, 다크 등 정교한 톤 매칭 및 광원 그라디언트를 입힙니다.
-    - 가구 인페인팅 편집 영역(BBox) 시, Unsplash 다운로드 실패 시 즉석에서 고화질 일러스트/벡터 가구 조각을 드로잉하여 자연스럽게 합성합니다.
+    ComfyUI 오프라인/Fallback 모드 시 사각형 박스로 툭 끊겨 나오던 버그 패치본.
+    사용자가 선택한 마스크 파일(user_mask1.png)의 알파 채널/그레이스케일 구조를 실시간 역추적 로드하고,
+    동시에 가구 템플릿 이미지의 화이트 배경 제거 및 종횡비 보존 스케일링을 거쳐 정밀하게 합성합니다.
     """
-    import os, shutil
-    from PIL import Image, ImageEnhance, ImageDraw, ImageFilter, ImageFont
+    import os, shutil, glob
+    from PIL import Image, ImageEnhance, ImageDraw, ImageFilter, ImageFont, ImageChops
     
-    # 1. 원본 파일 탐색
     # 1. 원본 파일 탐색
     input_path = None
     ext_found = ".jpg"
-    
     for folder in ("uploads", "results"):
         for ext in (".jpg", ".jpeg", ".png"):
             test_path = os.path.join(PROJECT_ROOT, folder, f"{image_id}{ext}")
@@ -852,32 +929,23 @@ def process_mock_image(
                 input_path = test_path
                 ext_found = ext
                 break
-        if input_path:
-            break
+        if input_path: break
                 
-    # 2. 결과물 저장 경로 지정
     os.makedirs(os.path.join(PROJECT_ROOT, "results"), exist_ok=True)
     output_path = os.path.join(PROJECT_ROOT, "results", f"{result_id}{ext_found}")
     
-    # 가상의 기본 원본 생성
     if not input_path or not os.path.exists(input_path):
-        print(f"⚠️ 원본 파일 {image_id}가 없어 가상의 백색 이미지를 생성합니다.")
         img = Image.new("RGB", (768, 512), color="white")
         dummy_input = os.path.join(PROJECT_ROOT, "uploads", f"{image_id}.jpg")
         img.save(dummy_input)
         input_path = dummy_input
-        ext_found = ".jpg"
-        output_path = os.path.join(PROJECT_ROOT, "results", f"{result_id}.jpg")
 
     try:
-        # PIL 이미지 로드 (원본 구조 보존을 위해 원본 이미지를 베이스로 지정)
         img = Image.open(input_path).convert("RGB")
         w, h = img.size
-        
-        # 텍스트 검사를 위해 결합된 프롬프트 생성
         combined_text = f"{style_name or ''} {prompt_text or ''}".lower()
-        
-        # 스타일에 따른 매칭 키워드 스캔
+
+        # 3. 🎨 공간 구조를 100% 보존하면서 스타일 필터링 적용
         selected_style_key = None
         if any(x in combined_text for x in ["우드", "wood", "나무", "따뜻한", "scandinavian", "북유럽", "cozy", "brown", "natural", "내추럴"]):
             selected_style_key = "wood"
@@ -888,11 +956,7 @@ def process_mock_image(
         elif any(x in combined_text for x in ["어두운", "dark", "밤", "moody", "블랙", "black"]):
             selected_style_key = "dark"
 
-        # 3. 🎨 공간 구조를 100% 보존하면서 스타일 필터링 적용 (이미지 겹침 및 투명 왜곡 현상 제거)
-        # 외부 이미지 템플릿과 블렌딩하는 방식을 제거하여 다른 방 사진이 유령처럼 어긋나게 겹쳐 나오는 버그를 패치했습니다.
-        # 오직 사용자의 업로드 이미지 자체를 픽셀 필터 연산하여 구조적 일치성을 완전히 유지합니다.
         if selected_style_key == "wood":
-            print("🎨 [Mock Style] 우드/북유럽 테마: 따뜻한 웜톤 보정 및 전구색 소프트 광원 레이어 결합")
             r, g, b = img.split()
             r = ImageEnhance.Contrast(r).enhance(1.15)
             g = ImageEnhance.Contrast(g).enhance(1.05)
@@ -906,17 +970,14 @@ def process_mock_image(
                 glow_draw.ellipse([w//2 - radius, -radius, w//2 + radius, radius], fill=(255, 190, 100, alpha))
             img = Image.alpha_composite(img.convert("RGBA"), glow).convert("RGB")
         elif selected_style_key == "white":
-            print("🎨 [Mock Style] 갤러리 화이트 테마: 밝고 화사하게 고조도 화이트닝 명암 보정")
             img = ImageEnhance.Brightness(img).enhance(1.30)
             img = ImageEnhance.Contrast(img).enhance(0.98)
             img = ImageEnhance.Color(img).enhance(0.85)
         elif selected_style_key == "minimal":
-            print("🎨 [Mock Style] 어반 미니멀 테마: 명도 조절 및 채도를 차분하게 깎은 차콜 무드")
             img = ImageEnhance.Color(img).enhance(0.20)
             img = ImageEnhance.Contrast(img).enhance(1.35)
             img = ImageEnhance.Brightness(img).enhance(0.95)
         elif selected_style_key == "dark":
-            print("🎨 [Mock Style] 차분한 다크 테마: 저조도 톤다운 및 코랄빛 간접 무드등 연출")
             img = ImageEnhance.Brightness(img).enhance(0.55)
             img = ImageEnhance.Contrast(img).enhance(1.2)
             glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
@@ -926,11 +987,10 @@ def process_mock_image(
                 glow_draw.ellipse([-radius, h//2 - radius, radius, h//2 + radius], fill=(255, 160, 60, alpha))
             img = Image.alpha_composite(img.convert("RGBA"), glow).convert("RGB")
         else:
-            print("🎨 [Mock Style] 기본 스타일: 가벼운 명도/대비 보정 필터")
             img = ImageEnhance.Brightness(img).enhance(1.05)
             img = ImageEnhance.Contrast(img).enhance(1.05)
 
-        # 4. 가구 인페인팅 정밀 합성 (BBox)
+        # 4. 가구 인페인팅 정밀 합성 (BBox & 마스크 하이브리드 제어)
         if bbox and len(bbox) == 4:
             x1, y1, x2, y2 = bbox
             x1, x2 = sorted([max(0, min(x1, w)), max(0, min(x2, w))])
@@ -940,101 +1000,89 @@ def process_mock_image(
             box_h = y2 - y1
             
             if box_w > 5 and box_h > 5:
-                print(f"🎨 [Mock Inpaint] 영역 검출 ({x1}, {y1}) ~ ({x2}, {y2}). 가구 리소스 합성 시작...")
-                
                 # 카테고리 매칭
                 furniture_key = "sofa"
-                if "침대" in combined_text or "bed" in combined_text:
-                    furniture_key = "bed"
-                elif any(x in combined_text for x in ["테이블", "식탁", "책상", "table", "desk"]):
-                    furniture_key = "table"
-                elif "의자" in combined_text or "chair" in combined_text:
-                    furniture_key = "chair"
-                elif any(x in combined_text for x in ["조명", "스탠드", "lighting", "lamp"]):
-                    furniture_key = "lighting"
+                if "침대" in combined_text or "bed" in combined_text: furniture_key = "bed"
+                elif any(x in combined_text for x in ["테이블", "식탁", "책상", "table", "desk"]): furniture_key = "table"
+                elif "의자" in combined_text or "chair" in combined_text: furniture_key = "chair"
 
-                # 1순위: 인터넷 연결 시 Unsplash에서 실제 고품질 가구 이미지 조각 로드
                 furniture_urls = {
                     "sofa": "https://images.unsplash.com/photo-1484101403633-562f891dc89a?w=400&fit=crop",
                     "bed": "https://images.unsplash.com/photo-1540518614846-7eded433c457?w=400&fit=crop",
                     "table": "https://images.unsplash.com/photo-1530018607912-eff2df114f11?w=400&fit=crop",
-                    "chair": "https://images.unsplash.com/photo-1580481072645-022f9a6dbf27?w=400&fit=crop",
-                    "lighting": "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?w=400&fit=crop"
+                    "chair": "https://images.unsplash.com/photo-1580481072645-022f9a6dbf27?w=400&fit=crop"
                 }
                 
                 furniture_src = download_and_cache_image(furniture_urls[furniture_key], f"furniture_{furniture_key}")
                 
-                # 2순위: 다운로드 실패 또는 오프라인인 경우 즉석에서 고화질 그래픽 가구 에셋 벡터 드로잉 생성!
                 if not furniture_src:
-                    print(f"🎨 [Mock Inpaint] 이미지 다운로드 실패로 즉석 가구 렌더링 드로잉 구동: '{furniture_key}'")
                     furniture_src = draw_mock_furniture_vector(box_w, box_h, furniture_key)
                 
                 if furniture_src:
-                    # 크기 조절 및 합성용 알파 채널 오버레이 생성
+                    # 4-1. RGB 이미지인 경우 화이트 배경을 제거하여 투명 채널(RGBA) 생성
                     if furniture_src.mode != "RGBA":
-                        # Unsplash 다운로드 파일인 경우 (RGB) 크기조정 후 붙여넣기
-                        f_ratio = furniture_src.width / furniture_src.height
-                        box_ratio = box_w / box_h
-                        if box_ratio > f_ratio:
-                            new_fh = int(box_w / f_ratio)
-                            resized_f = furniture_src.resize((box_w, new_fh), Image.Resampling.LANCZOS)
-                            crop_y = (new_fh - box_h) // 2
-                            cropped_f = resized_f.crop((0, crop_y, box_w, crop_y + box_h)).convert("RGBA")
-                        else:
-                            new_fw = int(box_h * f_ratio)
-                            resized_f = furniture_src.resize((new_fw, box_h), Image.Resampling.LANCZOS)
-                            crop_x = (new_fw - box_w) // 2
-                            cropped_f = resized_f.crop((crop_x, 0, crop_x + box_w, box_h)).convert("RGBA")
-                    else:
-                        # 즉석 드로잉 벡터 이미지인 경우 (RGBA) BBox 크기에 맞게 생성되었으므로 그대로 사용
-                        cropped_f = furniture_src
-                    
-                    # 3D 렌더링 합성 레이어 구성
-                    f_overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-                    f_overlay.paste(cropped_f, (x1, y1), cropped_f)
-                    
-                    # 마스킹 깃털(Feathering) 가우시안 블러 마스크 생성 (경계 부드러움 극대화)
-                    blend_mask = Image.new("L", (w, h), 0)
-                    draw_blend = ImageDraw.Draw(blend_mask)
-                    draw_blend.rectangle([x1, y1, x2, y2], fill=255)
-                    
-                    feather_val = max(3, int(min(box_w, box_h) * 0.08))
-                    blend_mask_blurred = blend_mask.filter(ImageFilter.GaussianBlur(feather_val))
-                    
-                    # 최종 알파 블렌드 합성
-                    img = Image.composite(f_overlay.convert("RGB"), img, blend_mask_blurred)
-                    print(f"🎨 [Mock Inpaint] 가우시안 깃털 페더링({feather_val}px) 기법으로 '{furniture_key}' 합성 완료.")
+                        rgba = furniture_src.convert("RGBA")
+                        data = rgba.getdata()
+                        new_data = []
+                        for item in data:
+                            if item[0] > 235 and item[1] > 235 and item[2] > 235:
+                                new_data.append((255, 255, 255, 0))
+                            else:
+                                new_data.append(item)
+                        rgba.putdata(new_data)
+                        furniture_src = rgba
 
-                # 세련된 인페인팅 텍스트 라벨 오버레이
-                draw_text = ImageDraw.Draw(img)
-                label_msg = f"[AI Inpainted: {furniture_key.upper()}]"
-                try:
-                    font_paths = ["C:\\Windows\\Fonts\\malgun.ttf", "C:\\Windows\\Fonts\\arial.ttf"]
-                    font = None
-                    for path in font_paths:
-                        if os.path.exists(path):
-                            font = ImageFont.truetype(path, size=max(11, int(box_h * 0.09)))
-                            break
-                    if font is None:
-                        font = ImageFont.load_default()
-                except:
-                    font = ImageFont.load_default()
-                
-                text_w, text_h = 100, 18
-                if hasattr(font, "getbbox"):
-                    tb = font.getbbox(label_msg)
-                    text_w, text_h = tb[2] - tb[0], tb[3] - tb[1]
-                
-                tx = x1 + box_w // 2 - text_w // 2
-                ty = y1 + box_h // 2 - text_h // 2
-                draw_text.rectangle([tx - 6, ty - 4, tx + text_w + 6, ty + text_h + 4], fill=(0, 0, 0, 160))
-                draw_text.text((tx, ty), label_msg, fill=(255, 255, 255), font=font)
+                    # 4-2. 종횡비 보존 FIT 리사이징 연산 (가구 왜곡 방지)
+                    f_ratio = furniture_src.width / furniture_src.height
+                    box_ratio = box_w / box_h
+                    
+                    if box_ratio > f_ratio:
+                        new_fh = box_h
+                        new_fw = int(box_h * f_ratio)
+                    else:
+                        new_fw = box_w
+                        new_fh = int(box_w / f_ratio)
+                        
+                    resized_f = furniture_src.resize((new_fw, new_fh), Image.Resampling.LANCZOS)
+                    
+                    # BBox 내 중앙 정렬 오프셋
+                    offset_x = (box_w - new_fw) // 2
+                    offset_y = (box_h - new_fh) // 2
+                    
+                    # 4-3. 오버레이 배치
+                    f_overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+                    f_overlay.paste(resized_f, (x1 + offset_x, y1 + offset_y), resized_f)
+
+                    # 4-4. 🎯 [버그 패치 핵심] 저장되어 있는 흑백 단일채널 마스크 파일 실시간 역추적 로드
+                    mask_files = glob.glob(os.path.join(PROJECT_ROOT, "uploads", f"{image_id}_maskA*.png"))
+                    if mask_files:
+                        latest_mask_path = max(mask_files, key=os.path.getmtime)
+                        blend_mask = Image.open(latest_mask_path).convert("L")
+                    else:
+                        blend_mask = Image.new("L", (w, h), 0)
+                        draw_blend = ImageDraw.Draw(blend_mask)
+                        draw_blend.ellipse([x1, y1, x2, y2], fill=255)
+                    
+                    if blend_mask.size != (w, h):
+                        blend_mask = blend_mask.resize((w, h), Image.Resampling.BILINEAR)
+
+                    # 4-5. 가구 실루엣 알파 채널과 유저 마스크의 결합 (교집합 마스킹)
+                    alpha_mask = f_overlay.split()[-1]
+                    final_blend_mask = ImageChops.multiply(alpha_mask, blend_mask)
+                    
+                    # 경계선 소프트 깃털 효과 적용
+                    feather_val = max(2, int(min(new_fw, new_fh) * 0.05))
+                    blend_mask_blurred = final_blend_mask.filter(ImageFilter.GaussianBlur(feather_val))
+                    
+                    # 5. 최종 합성 연산 실행 (더이상 사각형 테두리가 남지 않음)
+                    img = Image.composite(f_overlay.convert("RGB"), img, blend_mask_blurred)
+                    print(f"🟢 [Mock Patch Success] 가우시안 픽셀 마스킹 및 실루엣 매칭 기법으로 자연스러운 합성 완료.")
 
         img.save(output_path, quality=90)
         print(f"🎨 [Mock Render] 공간 구조 보존 및 모킹 가구 합성 완료: {output_path}")
         
     except Exception as e:
-        print(f"❌ [Mock Render] 가공 중 치명적 오류 발생 (복사 대체): {e}")
+        print(f"❌ [Mock Render] 에러 발생: {e}")
         import traceback
         traceback.print_exc()
         shutil.copy(input_path, output_path)
@@ -1839,19 +1887,18 @@ def chat_message(req: ChatMessageRequest):
 @app.post("/api/image/edit", response_model=SuccessResponse[ImageEditResponse])
 def edit_image(req: ImageEditRequest):
     """
-    [이미지 정밀 편집 창구]
+    [이미지 정밀 편집 창구 - 좌표 왜곡 및 유령 크롭 버그 완벽 패치 버전]
     comfyui-helper-nodes 및 실제 ComfyUI API 연동을 통해 이미지의 특정 가구 영역을 편집합니다.
     """
     start_time = time.time()
     
     comfy_online = check_comfyui_online()
-    # comfyui_workflow.json 기반 실행
-    workflow_info = log_workflow_execution("comfyui_workflow.json")
+    workflow_info = log_workflow_execution("inpainting.json")  # 명확하게 파일 정합
     workflow_info["comfyui_status"] = "online" if comfy_online else "offline"
     
     edit_id = f"edit_{uuid.uuid4().hex[:8]}"
     
-    # uploads/ 와 results/ 두 폴더에서 원본 파일 탐색 (PROJECT_ROOT 절대경로 기준)
+    # 원본 파일 탐색 (PROJECT_ROOT 절대경로 기준)
     orig_input_filename = None
     orig_path = None
     for search_folder in ("uploads", "results"):
@@ -1860,110 +1907,177 @@ def edit_image(req: ImageEditRequest):
             if os.path.exists(candidate_path):
                 orig_input_filename = f"{req.image_id}{ext}"
                 orig_path = candidate_path
-                print(f"[Edit] 원본 파일 발견: {orig_path}")
+                print(f"🎯 [Edit Path Fix] 원본 파일 발견 성공: {orig_path}")
                 break
         if orig_path:
             break
             
     if not orig_path:
-        # 원본 파일이 없으면 모크 폠백으로 처리 (black 이미지)
-        print(f"[Edit] 원본 파일 로드 실패 (image_id={req.image_id}) - 모크로 진행")
+        print(f"⚠️ [Edit] 원본 파일 로드 실패 (image_id={req.image_id})")
         orig_input_filename = f"{req.image_id}.jpg"
-        orig_path = None  # 마스크 생성 실패 시 Mock으로 대체
-    
-    # 파일명 및 마스크 경로 설정
+        orig_path = os.path.join(PROJECT_ROOT, "uploads", orig_input_filename)
+
     cache_bust_suffix = f"_{int(time.time() * 10)}"
-    mask_filename = f"{req.image_id}_mask{cache_bust_suffix}.png"
-    mask_path = os.path.join(PROJECT_ROOT, "uploads", mask_filename)
+    mask_filename_a = f"{req.image_id}_maskA{cache_bust_suffix}.png"
+    mask_path_a = os.path.join(PROJECT_ROOT, "uploads", mask_filename_a)
     
+    mask_filename_b = None
+    mask_path_b = None
+    if req.mask_b:
+        mask_filename_b = f"{req.image_id}_maskB{cache_bust_suffix}.png"
+        mask_path_b = os.path.join(PROJECT_ROOT, "uploads", mask_filename_b)
+        
+    def process_and_save_mask(mask_input, dest_path, width, height):
+        mask_layer = Image.new("L", (width, height), 0)
+        
+        # 1. Base64 스트림 마스크 디코딩 파서
+        if isinstance(mask_input, str) and mask_input.startswith("data:image"):
+            try:
+                import base64
+                from io import BytesIO
+                header, encoded = mask_input.split(",", 1)
+                decoded_data = base64.b64decode(encoded)
+                decoded_img = Image.open(BytesIO(decoded_data))
+                
+                if "A" in decoded_img.getbands():
+                    alpha_ch = decoded_img.split()[-1]
+                    alpha_arr = list(alpha_ch.getdata())
+                    # 알파 채널이 전부 255(균일 불투명) → 마스크 정보가 RGB에만 존재
+                    # 이 경우 알파 채널을 쓰면 이미지 전체가 마스크가 되어버리므로 RGB→L 사용
+                    if min(alpha_arr) == max(alpha_arr) == 255:
+                        mask_layer = decoded_img.convert("L")
+                    else:
+                        mask_layer = alpha_ch
+                else:
+                    mask_layer = decoded_img.convert("L")
+                
+                if mask_layer.size != (width, height):
+                    mask_layer = mask_layer.resize((width, height), Image.Resampling.NEAREST)
+                    
+            except Exception as e:
+                print(f"⚠️ Base64 디코딩 에러: {e}")
+                
+        # 2. 정밀 BBox 좌표 파서 (현재 프론트에서 넘어오는 원형/네모 드래그 좌표 매칭)
+        elif mask_input and isinstance(mask_input, list) and len(mask_input) == 4:
+            x1, y1, x2, y2 = mask_input
+            x1, x2 = sorted([max(0, min(x1, width)), max(0, min(x2, width))])
+            y1, y2 = sorted([max(0, min(y1, height)), max(0, min(y2, height))])
+            draw = ImageDraw.Draw(mask_layer)
+            draw.rectangle([x1, y1, x2, y2], fill=255)
+            
+            # 해상도 깨짐 및 계단 현상 방지를 위한 소프트 페더링 블러 팩터
+            feather = max(4, min(width, height) // 120)
+            mask_layer = mask_layer.filter(ImageFilter.MaxFilter(feather + 1))
+            mask_layer = mask_layer.filter(ImageFilter.GaussianBlur(feather))
+        else:
+            # 매칭 좌표가 부실할 시 기본 중앙 영역 배정 방어 코드
+            draw = ImageDraw.Draw(mask_layer)
+            draw.rectangle([int(width*0.25), int(height*0.25), int(width*0.75), int(height*0.75)], fill=255)
+
+        # 🎯 [핵심 패치] ComfyUI LoadImageMask 'red' 채널 정합
+        # L 그레이스케일을 RGB 3채널로 확장하여 R=G=B=마스크값으로 저장
+        # → ComfyUI LoadImageMask의 "channel: red"가 흰 타원 영역을 정확히 마스크로 인식
+        l_channel = mask_layer.convert("L")
+        if l_channel.size != (width, height):
+            l_channel = l_channel.resize((width, height), Image.Resampling.NEAREST)
+        rgb_mask = Image.merge("RGB", (l_channel, l_channel, l_channel))
+        rgb_mask.save(dest_path, "PNG")
+        print(f"🎨 [Mask Fix] 마스크 RGB PNG 저장 완료 ({width}x{height}) -> {dest_path}")
+
+        # 로컬 ComfyUI input 보관 디렉터리로 강제 복사 동기화
+        if os.path.exists(COMFYUI_INPUT_DIR):
+            shutil.copy(dest_path, os.path.join(COMFYUI_INPUT_DIR, os.path.basename(dest_path)))
+
+    # 실시간 오리지널 이미지 가로세로 해상도 체킹 및 마스크 복원 전달
     try:
         if os.path.exists(orig_path):
+            # 원본 이미지를 ComfyUI input 폴더로 복사 동기화하여 로드 에러 방지
+            if os.path.exists(COMFYUI_INPUT_DIR):
+                shutil.copy(orig_path, os.path.join(COMFYUI_INPUT_DIR, os.path.basename(orig_path)))
+                print(f"📁 [ComfyUI API] 원본 이미지 ComfyUI 복사 완료: {os.path.basename(orig_path)}")
+                
             with Image.open(orig_path) as img:
                 w, h = img.size
-                # 1. 흑백 채널 레이어 생성 (기본 0, 검은색 = 마스크 없음)
-                mask_layer = Image.new("L", (w, h), 0)
-                
-                # [NEW] 웹 브라우저 캔버스로부터 추출된 Base64 PNG 마스크 이미지 처리 지원
-                if isinstance(req.mask, str) and req.mask.startswith("data:image"):
-                    try:
-                        import base64
-                        from io import BytesIO
-                        # "data:image/png;base64," 접두사 분리
-                        header, encoded = req.mask.split(",", 1)
-                        decoded_data = base64.b64decode(encoded)
-                        decoded_img = Image.open(BytesIO(decoded_data)).convert("L")
-                        
-                        # 해상도 크기 정합성 보정
-                        if decoded_img.size != (w, h):
-                            decoded_img = decoded_img.resize((w, h), Image.Resampling.NEAREST)
-                        
-                        # [자연스러운 합성] 프론트엔드가 보낸 마스크도 경계를 부드럽게 깃털화(Feathering) 및 Dilation 보정합니다.
-                        # 가구가 원본 이미지 배경에 매끄럽게 녹아들게 하기 위한 핵심 필터링입니다.
-                        feather = max(10, min(w, h) // 40)
-                        expand_size = feather + 1
-                        decoded_img = decoded_img.filter(ImageFilter.MaxFilter(expand_size))
-                        decoded_img = decoded_img.filter(ImageFilter.GaussianBlur(feather))
-                        
-                        mask_layer = decoded_img
-                        print("🎭 [Masking] 클라이언트 전송 Base64 마스크 이미지 디코딩 및 매핑 성공.")
-                    except Exception as base64_err:
-                        print(f"⚠️ [Masking] Base64 디코딩 실패, 기본 BBox 렌더러로 전환: {base64_err}")
-                        req.mask = None
-
-                # 드래그 바운딩 박스 리스트 좌표 처리 ([x1, y1, x2, y2])
-                if req.mask and isinstance(req.mask, list) and len(req.mask) == 4:
-                    x1, y1, x2, y2 = req.mask
-                    # 바운더리 검증 및 정렬
-                    x1, x2 = sorted([max(0, min(x1, w)), max(0, min(x2, w))])
-                    y1, y2 = sorted([max(0, min(y1, h)), max(0, min(y2, h))])
-                    
-                    draw = ImageDraw.Draw(mask_layer)
-                    draw.rectangle([x1, y1, x2, y2], fill=255) # 255 = 흰색 (마스크 있음)
-                    
-                    # 마스크의 에지가 부자연스럽게 들뜨는 현상을 막기 위해 팽창(Dilation) 및 깃털(Feathering) 가우시안 블러 합성!
-                    feather = max(6, min(w, h) // 80)
-                    expand_size = feather * 2 + 1
-                    mask_layer = mask_layer.filter(ImageFilter.MaxFilter(expand_size))
-                    mask_layer = mask_layer.filter(ImageFilter.GaussianBlur(feather))
-                    print(f"🎭 [Masking] 사용자가 지정한 BBox 영역 마스킹 채널 생성 (깃털 효과 완료): ({x1}, {y1}) ~ ({x2}, {y2})")
-                elif not (isinstance(req.mask, str) and req.mask.startswith("data:image")):
-                    draw = ImageDraw.Draw(mask_layer)
-                    draw.rectangle([int(w * 0.2), int(h * 0.2), int(w * 0.8), int(h * 0.8)], fill=255)
-                    print("🎭 [Masking] 마스크 정보가 유효하지 않아 중앙 60% 기본 마스킹 생성")
-                
-                # 2. 흑백 PNG 마스크 직접 저장
-                mask_layer.save(mask_path, "PNG")
-                print(f"💾 [Masking] 흑백 마스크 이미지 준비 완료: {mask_path}")
+            process_and_save_mask(req.mask, mask_path_a, w, h)
+            if req.mask_b:
+                process_and_save_mask(req.mask_b, mask_path_b, w, h)
         else:
-            print(f"⚠️ [Masking] 원본 이미지를 찾을 수 없어 합성 생략: {orig_path}")
+            w, h = 768, 512
+            process_and_save_mask(req.mask, mask_path_a, w, h)
     except Exception as e:
-        print(f"⚠️ [Masking] 마스크 채널 생성 중 에러 발생: {e}")
-        
-    # 실제 포터블 ComfyUI input 디렉토리 절대경로 지정하여 흑백 마스크 파일 복사
-    if os.path.exists(COMFYUI_INPUT_DIR) and os.path.exists(mask_path):
-        import shutil
-        shutil.copy(mask_path, os.path.join(COMFYUI_INPUT_DIR, mask_filename))
-        print(f"📁 [ComfyUI API] mask 파일 복사 완료: {mask_filename}")
-        
+        print(f"⚠️ 마스크 체인 빌드 중 에러: {e}")
+        w, h = 768, 512
+
     parameters = {
-        "image_filename": mask_filename,
-        "image_filename_b": "",
+        "image_filename": mask_filename_a,
+        "image_filename_b": mask_filename_b or "",
         "orig_image": orig_input_filename,
         "prompt": translate_prompt_to_english(req.prompt),
-        "prompt_b": translate_prompt_to_english(req.prompt),
+        "prompt_b": translate_prompt_to_english(req.prompt_b or req.prompt),
         "seed": int(time.time()) % 1000000
     }
     
+    # 실시간 화질 자연스러움 극대화를 위한 기본 권장 스윗스팟 자동 연동 (요청에 누락 시 적용)
+    parameters["steps"] = req.steps if req.steps is not None else 25
+    parameters["cfg"] = req.cfg if req.cfg is not None else 8.0
+    parameters["denoise"] = req.denoise if req.denoise is not None else 0.81
+    
     real_filename = None
     if comfy_online:
-        # ✅ 버그 수정: 딕셔너리 copy()를 통해 매개변수 변조 방지
-        real_filename = execute_real_comfyui("comfyui_workflow.json", parameters.copy())
+        real_filename = execute_real_comfyui("inpainting.json", parameters.copy())
         
+    if not real_filename:
+        # ComfyUI 오프라인. sd_tutorial 로컬 Fallback 실행
+        print("🖥️ [Inpaint Transform] ComfyUI 오프라인. sd_tutorial 로컬 Fallback 실행 중...")
+        result_filename = f"{edit_id}.jpg"
+        dest_path = os.path.join(PROJECT_ROOT, "results", result_filename)
+        orig_path = os.path.join(PROJECT_ROOT, "uploads", orig_input_filename) if orig_input_filename else os.path.join(PROJECT_ROOT, "uploads", f"{req.image_id}.jpg")
+        
+        inpaint_model_filename = "realisticVisionV60B1_v51HyperInpaintVAE.safetensors"
+        sd_inpaint_model_path = os.path.join(COMFYUI_PATH, "ComfyUI", "models", "checkpoints", inpaint_model_filename)
+        if not os.path.exists(sd_inpaint_model_path):
+            alt_inpaint_model = os.path.join(COMFYUI_PATH, "models", "checkpoints", inpaint_model_filename)
+            if os.path.exists(alt_inpaint_model):
+                sd_inpaint_model_path = alt_inpaint_model
+                
+        try:
+            sys.path.append(PROJECT_ROOT)
+            import sd_tutorial
+            
+            if os.path.exists(sd_inpaint_model_path) and os.path.exists(orig_path) and os.path.exists(mask_path_a):
+                print(f"⚡ 로컬 인페인팅 실행: model={sd_inpaint_model_path}, input={orig_path}, mask={mask_path_a}")
+                sd_tutorial.run_interior_inpainting(
+                    inpaint_model_path=sd_inpaint_model_path,
+                    input_image_path=orig_path,
+                    mask_image_path=mask_path_a,
+                    output_image_path=dest_path,
+                    prompt=translate_prompt_to_english(req.prompt),
+                    negative_prompt="blurry, low quality, distorted, bad proportions, ugly, disfigured"
+                )
+                
+                if req.mask_b and mask_path_b and os.path.exists(mask_path_b):
+                    print(f"⚡ 로컬 인페인팅 2단계 실행: mask={mask_path_b}")
+                    sd_tutorial.run_interior_inpainting(
+                        inpaint_model_path=sd_inpaint_model_path,
+                        input_image_path=dest_path,
+                        mask_image_path=mask_path_b,
+                        output_image_path=dest_path,
+                        prompt=translate_prompt_to_english(req.prompt_b or req.prompt),
+                        negative_prompt="blurry, low quality, distorted, bad proportions, ugly, disfigured"
+                    )
+                
+                print(f"🟢 [Inpaint Transform] sd_tutorial 생성 완료: {dest_path}")
+                real_filename = result_filename
+                workflow_info["execution_mode"] = "local_sd_tutorial"
+            else:
+                raise FileNotFoundError(f"로컬 인페인트 모델, 원본 이미지 또는 마스크를 찾을 수 없습니다. Model: {sd_inpaint_model_path}")
+        except Exception as e:
+            print(f"⚠️ [Inpaint Fallback Error] 로컬 SD 실행 실패 (Mock 대체): {e}")
+
     if real_filename:
-        # [NEW] 결과 이미지 해상도 강제 원본 정합 복원
-        # ComfyUI 인페인팅 렌더링에 의해 변경/왜곡된 해상도를 사용자가 업로드했던 원래의 픽셀 해상도로 정형 복원합니다.
+        # 생성 완료 후 프론트 크롭 에러 차단용 이미지 해상도 강제 원본 정합 리사이징 및 마스크 정밀 합성 적용
         result_path = os.path.join(PROJECT_ROOT, "results", real_filename)
-        if os.path.exists(result_path) and orig_path:
+        if os.path.exists(result_path) and os.path.exists(orig_path):
             try:
                 with Image.open(orig_path) as orig_img:
                     orig_w, orig_h = orig_img.size
@@ -1978,26 +2092,67 @@ def edit_image(req: ImageEditRequest):
                         resized_img.save(result_path, "PNG" if real_filename.lower().endswith(".png") else "JPEG")
             except Exception as resize_err:
                 print(f"⚠️ [Resizing] 결과 이미지 원본 해상도 복원 중 에러: {resize_err}")
+                from PIL import ImageChops
+                
+                # 1. 이미지 로드 및 기본 객체 생성
+                orig_img = Image.open(orig_path).convert("RGB")
+                orig_w, orig_h = orig_img.size
+                
+                res_img = Image.open(result_path).convert("RGB")
+                # 결과 이미지를 원본 크기로 리사이징
+                if res_img.size != (orig_w, orig_h):
+                    res_img = res_img.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
+                
+                # 2. 마스크 로드 및 채널 통일화
+                mask_a = Image.open(mask_path_a).convert("L")
+                if mask_a.size != (orig_w, orig_h):
+                    mask_a = mask_a.resize((orig_w, orig_h), Image.Resampling.NEAREST)
+                
+                final_mask = mask_a
+                
+                # 2단계 마스크가 활성화되어 존재할 경우 픽셀별 최댓값(Chops.lighter)으로 두 마스크를 합침
+                if mask_path_b and os.path.exists(mask_path_b):
+                    mask_b = Image.open(mask_path_b).convert("L")
+                    if mask_b.size != (orig_w, orig_h):
+                        mask_b = mask_b.resize((orig_w, orig_h), Image.Resampling.NEAREST)
+                    final_mask = ImageChops.lighter(final_mask, mask_b)
+                
+                # 3. 원본 이미지와 인페인팅 결과 이미지를 최종 마스크 기준으로 합성
+                composite_img = Image.composite(res_img, orig_img, final_mask)
+                
+                # 4. 포맷 매치 후 저장
+                save_format = "PNG" if real_filename.lower().endswith(".png") else "JPEG"
+                composite_img.save(result_path, save_format)
+                print(f"🎨 [Inpaint Precision Fix] 마스크 영역 합성 완료. 비마스크 영역 원본 100% 보존. 저장 경로: {result_path}")
+                
+            except Exception as r_err:
+                print(f"⚠️ 원본 종횡비 복원 및 마스크 합성 중 예외: {r_err}")
+                import traceback
+                traceback.print_exc()
                 
         result_url = f"/static/results/{real_filename}"
-        workflow_info["execution_mode"] = "real_comfyui"
+        if "execution_mode" not in workflow_info:
+            workflow_info["execution_mode"] = "real_comfyui"
     else:
-        brightness_val = -0.15
-        contrast_val = 1.35
-        # ✅ 버그 수정: 원본 한국어 프롬프트 + 번역된 영어 프롬프트 모두 전달해 한국어 키워드 매칭 보장
+        # 🎯 [핵심 패치] 모킹 렌더링 시 엉뚱한 쿠션 크롭 버그 전면 수정
+        print("🖥️ ComfyUI 연동 불안정 상태 -> 정밀 픽셀 오프라인 가상 매칭 엔진 구동")
+        brightness_val = -0.05
+        contrast_val = 1.10
         combined_prompt_for_mock = f"{req.prompt} {parameters['prompt']}"
+        
         result_url = process_mock_image(
             image_id=req.image_id,
             result_id=edit_id,
-            style_name="Furniture Inpaint Style",
+            style_name="Furniture Inpaint Precision",
             prompt_text=combined_prompt_for_mock,
             brightness=brightness_val,
             contrast=contrast_val,
-            text_overlay=f"ZipPT Furniture Inpainting\nObj: {req.selected_object or 'N/A'}",
-            bbox=req.mask
+            text_overlay=f"ZipPT Inpainting",
+            bbox=req.mask_pixels_a  # 버그② 수정: Base64 문자열 대신 픽셀 좌표 배열 [x1,y1,x2,y2] 주입
         )
         workflow_info["execution_mode"] = "mock_fallback"
 
+    # 세션 기록 업데이트 관리
     session_data = get_or_create_session(req.session_id)
     session_data["edits"].append({
         "edit_id": edit_id,
@@ -2011,7 +2166,6 @@ def edit_image(req: ImageEditRequest):
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
-    # JSONResponse를 사용하여 스키마 제약 없이 workflow 객체를 data 내부에 주입
     return JSONResponse(
         status_code=200,
         content={
@@ -2023,7 +2177,7 @@ def edit_image(req: ImageEditRequest):
                 "status": "completed",
                 "workflow": workflow_info
             },
-            "message": f"이미지 편집 작업이 완료되었습니다. (ComfyUI Status: {workflow_info['comfyui_status']})"
+            "message": f"이미지 편집 작업이 완료되었습니다. (Mode: {workflow_info['execution_mode']})"
         }
     )
 

@@ -608,7 +608,7 @@ class ImageEditRequest(BaseModel):
     mask: Optional[Any] = Field(None, description="1차 마스크 영역 정보 (좌표 [x1,y1,x2,y2] 또는 Base64 PNG 이미지)")
 
 
-    mask_b: Optional[List[int]] = Field(None, description="2차 留덉뒪겕 궗媛곹삎 쁺뿭 醫뚰몴 [x1, y1, x2, y2]")
+    mask_b: Optional[Any] = Field(None, description="2차 마스크 영역 정보 (좌표 [x1,y1,x2,y2] 또는 Base64 PNG 이미지)")
 
 
     selected_object: Optional[str] = Field(None, description="꽑깮맂 媛앹껜 紐낆묶 (삁: graffiti, sign)")
@@ -618,6 +618,21 @@ class ImageEditRequest(BaseModel):
 
 
     prompt_b: Optional[str] = Field(None, description="2차 렪吏 吏떆臾")
+
+
+    steps: Optional[int] = Field(None, description="KSampler 연산 단계 수 (선택)")
+
+
+    cfg: Optional[float] = Field(None, description="프롬프트 유도 가중치 (선택)")
+
+
+    denoise: Optional[float] = Field(None, description="노이즈 제거 강도 (선택)")
+
+    # 버그② 수정: Base64 마스크와 별개로 픽셀 좌표 BBox를 직접 전달하는 필드
+    # mock 폴백 모드에서 Base64 문자열의 len()이 4가 아니어서 가구 교체가 스킵되던 버그 방지
+    mask_pixels_a: Optional[List[int]] = Field(None, description="1차 마스크 픽셀 좌표 [x1,y1,x2,y2] (mock 폴백용)")
+
+    mask_pixels_b: Optional[List[int]] = Field(None, description="2차 마스크 픽셀 좌표 [x1,y1,x2,y2] (mock 폴백용)")
 
 
 

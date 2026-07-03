@@ -124,7 +124,17 @@ export async function getSessionHistory(sessionId) {
  * 7번 창구: 부분 가구 수선 및 편집 (POST /api/image/edit)
  * 비유: 사진에서 특정 침대나 소파 영역만 마우스로 칠해서 새 가구로 교체해 달라고 요청합니다.
  */
-export async function editImage({ imageId, sessionId, mask = null, mask_b = null, selectedObject = null, prompt = "하얀색 소파로 교체", prompt_b = null }) {
+export async function editImage({
+  imageId,
+  sessionId,
+  mask = null,         // Base64 PNG 마스크 (ComfyUI 인페인팅용)
+  mask_b = null,
+  mask_pixels_a = null, // [x1,y1,x2,y2] 픽셀 좌표 배열 (mock 폴백용) - 버그② 수정
+  mask_pixels_b = null,
+  selectedObject = null,
+  prompt = "하얀색 소파로 교체",
+  prompt_b = null
+}) {
   try {
     const response = await fetch(`${API_BASE_URL}/api/image/edit`, {
       method: "POST",
@@ -136,6 +146,8 @@ export async function editImage({ imageId, sessionId, mask = null, mask_b = null
         session_id: sessionId,
         mask: mask,
         mask_b: mask_b,
+        mask_pixels_a: mask_pixels_a,
+        mask_pixels_b: mask_pixels_b,
         selected_object: selectedObject,
         prompt: prompt,
         prompt_b: prompt_b
@@ -159,6 +171,7 @@ export async function editImage({ imageId, sessionId, mask = null, mask_b = null
     };
   }
 }
+
 
 /**
  * 6번 창구: AI 인테리어 취향 & 추구미 상담 챗봇 호출 (POST /api/chat)

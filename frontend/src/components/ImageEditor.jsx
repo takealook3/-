@@ -1,20 +1,34 @@
 // =====================================================================
-// [ImageEditor.jsx: 단일 영역 원형 드래그 마스킹 (Circle Inpainting) 편집소]
-// 비유: 사진 속에서 바꾸고 싶은 가구 영역을 동그란 네온 링(Circle) 스티커로 지정하고
-// 원하는 가구를 입력해 마스크 픽셀 이미지를 백엔드로 직접 송신하여 수선하는 컴포넌트입니다.
+// [ImageEditor.jsx: 1/2차 원형 마스킹 (Circle Double Inpainting) 통합 편집소]
+// 비유: 사진 속에서 바꾸고 싶은 가구 영역들을 각각 블루(A)와 핑크(B) 원형 스티커로
+// 동그랗게 지정하여 흑백 이미지 파일로 개별 캔버스 추출한 뒤, 백엔드로 송신하여 
+// 1차 단독 혹은 2차 동시 수선을 의뢰하는 프리미엄 편집 컴포넌트입니다.
 // =====================================================================
 import React, { useState, useRef } from 'react';
 import { editImage, searchProducts, API_BASE_URL } from '../services/api';
 
 export default function ImageEditor({ imageId, sessionId, originalImageUrl, onError }) {
-  // 드래그 원형 마스킹 좌표 (정규화된 비율값)
-  const [bboxNorm, setBboxNorm] = useState(null); // { x1, y1, x2, y2 }
-  const [maskPixels, setMaskPixels] = useState(null); // [x1, y1, x2, y2]
+  // 마스크 모드: 'A' (1차 가구 수선) 또는 'B' (2차 가구 수선)
+  const [maskMode, setMaskMode] = useState('A');
+
+  // 드래그 원형 마스킹 좌표 (A 영역 - 네온 블루)
+  const [bboxNormA, setBboxNormA] = useState(null); // { x1, y1, x2, y2 }
+  const [maskPixelsA, setMaskPixelsA] = useState(null); // [x1, y1, x2, y2]
+
+  // 드래그 원형 마스킹 좌표 (B 영역 - 네온 핑크)
+  const [bboxNormB, setBboxNormB] = useState(null); // { x1, y1, x2, y2 }
+  const [maskPixelsB, setMaskPixelsB] = useState(null); // [x1, y1, x2, y2]
+
+  // 마우스 드래그 상태
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  // 드래그 중 현재 좌표를 ref로 추적 (mouseUp에서 최신값 동기적으로 읽기 위함)
+  const dragCurrentRef = useRef({ x: 0, y: 0 });
 
-  // 가구 교체 프롬프트
-  const [promptText, setPromptText] = useState("현대적이고 고급스러운 가죽 소파");
+  // 1차/2차 수선 프롬프트
+  const [promptA, setPromptA] = useState("현대적이고 고급스러운 가죽 소파");
+  const [promptB, setPromptB] = useState("아늑한 우드 사이드 테이블");
+
   const [editing, setEditing] = useState(false);
   const [editedResultUrl, setEditedResultUrl] = useState(null);
 
@@ -43,58 +57,133 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
     const y = e.clientY - rect.top;
     setIsDragging(true);
     setDragStart({ x, y });
-    setBboxNorm(null);
-    setMaskPixels(null);
+
+    if (maskMode === 'A') {
+      setBboxNormA(null);
+      setMaskPixelsA(null);
+    } else {
+      setBboxNormB(null);
+      setMaskPixelsB(null);
+    }
   };
 
-  // 마우스 드래그 중 (원형 선택 박스 생성)
+  // 마우스 드래그 중
   const handleMouseMove = (e) => {
     if (!isDragging || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const currentX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
     const currentY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
 
+    // ref에도 동기적으로 저장 (mouseUp에서 최신 좌표를 즉시 읽기 위함)
+    dragCurrentRef.current = { x: currentX, y: currentY };
+
     const x1Norm = Math.min(dragStart.x, currentX) / rect.width;
     const y1Norm = Math.min(dragStart.y, currentY) / rect.height;
     const x2Norm = Math.max(dragStart.x, currentX) / rect.width;
     const y2Norm = Math.max(dragStart.y, currentY) / rect.height;
 
-    setBboxNorm({ x1: x1Norm, y1: y1Norm, x2: x2Norm, y2: y2Norm });
-  };
-
-  // 마우스 클릭 종료 (정밀 좌표 확정)
-  const handleMouseUp = () => {
-    if (!isDragging) return;
-    setIsDragging(false);
-
-    if (bboxNorm && imgRef.current) {
-      const natW = imgRef.current.naturalWidth || 800;
-      const natH = imgRef.current.naturalHeight || 600;
-      const px1 = Math.round(bboxNorm.x1 * natW);
-      const py1 = Math.round(bboxNorm.y1 * natH);
-      const px2 = Math.round(bboxNorm.x2 * natW);
-      const py2 = Math.round(bboxNorm.y2 * natH);
-      setMaskPixels([px1, py1, px2, py2]);
+    const coords = { x1: x1Norm, y1: y1Norm, x2: x2Norm, y2: y2Norm };
+    if (maskMode === 'A') {
+      setBboxNormA(coords);
+    } else {
+      setBboxNormB(coords);
     }
   };
 
-  // 마스크 영역 지우기
-  const handleClear = () => {
-    setBboxNorm(null);
-    setMaskPixels(null);
+  // 마우스 클릭 종료 (정밀 픽셀 좌표 바인딩)
+  const handleMouseUp = (e) => {
+    if (!isDragging) return;
+    setIsDragging(false);
+
+    if (!containerRef.current || !imgRef.current) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    // React state 비동기 갱신 대신 ref에서 최신 좌표를 즉시 동기적으로 읽음
+    const currentX = dragCurrentRef.current.x;
+    const currentY = dragCurrentRef.current.y;
+
+    const x1Norm = Math.min(dragStart.x, currentX) / rect.width;
+    const y1Norm = Math.min(dragStart.y, currentY) / rect.height;
+    const x2Norm = Math.max(dragStart.x, currentX) / rect.width;
+    const y2Norm = Math.max(dragStart.y, currentY) / rect.height;
+
+    const finalCoords = { x1: x1Norm, y1: y1Norm, x2: x2Norm, y2: y2Norm };
+
+    const natW = imgRef.current.naturalWidth || 800;
+    const natH = imgRef.current.naturalHeight || 600;
+    const px1 = Math.round(x1Norm * natW);
+    const py1 = Math.round(y1Norm * natH);
+    const px2 = Math.round(x2Norm * natW);
+    const py2 = Math.round(y2Norm * natH);
+
+    if (maskMode === 'A') {
+      setBboxNormA(finalCoords);
+      setMaskPixelsA([px1, py1, px2, py2]);
+    } else {
+      setBboxNormB(finalCoords);
+      setMaskPixelsB([px1, py1, px2, py2]);
+    }
+  };
+  // 개별 마스크 영역 클리어
+  const handleClearActiveMask = () => {
+    if (maskMode === 'A') {
+      setBboxNormA(null);
+      setMaskPixelsA(null);
+    } else {
+      setBboxNormB(null);
+      setMaskPixelsB(null);
+    }
+  };
+
+  // 전체 마스크 영역 클리어
+  const handleClearAll = () => {
+    setBboxNormA(null);
+    setMaskPixelsA(null);
+    setBboxNormB(null);
+    setMaskPixelsB(null);
     setEditedResultUrl(null);
     setProductsList([]);
     onError(null);
   };
 
-  // 인페인팅 제출 (캔버스 이미지 추출 연동 설계 적용)
+  // 캔버스 드로잉을 통한 원형 마스크 PNG 추출 헬퍼 함수
+  const generateCircularBase64Mask = (bbox, width, height) => {
+    if (!bbox) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    
+    // 검은색 칠하기
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+    
+    // 흰색 타원 칠하기
+    const x = bbox.x1 * width;
+    const y = bbox.y1 * height;
+    const w = (bbox.x2 - bbox.x1) * width;
+    const h = (bbox.y2 - bbox.y1) * height;
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    const rx = w / 2;
+    const ry = h / 2;
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+    ctx.fill();
+    
+    return canvas.toDataURL('image/png');
+  };
+
+  // 수선하기 요청 제출
   const handleEditSubmit = async () => {
-    if (!promptText.trim()) {
-      onError({ errorCode: "PROMPT_REQUIRED", message: "교체할 가구 명칭 및 연출할 스타일 프롬프트를 입력해 주세요." });
+    if (!promptA.trim()) {
+      onError({ errorCode: "PROMPT_REQUIRED", message: "1차 가구 수선 요청사항(Prompt A)을 입력해 주세요." });
       return;
     }
-    if (!bboxNorm || !imgRef.current) {
-      onError({ errorCode: "MASK_REQUIRED", message: "캔버스에 편집할 가구 영역을 드래그하여 원형으로 지정해 주세요." });
+    if (!maskPixelsA) {
+      onError({ errorCode: "MASK_REQUIRED", message: "1차 가구 수선 영역(A)을 지정해 주세요 (필수)" });
       return;
     }
     
@@ -102,54 +191,37 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
     setEditing(true);
 
     try {
-      // 1. 원본 이미지 해상도와 1:1 대응하는 오프스크린 캔버스 동적 빌드
-      const canvas = document.createElement('canvas');
       const natW = imgRef.current.naturalWidth;
       const natH = imgRef.current.naturalHeight;
-      canvas.width = natW;
-      canvas.height = natH;
 
-      const ctx = canvas.getContext('2d');
-      // 2. 캔버스 배경 검은색 충진 (0 = 마스킹 안됨)
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 0, natW, natH);
+      // 마스크 1 (A) 원형 캔버스 추출
+      const base64MaskA = generateCircularBase64Mask(bboxNormA, natW, natH);
+      
+      // 마스크 2 (B) 원형 캔버스 추출 (지정된 경우에만)
+      const base64MaskB = bboxNormB ? generateCircularBase64Mask(bboxNormB, natW, natH) : null;
 
-      // 3. 사용자가 드래그한 타원(원) 영역 내부에 흰색 붓 칠하기 (255 = 마스킹 됨)
-      const x = bboxNorm.x1 * natW;
-      const y = bboxNorm.y1 * natH;
-      const w = (bboxNorm.x2 - bboxNorm.x1) * natW;
-      const h = (bboxNorm.y2 - bboxNorm.y1) * natH;
-
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      const cx = x + w / 2;
-      const cy = y + h / 2;
-      const rx = w / 2;
-      const ry = h / 2;
-      ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
-      ctx.fill();
-
-      // 4. 캔버스로부터 Base64 PNG 추출
-      const base64Mask = canvas.toDataURL('image/png');
-
-      // 5. 백엔드 전송
       const res = await editImage({
         imageId,
         sessionId,
-        mask: base64Mask, // Base64 마스크 이미지 통으로 송신!
-        selected_object: "furniture",
-        prompt: promptText.trim()
+        mask: base64MaskA,           // ComfyUI 인페인팅용 Base64 PNG 마스크
+        mask_b: base64MaskB,
+        mask_pixels_a: maskPixelsA,  // mock 폴백용 픽셀 좌표 배열 [x1,y1,x2,y2]
+        mask_pixels_b: maskPixelsB ? maskPixelsB : null,
+        prompt: promptA.trim(),
+        prompt_b: base64MaskB ? promptB.trim() : null
       });
 
       if (res.success) {
         const eUrl = res.data?.edited_image_url || res.data?.editedImageUrl;
-        setEditedResultUrl(eUrl);
+        // 브라우저 캐시 방지를 위해 타임스탬프 쿼리 파라미터 추가
+        const cacheBustedUrl = eUrl ? `${eUrl}?t=${Date.now()}` : eUrl;
+        setEditedResultUrl(cacheBustedUrl);
       } else {
         onError({ errorCode: res.errorCode || "PROCESSING_FAILED", message: res.message });
       }
     } catch (err) {
       console.error(err);
-      onError({ errorCode: "CANVAS_ERROR", message: `마스크 이미지 추출 중 장애가 발생했습니다: ${err.message}` });
+      onError({ errorCode: "CANVAS_ERROR", message: `마스크 픽셀 캔버스 렌더링 중 오류: ${err.message}` });
     } finally {
       setEditing(false);
     }
@@ -157,8 +229,11 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
 
   // 유사 가구 쇼핑 정보 검색
   const handleSearchProducts = async () => {
-    if (!maskPixels) {
-      onError({ errorCode: "MASK_REQUIRED", message: "캔버스에 검색할 가구 영역을 드래그하여 원형으로 지정해 주세요." });
+    const activeMaskPixels = maskMode === 'A' ? maskPixelsA : maskPixelsB;
+    const activePromptText = maskMode === 'A' ? promptA : promptB;
+
+    if (!activeMaskPixels) {
+      onError({ errorCode: "MASK_REQUIRED", message: `캔버스에 검색할 가구 영역(${maskMode === 'A' ? '가구 A' : '가구 B'})을 드래그하여 원형으로 지정해 주세요.` });
       return;
     }
     
@@ -170,8 +245,8 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
       const res = await searchProducts({
         imageId,
         sessionId,
-        maskPixels,
-        prompt: promptText.trim() // 한글 주석: 사용자가 입력한 가구 스타일 텍스트 전달 추가
+        maskPixels: activeMaskPixels,
+        prompt: activePromptText.trim() // 한글 주석: 사용자가 입력한 가구 스타일 텍스트 전달 추가
       });
 
       if (res.success) {
@@ -191,22 +266,64 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
     <div className="card" style={{ border: '1px solid #334155' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
         <div className="card-title" style={{ fontSize: '1.25rem', fontWeight: '800' }}>
-          🛠️ 4. AI 가구 영역 부분 교체 (원형 인페인팅)
+          🛠️ 4. AI 가구 영역 부분 교체 (1단계 단독 / 2단계 동시 지원)
         </div>
         <button 
-          onClick={handleClear}
+          onClick={handleClearAll}
           className="toolbar-btn" 
           style={{ fontSize: '0.8rem', padding: '6px 12px', background: '#334155', color: '#cbd5e1', borderRadius: '6px' }}
         >
-          영역 초기화 🗑️
+          전체 리셋 🗑️
         </button>
       </div>
       <div className="card-desc" style={{ marginBottom: '16px' }}>
-        마우스 드래그를 통해 변경하고 싶은 가구 영역을 <strong>원형(Circle)</strong>으로 지정한 뒤, 원하는 새로운 스타일이나 가구 지시 프롬프트를 입력하여 감쪽같이 교체해 보세요.
+        마우스 드래그를 이용해 사진 속의 1차 수선 가구(A)와 2차 수선 가구(B) 영역을 각각 <strong>원형(Circle)</strong>으로 지정해 보세요. (2차 수선 영역은 생략 가능합니다.)
+      </div>
+
+      {/* 수선 타겟 편집 탭 */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+        <button
+          type="button"
+          onClick={() => setMaskMode('A')}
+          style={{
+            flex: 1,
+            padding: '10px',
+            borderRadius: '8px',
+            fontWeight: '700',
+            fontSize: '0.9rem',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            background: maskMode === 'A' ? '#075985' : '#1e293b',
+            border: `2px solid ${maskMode === 'A' ? '#38bdf8' : '#334155'}`,
+            color: maskMode === 'A' ? '#e0f2fe' : '#94a3b8',
+            boxShadow: maskMode === 'A' ? '0 0 10px rgba(56, 189, 248, 0.25)' : 'none'
+          }}
+        >
+          🔵 1차 가구 수선 (A 영역 설정)
+        </button>
+        <button
+          type="button"
+          onClick={() => setMaskMode('B')}
+          style={{
+            flex: 1,
+            padding: '10px',
+            borderRadius: '8px',
+            fontWeight: '700',
+            fontSize: '0.9rem',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            background: maskMode === 'B' ? '#831843' : '#1e293b',
+            border: `2px solid ${maskMode === 'B' ? '#f43f5e' : '#334155'}`,
+            color: maskMode === 'B' ? '#ffe4e6' : '#94a3b8',
+            boxShadow: maskMode === 'B' ? '0 0 10px rgba(244, 63, 94, 0.25)' : 'none'
+          }}
+        >
+          🔴 2차 가구 수선 (B 영역 설정 - 선택)
+        </button>
       </div>
 
       <div className="grid-2">
-        {/* 좌측: 마스킹 캔버스 */}
+        {/* 좌측: 마스킹 캔버스 및 개별 초기화 */}
         <div>
           <div
             ref={containerRef}
@@ -218,7 +335,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
               cursor: 'crosshair', 
               position: 'relative',
               borderRadius: '8px',
-              border: `2px dashed #38bdf8`,
+              border: `2px dashed ${maskMode === 'A' ? '#38bdf8' : '#f43f5e'}`,
               overflow: 'hidden'
             }}
           >
@@ -230,110 +347,172 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
               draggable={false}
               style={{ width: '100%', height: 'auto', display: 'block', borderRadius: '6px' }}
             />
-            {/* 원형 마스크 영역 인디케이터 (네온 블루 서클) */}
-            {bboxNorm && (
+            {/* 1차 마스크 영역 박스 (블루 원형) */}
+            {bboxNormA && (
               <div
                 style={{
                   position: 'absolute',
-                  left: `${bboxNorm.x1 * 100}%`,
-                  top: `${bboxNorm.y1 * 100}%`,
-                  width: `${(bboxNorm.x2 - bboxNorm.x1) * 100}%`,
-                  height: `${(bboxNorm.y2 - bboxNorm.y1) * 100}%`,
+                  left: `${bboxNormA.x1 * 100}%`,
+                  top: `${bboxNormA.y1 * 100}%`,
+                  width: `${(bboxNormA.x2 - bboxNormA.x1) * 100}%`,
+                  height: `${(bboxNormA.y2 - bboxNormA.y1) * 100}%`,
                   border: '3px solid #38bdf8',
-                  borderRadius: '50%', // 이 핵심 속성이 사각형을 타원/원형 네온 스티커로 변형합니다.
+                  borderRadius: '50%',
                   background: 'rgba(56, 189, 248, 0.25)',
-                  boxShadow: '0 0 12px #38bdf8',
+                  boxShadow: '0 0 8px #38bdf8',
                   pointerEvents: 'none'
                 }}
               >
-                <span style={{ position: 'absolute', top: '-24px', left: '50%', transform: 'translateX(-50%)', background: '#38bdf8', color: '#0f172a', fontSize: '0.75rem', fontWeight: '800', padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                  타겟 영역
+                <span style={{ position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', background: '#38bdf8', color: '#0f172a', fontSize: '0.7rem', fontWeight: '800', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap' }}>
+                  가구 A
+                </span>
+              </div>
+            )}
+            {/* 2차 마스크 영역 박스 (핑크 원형) */}
+            {bboxNormB && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${bboxNormB.x1 * 100}%`,
+                  top: `${bboxNormB.y1 * 100}%`,
+                  width: `${(bboxNormB.x2 - bboxNormB.x1) * 100}%`,
+                  height: `${(bboxNormB.y2 - bboxNormB.y1) * 100}%`,
+                  border: '3px solid #f43f5e',
+                  borderRadius: '50%',
+                  background: 'rgba(244, 63, 94, 0.25)',
+                  boxShadow: '0 0 8px #f43f5e',
+                  pointerEvents: 'none'
+                }}
+              >
+                <span style={{ position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', background: '#f43f5e', color: '#fff', fontSize: '0.7rem', fontWeight: '800', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap' }}>
+                  가구 B
                 </span>
               </div>
             )}
           </div>
 
+          {/* 도구바 */}
+          <div className="toolbar" style={{ marginTop: '10px' }}>
+            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+              현재 설정 모드: {maskMode === 'A' ? '🔵 1차 가구 (A)' : '🔴 2차 가구 (B)'}
+            </span>
+            <button
+              type="button"
+              className="toolbar-btn"
+              onClick={handleClearActiveMask}
+              style={{ fontSize: '0.8rem', padding: '4px 10px', background: '#475569', borderRadius: '4px' }}
+            >
+              선택 영역 지우기 🧹
+            </button>
+          </div>
+
+          {/* 감지 정보 배너 */}
           <div className="success-banner" style={{ marginTop: '12px', background: '#1e293b', fontSize: '0.8rem', color: '#cbd5e1' }}>
-            {maskPixels ? (
-              <div>🎯 <strong>지정된 원형 영역:</strong> [가로 {maskPixels[0]}~{maskPixels[2]} px, 세로 {maskPixels[1]}~{maskPixels[3]} px]</div>
-            ) : (
-              <div>🎯 <strong>마스킹 대기:</strong> 사진 위를 마우스 드래그하여 가구 주변을 원형으로 감싸주세요.</div>
-            )}
+            <div>
+              {maskPixelsA ? (
+                <div>🔵 <strong>가구 A 원형 영역:</strong> [x: {maskPixelsA[0]}~{maskPixelsA[2]}, y: {maskPixelsA[1]}~{maskPixelsA[3]}] ({promptA})</div>
+              ) : (
+                <div>🔵 <strong>가구 A 영역:</strong> 캔버스에 마우스를 드래그해 주세요 (필수)</div>
+              )}
+              {maskPixelsB ? (
+                <div style={{ marginTop: '4px' }}>🔴 <strong>가구 B 원형 영역:</strong> [x: {maskPixelsB[0]}~{maskPixelsB[2]}, y: {maskPixelsB[1]}~{maskPixelsB[3]}] ({promptB})</div>
+              ) : (
+                <div style={{ marginTop: '4px', color: '#64748b' }}>🔴 <strong>가구 B 영역:</strong> 추가 변경 가구가 필요하면 모드 전환 후 영역 지정 (선택)</div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* 우측: 수선 지시 폼 */}
+        {/* 우측: 수선 지시 양식 및 결과 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: '700', color: '#38bdf8', marginBottom: '8px' }}>
-              🎨 교체할 가구 및 인테리어 지시어 (Prompt):
+            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', color: '#38bdf8', marginBottom: '6px' }}>
+              🔵 1차 가구 수선 요청 (Prompt A):
             </label>
             <input
               type="text"
-              value={promptText}
-              onChange={(e) => setPromptText(e.target.value)}
-              placeholder="예: 현대적이고 세련된 브라운 가죽 소파"
+              value={promptA}
+              onChange={(e) => setPromptA(e.target.value)}
+              placeholder="예: 현대적이고 고급스러운 가죽 소파"
               className="input-field"
               style={{ borderColor: '#0284c7' }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', color: '#f43f5e', marginBottom: '6px', opacity: maskPixelsB ? 1 : 0.5 }}>
+              🔴 2차 가구 수선 요청 (Prompt B - 선택):
+            </label>
+            <input
+              type="text"
+              value={promptB}
+              onChange={(e) => setPromptB(e.target.value)}
+              placeholder="예: 아늑한 우드 사이드 테이블"
+              className="input-field"
+              disabled={!maskPixelsB}
+              style={{ 
+                borderColor: maskPixelsB ? '#be123c' : '#334155',
+                opacity: maskPixelsB ? 1 : 0.5,
+                cursor: maskPixelsB ? 'text' : 'not-allowed'
+              }}
             />
           </div>
 
           <button
             type="button"
             onClick={handleEditSubmit}
-            disabled={editing || !maskPixels}
+            disabled={editing || !maskPixelsA}
             className="btn btn-coral btn-full"
             style={{ 
               padding: '14px', 
               fontSize: '1rem', 
               fontWeight: '700',
-              cursor: (!maskPixels || editing) ? 'not-allowed' : 'pointer',
-              background: (!maskPixels) ? '#334155' : 'linear-gradient(135deg, #38bdf8 0%, #0284c7 100%)',
+              cursor: (!maskPixelsA || editing) ? 'not-allowed' : 'pointer',
+              background: (!maskPixelsA) ? '#334155' : 'linear-gradient(135deg, #f43f5e 0%, #be123c 100%)',
               color: '#fff',
               border: 'none',
               borderRadius: '8px',
-              transition: 'all 0.3s',
-              boxShadow: maskPixels ? '0 4px 12px rgba(56, 189, 248, 0.3)' : 'none'
+              transition: 'all 0.3s'
             }}
           >
-            {editing ? "✨ AI 원형 마스킹 인페인팅 적용 중..." : "✨ AI 가구 영역 교체 실행"}
+            {editing ? "✨ AI 원형 인페인팅 적용 작업 중... (대기)" : "✨ AI 가구 편집/수선 실행"}
           </button>
 
           <button
             type="button"
             onClick={handleSearchProducts}
-            disabled={searchingProducts || !maskPixels}
+            disabled={searchingProducts || (maskMode === 'A' ? !maskPixelsA : !maskPixelsB)}
             className="btn btn-full"
             style={{ 
               padding: '14px', 
               fontSize: '1rem', 
               fontWeight: '700',
-              cursor: (!maskPixels || searchingProducts) ? 'not-allowed' : 'pointer',
-              background: (!maskPixels) ? '#334155' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              cursor: (((maskMode === 'A' ? !maskPixelsA : !maskPixelsB) || searchingProducts) ? 'not-allowed' : 'pointer'),
+              background: (maskMode === 'A' ? !maskPixelsA : !maskPixelsB) ? '#334155' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
               color: '#fff',
               border: 'none',
               borderRadius: '8px',
               transition: 'all 0.3s',
-              boxShadow: maskPixels ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none',
+              boxShadow: (maskMode === 'A' ? maskPixelsA : maskPixelsB) ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none',
               marginTop: '4px'
             }}
           >
-            {searchingProducts ? "🛍️ AI 유사 가구 정보 수집 중..." : "🛍️ 유사 가구 쇼핑 정보 검색"}
+            {searchingProducts ? "🛍️ AI 유사 가구 정보 수집 중..." : `🛍️ 유사 가구 쇼핑 정보 검색 (${maskMode === 'A' ? '가구 A' : '가구 B'})`}
           </button>
 
           <hr style={{ borderColor: '#334155', margin: '4px 0' }} />
 
           <div>
             <div style={{ fontSize: '1.05rem', fontWeight: '800', color: '#fff', marginBottom: '8px' }}>
-              🎉 인페인팅 수선 결과
+              🎉 최신 수선 완료 결과
             </div>
             {editedResultUrl ? (
               <div>
                 <div className="success-banner" style={{ marginBottom: '12px', background: '#022c22', border: '1px solid #059669' }}>
                   <span>☑️</span>
-                  <span>가구 영역이 성공적으로 편집되었습니다! 아래 프리뷰에서 모습을 확인해 보세요.</span>
+                  <span>가구 교체 결과가 생성되었습니다! 아래에서 합성된 모습을 확인해 보세요.</span>
                 </div>
-                <div className="preview-box" style={{ height: '400px', border: '2px solid #10b981', position: 'relative', overflow: 'hidden', borderRadius: '8px' }}>
+                <div className="preview-box" style={{ height: '240px', border: '2px solid #10b981', position: 'relative', overflow: 'hidden', borderRadius: '8px' }}>
                   <img src={getFullUrl(editedResultUrl)} alt="편집 완료 이미지" className="preview-img" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 </div>
                 <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
@@ -364,8 +543,8 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
                 </div>
               </div>
             ) : (
-              <div style={{ padding: '35px 24px', background: '#0f172a', borderRadius: '10px', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
-                아직 수선 완료된 결과가 없습니다. 좌측 화면에 원형 영역을 지정하고 가구 변경 단추를 눌러주세요.
+              <div style={{ padding: '30px 24px', background: '#0f172a', borderRadius: '10px', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
+                아직 수선된 결과가 없습니다. 좌측 캔버스에 영역을 선택하고 [AI 가구 편집/수선 실행] 버튼을 클릭해 주세요.
               </div>
             )}
           </div>
