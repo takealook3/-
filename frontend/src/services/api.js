@@ -4,7 +4,7 @@
 // 주문(API 요청)을 전달하고 결과(응답 JSON)를 받아오는 우직한 배달원입니다.
 // =====================================================================
 
-export const API_BASE_URL = "http://localhost:8000";
+export const API_BASE_URL = "http://localhost:8001";
 
 /**
  * 1번 창구: 서버 상태 확인 (GET /health)

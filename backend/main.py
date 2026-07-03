@@ -240,7 +240,7 @@ WIDGET_MAP = {
     "VAEDecode": [],
     "SaveImage": ["filename_prefix"],
     "PreviewImage": ["filename_prefix"],
-    # ControlNet 관련 노드 (room_redesign_workflow.json)
+    # ControlNet 관련 노드 (room_redesign_workflow_api.json)
     "ControlNetLoader": ["control_net_name"],
     "M-LSD Lines": ["score_threshold", "dist_threshold", "process_res"],
     "ControlNetApply": ["strength"],
@@ -434,10 +434,11 @@ def translate_prompt_to_english(prompt: str) -> str:
 
 def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
     import requests
+    import shutil
     try:
-        # ── [NEW] room_redesign_workflow.json은 직접 API format JSON을 사용하여 다이렉트 바인딩 ──
-        if workflow_filename == "room_redesign_workflow.json":
-            api_workflow_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "room_redesign_workflow_API.json")
+        # ── [NEW] room_redesign_workflow_api.json은 직접 API format JSON을 사용하여 다이렉트 바인딩 ──
+        if workflow_filename == "room_redesign_workflow_api.json":
+            api_workflow_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "room_redesign_workflow_api.json")
             if not os.path.exists(api_workflow_path):
                 print(f"⚠️ [ComfyUI API] API format 파일이 존재하지 않습니다: {api_workflow_path}")
                 return None
@@ -581,14 +582,7 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                                 print(f"📁 [ComfyUI API] input 파일 복사 완료: {filename} (CWD {folder})")
                                 break
                                     
-        # [디버그 저장] 컴피유아이 전송 직전의 API 데이터를 로컬 파일로 저장
-        try:
-            debug_path = os.path.join(PROJECT_ROOT, "room_redesign_workflow_api_test.json")
-            with open(debug_path, "w", encoding="utf-8") as df:
-                json.dump(prompt_api_data, df, ensure_ascii=False, indent=2)
-            print(f"💾 [ComfyUI API Debug] 전송 직전 페이로드 파일 저장 완료: {debug_path}")
-        except Exception as de:
-            print(f"⚠️ [ComfyUI API Debug] 디버그 파일 저장 실패: {de}")
+
 
         res = requests.post(f"{COMFYUI_API_URL}/prompt", json={"prompt": prompt_api_data}, timeout=5)
         prompt_id = res.json().get("prompt_id")
@@ -1220,7 +1214,7 @@ async def generate_interior_image(request: Request):
     
     # ComfyUI 온라인 여부 체크
     comfy_online = check_comfyui_online()
-    workflow_info = log_workflow_execution("room_redesign_workflow.json")
+    workflow_info = log_workflow_execution("room_redesign_workflow_api.json")
     workflow_info["comfyui_status"] = "online" if comfy_online else "offline"
     
     result_id = f"result_{uuid.uuid4().hex[:6]}"
@@ -1234,7 +1228,7 @@ async def generate_interior_image(request: Request):
         "denoise": 0.6,
         "seed": int(time.time()) % 1000000
     }
-    real_filename = execute_real_comfyui("room_redesign_workflow.json", parameters)
+    real_filename = execute_real_comfyui("room_redesign_workflow_api.json", parameters)
         
     if real_filename:
         result_filename = real_filename
@@ -1396,7 +1390,7 @@ def generate_image(req: ImageGenerateRequest):
     start_time = time.time()
     
     comfy_online = check_comfyui_online()
-    workflow_info = log_workflow_execution("room_redesign_workflow.json")
+    workflow_info = log_workflow_execution("room_redesign_workflow_api.json")
     workflow_info["comfyui_status"] = "online" if comfy_online else "offline"
     
     task_id = str(uuid.uuid4())
@@ -1425,7 +1419,7 @@ def generate_image(req: ImageGenerateRequest):
     
     real_filename = None
     if comfy_online:
-        real_filename = execute_real_comfyui("room_redesign_workflow.json", parameters)
+        real_filename = execute_real_comfyui("room_redesign_workflow_api.json", parameters)
         
     if real_filename:
         generated_url = f"/static/results/{real_filename}"
