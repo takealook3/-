@@ -517,6 +517,23 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
             
             # 5. 아웃풋 파일명 접두사 설정 (SaveImage: Node 8)
             prompt_api_data["8"]["inputs"]["filename_prefix"] = f"ComfyUI_room_redesign_{int(time.time())}"
+            
+            # [한글 주석] AI 1080p 업스케일 가로비 동적 계산 주입 (Node 20)
+            if "image_filename" in parameters:
+                orig_img_path = os.path.join(PROJECT_ROOT, "uploads", parameters["image_filename"])
+                if not os.path.exists(orig_img_path):
+                    orig_img_path = os.path.join(PROJECT_ROOT, "results", parameters["image_filename"])
+                if os.path.exists(orig_img_path):
+                    try:
+                        with Image.open(orig_img_path) as o_img:
+                            ow, oh = o_img.size
+                            ratio = ow / oh
+                            target_w = int(1080 * ratio)
+                            prompt_api_data["20"]["inputs"]["width"] = target_w
+                            prompt_api_data["20"]["inputs"]["height"] = 1080
+                            print(f"📐 [room_redesign_API] ImageScale (Node 20) 해상도 주입: {target_w}x1080")
+                    except Exception as e:
+                        print(f"⚠️ [room_redesign_API] 해상도 주입 중 에러: {e}")
         else:
             # ── [NEW] gemini-code-1783051694407.json 직접 로딩 및 다이렉트 바인딩 ──
             api_workflow_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gemini-code-1783051694407.json")
@@ -575,6 +592,23 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
             
             # 4. 아웃풋 파일명 접두사 설정 (SaveImage: Node 9)
             prompt_api_data["9"]["inputs"]["filename_prefix"] = f"ComfyUI_inpaint_{int(time.time())}"
+            
+            # [한글 주석] AI 1080p 업스케일 가로비 동적 계산 주입 (Node 20)
+            if "orig_image" in parameters:
+                orig_img_path = os.path.join(PROJECT_ROOT, "uploads", parameters["orig_image"])
+                if not os.path.exists(orig_img_path):
+                    orig_img_path = os.path.join(PROJECT_ROOT, "results", parameters["orig_image"])
+                if os.path.exists(orig_img_path):
+                    try:
+                        with Image.open(orig_img_path) as o_img:
+                            ow, oh = o_img.size
+                            ratio = ow / oh
+                            target_w = int(1080 * ratio)
+                            prompt_api_data["20"]["inputs"]["width"] = target_w
+                            prompt_api_data["20"]["inputs"]["height"] = 1080
+                            print(f"📐 [comfyui_API] ImageScale (Node 20) 해상도 주입: {target_w}x1080")
+                    except Exception as e:
+                        print(f"⚠️ [comfyui_API] 해상도 주입 중 에러: {e}")
         
         # 고해상도 입력 이미지 리사이징 헬퍼 함수 정의
         def copy_and_resize_image(src_path: str, dest_path: str) -> None:
@@ -1925,9 +1959,13 @@ def edit_image(req: ImageEditRequest):
                 with Image.open(orig_path) as orig_img:
                     orig_w, orig_h = orig_img.size
                 with Image.open(result_path) as res_img:
-                    if res_img.size != (orig_w, orig_h):
-                        print(f"📏 [Resizing] 결과 이미지 해상도({res_img.size})를 원본 해상도({orig_w}x{orig_h})로 정밀 복원 리사이징합니다.")
-                        resized_img = res_img.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
+                    # [한글 주석] 워크플로우에 AI 1080p 업스케일러 노드가 추가되었으므로 최종 정합 해상도 목표를 세로 1080 픽셀 기준으로 수정합니다.
+                    ratio = orig_w / orig_h
+                    target_w = int(1080 * ratio)
+                    target_h = 1080
+                    if res_img.size != (target_w, target_h):
+                        print(f"📏 [Resizing] 결과 이미지 해상도({res_img.size})를 AI 1080p 업스케일 목표 해상도({target_w}x{target_h})로 정밀 복원 리사이징합니다.")
+                        resized_img = res_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
                         resized_img.save(result_path, "PNG" if real_filename.lower().endswith(".png") else "JPEG")
             except Exception as resize_err:
                 print(f"⚠️ [Resizing] 결과 이미지 원본 해상도 복원 중 에러: {resize_err}")

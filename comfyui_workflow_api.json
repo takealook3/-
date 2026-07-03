@@ -77,7 +77,7 @@
     "inputs": {
       "filename_prefix": "Web_Redesign_Result",
       "images": [
-        "8",
+        "20",
         0
       ]
     },
@@ -131,6 +131,47 @@
     "class_type": "LoadImageMask",
     "_meta": {
       "title": "웹 마우스 드래그 마스크 로드"
+    }
+  },
+  "18": {
+    "inputs": {
+      "model_name": "4x-UltraSharp.pth"
+    },
+    "class_type": "UpscaleModelLoader",
+    "_meta": {
+      "title": "업스케일 모델 로더"
+    }
+  },
+  "19": {
+    "inputs": {
+      "upscale_model": [
+        "18",
+        0
+      ],
+      "image": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "ImageUpscaleWithModel",
+    "_meta": {
+      "title": "AI 업스케일러 적용"
+    }
+  },
+  "20": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "width": 1620,
+      "height": 1080,
+      "crop": "disabled",
+      "image": [
+        "19",
+        0
+      ]
+    },
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "세로 1080 화질 조율"
     }
   }
 }

@@ -109,7 +109,7 @@
     "inputs": {
       "filename_prefix": "ComfyUI_room_redesign_minimalist",
       "images": [
-        "7",
+        "20",
         0
       ]
     },
@@ -161,6 +161,47 @@
     "class_type": "M-LSDPreprocessor",
     "_meta": {
       "title": "M-LSD Lines"
+    }
+  },
+  "18": {
+    "inputs": {
+      "model_name": "4x-UltraSharp.pth"
+    },
+    "class_type": "UpscaleModelLoader",
+    "_meta": {
+      "title": "업스케일 모델 로더"
+    }
+  },
+  "19": {
+    "inputs": {
+      "upscale_model": [
+        "18",
+        0
+      ],
+      "image": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "ImageUpscaleWithModel",
+    "_meta": {
+      "title": "AI 업스케일러 적용"
+    }
+  },
+  "20": {
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "width": 1620,
+      "height": 1080,
+      "crop": "disabled",
+      "image": [
+        "19",
+        0
+      ]
+    },
+    "class_type": "ImageScale",
+    "_meta": {
+      "title": "세로 1080 화질 조율"
     }
   }
 }

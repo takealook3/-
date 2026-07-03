@@ -274,8 +274,34 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
                   <span>☑️</span>
                   <span>가구 영역이 성공적으로 편집되었습니다! 아래 프리뷰에서 모습을 확인해 보세요.</span>
                 </div>
-                <div className="preview-box" style={{ height: '260px', border: '2px solid #10b981', position: 'relative', overflow: 'hidden', borderRadius: '8px' }}>
+                <div className="preview-box" style={{ height: '400px', border: '2px solid #10b981', position: 'relative', overflow: 'hidden', borderRadius: '8px' }}>
                   <img src={getFullUrl(editedResultUrl)} alt="편집 완료 이미지" className="preview-img" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                </div>
+                <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
+                  <a 
+                    href={getFullUrl(editedResultUrl)} 
+                    download={`ZipPT_Upscaled_Result.jpg`}
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="btn"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '10px 16px',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      color: '#fff',
+                      borderRadius: '6px',
+                      textDecoration: 'none',
+                      fontSize: '0.85rem',
+                      fontWeight: '700',
+                      flex: 1,
+                      boxShadow: '0 4px 10px rgba(16, 185, 129, 0.25)',
+                      textAlign: 'center'
+                    }}
+                  >
+                    💾 1.5배 고화질 이미지 다운로드 (새 창)
+                  </a>
                 </div>
               </div>
             ) : (
