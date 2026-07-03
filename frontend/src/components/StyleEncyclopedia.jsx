@@ -1,6 +1,89 @@
 import React, { useState, useEffect } from 'react';
 import imagesMap from './styles_images.json'; // 28가지 DB 한글 원본 이미지 맵 탑재
 
+// 스타일별 공간 카테고리 매핑 (침대방/소파/조명/오브제)
+const STYLE_CATEGORIES = {
+  1:  ['소파', '조명', '오브제'],         // 모던
+  2:  ['침대', '소파', '조명'],           // 미니멀
+  3:  ['침대', '소파', '오브제'],         // 북유럽
+  4:  ['소파', '조명', '오브제'],         // 인더스트리얼
+  5:  ['침대', '소파', '오브제'],         // 내추럴
+  6:  ['침대', '소파', '오브제'],         // 빈티지
+  7:  ['침대', '소파', '조명'],           // 클래식
+  8:  ['침대', '소파', '조명', '오브제'], // 럭셔리
+  9:  ['침대', '조명', '오브제'],         // 젠 스타일
+  10: ['소파', '조명', '오브제'],         // 레트로
+  11: ['침대', '소파', '오브제'],         // 보헤미안
+  12: ['침대', '소파', '조명'],           // 프로방스
+  13: ['침대', '소파', '오브제'],         // 프렌치
+  14: ['침대', '조명', '오브제'],         // 오리엔탈
+  15: ['소파', '조명', '오브제'],         // 에스닉
+  16: ['소파', '조명', '오브제'],         // 미드센추리 모던
+  17: ['소파', '조명', '오브제'],         // 컨템포러리
+  18: ['침대', '소파', '오브제'],         // 러스틱
+  19: ['소파', '조명', '오브제'],         // 아트데코
+  20: ['침대', '소파', '오브제'],         // 셔비 시크
+  21: ['소파', '조명', '오브제'],         // 어반 모던
+  22: ['침대', '소파', '오브제'],         // 재팬디
+  23: ['소파', '조명', '오브제'],         // 코스탈
+  24: ['소파', '조명', '오브제'],         // 모로칸
+  25: ['침대', '소파', '조명', '오브제'], // 글램
+  26: ['침대', '소파', '오브제'],         // 그랜밀레니얼
+  27: ['소파', '조명', '오브제'],         // 바우하우스
+  28: ['침대', '소파', '조명', '오브제']  // 에클레틱
+};
+
+// 4가지 카테고리 아이콘 정의 (SVG 인라인 벡터)
+const CATEGORY_ICONS = [
+  {
+    key: '침대',
+    label: '침대',
+    svg: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 20v-6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v6" />
+        <path d="M2 20h20" />
+        <path d="M2 14V8a2 2 0 0 1 2-2h4v8" />
+        <rect x="10" y="8" width="12" height="6" rx="1" />
+      </svg>
+    )
+  },
+  {
+    key: '소파',
+    label: '소파',
+    svg: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v3" />
+        <path d="M2 11a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5H2v-5z" />
+        <path d="M6 19v2" />
+        <path d="M18 19v2" />
+      </svg>
+    )
+  },
+  {
+    key: '조명',
+    label: '조명',
+    svg: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 18h6" />
+        <path d="M10 22h4" />
+        <path d="M12 2a7 7 0 0 1 7 7c0 2.5-1.5 4.5-3 6H8C6.5 13.5 5 11.5 5 9a7 7 0 0 1 7-7z" />
+      </svg>
+    )
+  },
+  {
+    key: '오브제',
+    label: '오브제',
+    svg: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="4" />
+        <path d="M8 12v2a4 4 0 0 0 8 0v-2" />
+        <path d="M9 20h6" />
+        <path d="M12 16v4" />
+      </svg>
+    )
+  }
+];
+
 // DB1.csv에서 파싱된 28가지 인테리어 스타일 데이터의 대표 정제 맵
 const STYLE_DATABASE_RAW = [
   { id: 1, name: "모던", engName: "Modern", desc: "직선 위주의 군더더기 없는 세련미와 심플함", target: "2030 직장인" },
@@ -88,6 +171,7 @@ export const STYLE_DATABASE = STYLE_DATABASE_RAW.map(item => ({
 
 export default function StyleEncyclopedia({ activeId, setActiveId }) {
   const [isAutoPlay, setIsAutoPlay] = useState(true); // 도감 5초 자동 롤링 활성화 여부
+  const [selectedCategory, setSelectedCategory] = useState(null); // 선택된 카테고리 필터 (null = 전체)
 
   // 5초 간격으로 자동 회전 (사용자가 직접 클릭하지 않았을 때만 활성화)
   useEffect(() => {
@@ -150,7 +234,7 @@ export default function StyleEncyclopedia({ activeId, setActiveId }) {
         {/* 1. 좌측 웜 샌드 텍스트 패널 */}
         <div style={{
           backgroundColor: '#F1EAE4', // 시안의 부드러운 오트밀 베이지색 재현
-          padding: '56px',
+          padding: '56px 56px 130px',  // 하단 130px: 아이콘 영역 확보용
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
@@ -214,6 +298,106 @@ export default function StyleEncyclopedia({ activeId, setActiveId }) {
             <span style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--primary)' }}>
               {activeStyle.target}
             </span>
+          </div>
+
+          {/* ── 공간 카테고리 아이콘 (좌측 하단 고정) ── */}
+          <div style={{
+            position: 'absolute',
+            bottom: '28px',
+            left: '56px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+          }}>
+            <span style={{
+              fontSize: '0.7rem',
+              fontWeight: '700',
+              color: '#9A8B84',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              marginBottom: '2px'
+            }}>공간 카테고리</span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {CATEGORY_ICONS.map(cat => {
+                // 이 스타일이 해당 카테고리를 포함하는지 확인
+                const hasCategory = (STYLE_CATEGORIES[activeStyle.id] || []).includes(cat.key);
+                // 현재 선택된 카테고리와 일치하는지
+                const isSelected = selectedCategory === cat.key;
+
+                return (
+                  <button
+                    key={cat.key}
+                    title={cat.label}
+                    onClick={() => setSelectedCategory(prev => prev === cat.key ? null : cat.key)}
+                    style={{
+                      width: '52px',
+                      height: '52px',
+                      borderRadius: '14px',
+                      border: isSelected
+                        ? '2px solid var(--primary)'
+                        : hasCategory
+                          ? '1.5px solid #CDBCB2'
+                          : '1.5px dashed #D8CEC9',
+                      backgroundColor: isSelected
+                        ? 'var(--primary)'
+                        : hasCategory
+                          ? 'rgba(255,255,255,0.75)'
+                          : 'rgba(235,228,224,0.4)',
+                      color: isSelected
+                        ? '#FCFAF7'
+                        : hasCategory
+                          ? 'var(--primary)'
+                          : '#BEB0AA',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '3px',
+                      transition: 'all 0.22s ease',
+                      backdropFilter: 'blur(4px)',
+                      boxShadow: isSelected
+                        ? '0 4px 16px rgba(43,53,48,0.18)'
+                        : hasCategory
+                          ? '0 2px 8px rgba(43,53,48,0.07)'
+                          : 'none',
+                      transform: isSelected ? 'translateY(-2px)' : 'none'
+                    }}
+                    onMouseEnter={e => {
+                      if (!isSelected) {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(43,53,48,0.12)';
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!isSelected) {
+                        e.currentTarget.style.transform = 'none';
+                        e.currentTarget.style.boxShadow = hasCategory ? '0 2px 8px rgba(43,53,48,0.07)' : 'none';
+                      }
+                    }}
+                  >
+                    {cat.svg}
+                    <span style={{ fontSize: '0.6rem', fontWeight: '700', letterSpacing: '0' }}>{cat.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {/* 선택 시 해당 카테고리 보유 여부 안내 */}
+            {selectedCategory && (
+              <span style={{
+                fontSize: '0.72rem',
+                color: (STYLE_CATEGORIES[activeStyle.id] || []).includes(selectedCategory)
+                  ? 'var(--accent)'
+                  : '#BEB0AA',
+                fontWeight: '600',
+                marginTop: '2px'
+              }}>
+                {(STYLE_CATEGORIES[activeStyle.id] || []).includes(selectedCategory)
+                  ? `✔ ${activeStyle.name}에 어울리는 ${selectedCategory} 카테고리`
+                  : `✗ 이 스타일의 주요 카테고리가 아닙니다`
+                }
+              </span>
+            )}
           </div>
         </div>
 

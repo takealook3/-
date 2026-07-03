@@ -275,22 +275,6 @@ export default function App() {
           </div>
         </section>
 
-        {/* [가구 카테고리 퀵 링크 아이콘 영역: 웜 샌드 미니멀리즘 데코] */}
-        <section className="category-icons-section">
-          <div className="category-icons-container">
-            {CATEGORY_ICONS.map((item, index) => {
-              const IconComponent = item.icon;
-              return (
-                <div key={index} className="category-icon-item">
-                  <div className="category-icon-circle">
-                    <IconComponent size={22} strokeWidth={1.5} />
-                  </div>
-                  <span className="category-icon-label">{item.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
 
         {/* [28가지 인테리어 가로 트랙 슬라이딩 슬라이더 Featured Collections 큐레이션 카드] */}
         <section className="featured-collections-section">
@@ -314,7 +298,7 @@ export default function App() {
               <div 
                 className="featured-carousel-track"
                 style={{
-                  transform: `translateX(calc(-${startIndex} * (25% + 6px)))`
+                  '--start-index': startIndex
                 }}
               >
                 {STYLE_DATABASE.map((style) => (
