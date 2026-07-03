@@ -2084,6 +2084,51 @@ def detect_furniture_class(image_path: str) -> str:
     return "furniture" # 기본값
 
 
+def extract_visual_search_query_with_gemini(cropped_image_path: str) -> Optional[str]:
+    """
+    [Gemini Vision 기반 시각적 쇼핑 검색어 추출기]
+    한글 주석: 잘라낸 이미지 조각을 제미나이(Gemini 2.0-Flash)에 직접 건네주어, 
+    사진 속 형태/색상/재질을 묘사하는 정밀한 네이버 쇼핑 검색용 한국어 텍스트를 실시간 추출합니다.
+    """
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        print("⚠️ [Gemini Vision Query Extractor] 구글 API 키 설정이 없어 동적 묘사어 추출을 건너뜁니다.")
+        return None
+        
+    try:
+        import google.generativeai as genai
+        from PIL import Image as PILImage
+        
+        if not os.path.exists(cropped_image_path):
+            return None
+            
+        genai.configure(api_key=api_key)
+        c_img = PILImage.open(cropped_image_path)
+        
+        # 가벼운 플래시 모델 활용
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        
+        prompt = (
+            "이 이미지 조각에 나오는 인테리어 가구 또는 소품의 시각적 특징(종류, 세부 디자인, 색상, 재질)을 정밀 분석해서, "
+            "네이버 쇼핑에서 검색하기에 가장 적합한 실용적인 한국어 검색 키워드 1개만 생성해줘.\n"
+            "추가 설명이나 마크다운 코드 블록(``` 등)은 절대 넣지 말고, 오직 단어 조합 1개만 반환해.\n"
+            "예시: '아이보리 패브릭 1인용 안락 의자', '철제 골드 스탠드 조명', '몬스테라 세라믹 화분'"
+        )
+        
+        response = model.generate_content([c_img, prompt])
+        result_text = response.text.strip()
+        
+        # 줄바꿈 및 불필요 기호 필터링
+        result_text = result_text.replace("\n", " ").replace("\r", "").replace("`", "").strip()
+        
+        if result_text and len(result_text) < 40:
+            print(f"🎯 [Gemini Vision Query Extractor] 이미지 분석 기반 묘사 쿼리 추출 완료: '{result_text}'")
+            return result_text
+    except Exception as e:
+        print(f"⚠️ [Gemini Vision Query Extractor] 분석 중 실패: {e}")
+    return None
+
+
 def search_naver_shopping_api(query: str) -> list:
     """
     [네이버 OpenAPI 쇼핑 검색]
@@ -2398,19 +2443,30 @@ def search_similar_products(payload: Dict[str, Any]):
     # 4. [Fallback 2단계] 제미나이 구글 쇼핑 연동 실패 시 로컬 YOLOv8 객체 탐지 및 실시간 네이버 쇼핑 공식 OpenAPI 연동 시도
     if not success_search and cropped_img_path and os.path.exists(cropped_img_path):
         try:
-            print("🔍 [Product Search Fallback] 2단계 로컬 YOLOv8 객체 탐지 기동 중...")
-            detected_cat = detect_furniture_class(cropped_img_path)
+            search_query = None
             
-            # 탐지된 영문 가구 클래스에 따라 네이버 쇼핑용 한글 검색 쿼리 매핑
-            query_map = {
-                "sofa": "인테리어 소파",
-                "bed": "모던 침대",
-                "table": "원목 식탁",
-                "chair": "디자인 의자",
-                "lighting": "플로어 스탠드 조명",
-                "plant": "인테리어 화분 식물"
-            }
-            search_query = query_map.get(detected_cat, "인테리어 가구")
+            # 1순위: Gemini Vision 기반 동적 묘사 쿼리 추출 시도 (카테고리 제약 탈피)
+            try:
+                print("🔍 [Product Search Fallback] 1순위 Gemini Vision 기반 시각적 검색어 추출 시작...")
+                search_query = extract_visual_search_query_with_gemini(cropped_img_path)
+            except Exception as vision_err:
+                print(f"⚠️ [Product Search Fallback] Gemini Vision 검색어 추출 에러: {vision_err}")
+                
+            # 2순위: Gemini Vision 실패 시, 로컬 YOLOv8 기반 기본 카테고리 매핑 작동
+            if not search_query:
+                print("🔍 [Product Search Fallback] 2순위 로컬 YOLOv8 객체 탐지 및 기본 키워드 매칭 기동...")
+                detected_cat = detect_furniture_class(cropped_img_path)
+                
+                # 탐지된 영문 가구 클래스에 따라 네이버 쇼핑용 한글 검색 쿼리 매핑
+                query_map = {
+                    "sofa": "인테리어 소파",
+                    "bed": "모던 침대",
+                    "table": "원목 식탁",
+                    "chair": "디자인 의자",
+                    "lighting": "플로어 스탠드 조명",
+                    "plant": "인테리어 화분 식물"
+                }
+                search_query = query_map.get(detected_cat, "인테리어 가구")
             
             print(f"🛍️ [Product Search Fallback] 2단계 실시간 네이버 공식 OpenAPI 호출 (검색어: '{search_query}')")
             api_items = search_naver_shopping_api(search_query)
