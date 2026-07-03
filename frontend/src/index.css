@@ -130,38 +130,44 @@ body {
 
 /* 히어로 내부 텍스트 글래스모피즘 박스 */
 .hero-overlay {
-  max-width: 600px;
+  max-width: 560px; /* 420px × 4/3 확대 */
   background-color: rgba(28, 23, 20, 0.72);
-  /* 가려진 부분의 자연스러운 배경 투과를 위해 블러 심도를 24px로 부드럽게 설정 */
   backdrop-filter: blur(24px) saturate(120%);
   -webkit-backdrop-filter: blur(24px) saturate(120%);
   border: 1px solid var(--border-color);
-  padding: 48px;
-  border-radius: 20px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  padding: 38px 48px; /* 28×4/3, 36×4/3 */
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
   z-index: 10;
 }
 
 .hero-title {
   font-family: 'Playfair Display', serif;
-  font-size: 2.8rem;
+  font-size: 2.4rem; /* 1.8 × 4/3 = 2.4rem */
   font-weight: 800;
   color: #FCFAF7;
   margin-bottom: 16px;
   letter-spacing: -0.01em;
-  line-height: 1.15;
+  line-height: 1.2;
 }
 
 .hero-subtitle {
   color: #D3C2B5;
-  font-size: 1.05rem;
-  line-height: 1.65;
-  margin-bottom: 32px;
+  font-size: 1.13rem; /* 0.85 × 4/3 = 1.13rem */
+  line-height: 1.6;
+  margin-bottom: 28px;
 }
 
 .hero-buttons {
   display: flex;
-  gap: 16px;
+  gap: 12px;
+}
+
+/* 좁아진 히어로 상자 내부에 알맞은 컴팩트 버튼 패딩 적용 */
+.hero-overlay .btn {
+  padding: 14px 28px; /* 10×4/3, 20×4/3 */
+  font-size: 1.09rem; /* 0.82 × 4/3 = 1.09rem */
+  border-radius: 8px;
 }
 
 /* 5. 카드 공통 스타일 - 포근한 웜 크림 아이보리 */
@@ -482,4 +488,337 @@ body {
 .toolbar-btn:hover {
   background-color: var(--bg-card-inner);
   border-color: var(--primary);
+}
+
+/* =====================================================================
+ * [가구 카테고리 아이콘 영역 스타일링: 오트밀 미니멀리즘 데코]
+ * ===================================================================== */
+.category-icons-section {
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  background-color: #FCFAF7; /* 맑고 화사한 크림 아이보리 배경 */
+  padding: 48px 10% 32px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.category-icons-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap; /* 모바일 반응형 자동 꺾임 */
+}
+
+.category-icon-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 90px;
+  transition: all 0.3s ease;
+}
+
+.category-icon-circle {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background-color: #F5EFEB; /* 시안 속 옅은 베이지 서클 배경 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary); /* 진한 에스프레소 브라운 */
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(46, 40, 36, 0.02);
+}
+
+.category-icon-item:hover .category-icon-circle {
+  transform: translateY(-6px);
+  background-color: var(--primary); /* 호버 시 가독성 반전 기법 */
+  color: #FCFAF7;
+  box-shadow: 0 12px 24px rgba(46, 40, 36, 0.12);
+}
+
+.category-icon-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+  transition: color 0.3s ease;
+}
+
+.category-icon-item:hover .category-icon-label {
+  color: var(--accent); /* 포인트 골드 브론즈 색상 전환 */
+}
+
+/* =====================================================================
+ * [Featured Collections 큐레이션 추천 카드 스타일링: Unsplash 고화질 뷰어]
+ * ===================================================================== */
+.featured-collections-section {
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  background-color: #FCFAF7;
+  padding: 64px 10%;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.featured-header {
+  text-align: center;
+}
+
+.featured-sub {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.featured-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: -0.01em;
+}
+
+.featured-grid {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+
+.featured-card {
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 24px rgba(46, 40, 36, 0.02);
+  display: flex;
+  flex-direction: column;
+}
+
+.featured-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 24px 48px rgba(46, 40, 36, 0.08);
+  border-color: rgba(132, 104, 83, 0.4);
+}
+
+.featured-card-img-wrapper {
+  width: 100%;
+  height: 220px;
+  overflow: hidden;
+  position: relative;
+  background-color: #F5EFEB;
+}
+
+.featured-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.featured-card:hover .featured-card-img {
+  transform: scale(1.05); /* 마이크로 줌인 인터랙션 */
+}
+
+.featured-card-no-img {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.featured-card-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.featured-card-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+}
+
+.featured-card-link {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  transition: color 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.featured-card:hover .featured-card-link {
+  color: var(--primary);
+}
+
+/* 모바일 및 태블릿 반응형 레이아웃 튜닝 */
+@media (max-width: 1024px) {
+  .featured-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .featured-grid {
+    grid-template-columns: 1fr;
+  }
+  .category-icons-container {
+    justify-content: center;
+    gap: 24px;
+  }
+}
+
+/* =====================================================================
+ * [Featured Collections 카루셀 래퍼 및 이전/다음 화살표 플로팅 버튼]
+ * ===================================================================== */
+.featured-carousel-wrapper {
+  position: relative;
+  max-width: 1300px; /* 1200px 카드 그리드 바깥에 화살표가 플로팅될 수 있게 넉넉히 설정 */
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 60px; /* 화살표 버튼의 absolute 배치를 위한 좌우 여백 */
+}
+
+.carousel-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background-color: #F5EFEB; /* 시안 속 옅은 베이지 서클 배경 재현 */
+  border: 1px solid var(--border-color);
+  color: var(--primary); /* 진한 에스프레소 브라운 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(46, 40, 36, 0.05);
+}
+
+.carousel-arrow:hover {
+  background-color: var(--primary); /* 호버 시 색상 반전 기법 */
+  color: #FCFAF7;
+  transform: translateY(-50%) scale(1.05);
+  box-shadow: 0 8px 20px rgba(46, 40, 36, 0.15);
+}
+
+.carousel-arrow:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.carousel-arrow.prev {
+  left: 0;
+}
+
+.carousel-arrow.next {
+  right: 0;
+}
+
+/* 태블릿/모바일 반응형 조율 */
+@media (max-width: 768px) {
+  .featured-carousel-wrapper {
+    padding: 0 24px;
+  }
+  .carousel-arrow {
+    width: 42px;
+    height: 42px;
+  }
+  .carousel-arrow.prev {
+    left: -4px;
+  }
+  .carousel-arrow.next {
+    right: -4px;
+  }
+}
+
+/* =====================================================================
+ * [Featured Collections 부드러운 가로 슬라이더 뷰포트 및 트랙 레일]
+ * ===================================================================== */
+.featured-carousel-viewport {
+  --card-width: 282px; /* 데스크탑 기본: (1200px - (3 * 24px)) / 4 = 282px */
+  --gap-width: 24px;
+  max-width: 1200px;
+  width: 100%;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.featured-carousel-track {
+  display: flex;
+  gap: var(--gap-width);
+  transition: transform 0.65s cubic-bezier(0.25, 1, 0.5, 1); /* 쫀득하고 찰진 이징 함수 감속 모션 */
+  width: max-content;
+  transform: translateX(calc(-1 * var(--start-index) * (var(--card-width) + var(--gap-width))));
+}
+
+/* 트랙 내부에서 변수 기반으로 카드 가로 너비 고정 */
+.featured-carousel-track .featured-card {
+  flex: 0 0 var(--card-width);
+  width: var(--card-width);
+}
+
+/* 태블릿 반응형 (1024px 이하): 한 화면에 카드 2개 보장 */
+@media (max-width: 1024px) {
+  .featured-carousel-viewport {
+    --card-width: calc((100vw - 160px - 24px) / 2); /* 패딩 160px 및 갭 24px 제외 2열 나열 */
+    --gap-width: 24px;
+  }
+}
+
+/* 모바일 반응형 (600px 이하): 한 화면에 카드 1개 보장 */
+@media (max-width: 600px) {
+  .featured-carousel-viewport {
+    --card-width: calc(100vw - 120px); /* 모바일 여백 제외 1열 꽉 채움 */
+    --gap-width: 0px;
+  }
+}
+
+/* =====================================================================
+ * [챗봇 추천 질문 칩 가로 스크롤바 숨김 (스크롤 기능은 유지)]
+ * ===================================================================== */
+.quick-chips-container {
+  padding: 10px 14px;
+  background-color: #FCFAF7;
+  border-top: 1px solid #CDBCB2;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  white-space: nowrap;
+  -ms-overflow-style: none;  /* IE and Edge: 스크롤바 제거 */
+  scrollbar-width: none;  /* Firefox: 스크롤바 제거 */
+}
+
+.quick-chips-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera: 스크롤바 제거 */
 }

@@ -102,158 +102,173 @@ export default function ChatWidget({ sessionId, imageId, onGenerateSuccess, onEr
   };
 
   return (
-    <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 9999, fontFamily: 'Outfit, sans-serif' }}>
-      {/* 1. 플로팅 아이콘 버튼 */}
-      {!isOpen && (
-        <button
-          onClick={() => setIsOpen(true)}
-          style={{
-            backgroundColor: '#2B3530',
-            color: '#FCFAF7',
-            border: 'none',
-            borderRadius: '50px',
-            padding: '14px 26px',
-            fontSize: '0.95rem',
-            fontWeight: '600',
-            cursor: 'pointer',
-            boxShadow: '0 8px 24px rgba(43, 53, 48, 0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            transition: 'all 0.25s ease'
-          }}
-          onMouseEnter={(e) => { 
-            e.currentTarget.style.transform = 'translateY(-2px)'; 
-            e.currentTarget.style.backgroundColor = '#19201C';
-          }}
-          onMouseLeave={(e) => { 
-            e.currentTarget.style.transform = 'translateY(0)'; 
-            e.currentTarget.style.backgroundColor = '#2B3530';
-          }}
-        >
-          <span style={{ fontSize: '1.2rem' }}>💬</span>
-          <span>AI 인테리어 취향 상담</span>
-        </button>
-      )}
+    <>
+      {/* 1. [플로팅 아이콘 버튼: 상시 렌더링 및 iOS 감성 작아짐 트랜지션] */}
+      <button
+        onClick={() => setIsOpen(true)}
+        style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          zIndex: 9999,
+          fontFamily: 'Outfit, sans-serif',
+          backgroundColor: '#2B3530',
+          color: '#FCFAF7',
+          border: 'none',
+          borderRadius: '50px',
+          padding: '14px 26px',
+          fontSize: '0.95rem',
+          fontWeight: '600',
+          cursor: 'pointer',
+          boxShadow: '0 8px 24px rgba(43, 53, 48, 0.2)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          opacity: isOpen ? 0 : 1, // 오픈 시 부드럽게 감춤
+          transform: isOpen ? 'translateY(15px) scale(0.7)' : 'translateY(0) scale(1)', // 아래로 내려앉으며 작아짐
+          visibility: isOpen ? 'hidden' : 'visible',
+          pointerEvents: isOpen ? 'none' : 'auto',
+          transition: 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s, visibility 0.45s, background-color 0.25s'
+        }}
+        onMouseEnter={(e) => { 
+          e.currentTarget.style.backgroundColor = '#19201C';
+        }}
+        onMouseLeave={(e) => { 
+          e.currentTarget.style.backgroundColor = '#2B3530';
+        }}
+      >
+        <span style={{ fontSize: '1.2rem' }}>💬</span>
+        <span>AI 인테리어 취향 상담</span>
+      </button>
 
-      {/* 2. 메신저 대화창 패널 */}
-      {isOpen && (
+      {/* 2. [메신저 대화창 패널: 상시 렌더링 및 iOS 찰진 줌인 팝업 트랜지션] */}
+      <div style={{
+        position: 'fixed',
+        bottom: '24px',
+        right: '24px',
+        zIndex: 9999,
+        fontFamily: 'Outfit, sans-serif',
+        width: '380px',
+        height: '560px',
+        backgroundColor: '#FCFAF7',
+        border: '1px solid #CDBCB2',
+        borderRadius: '20px',
+        borderTopLeftRadius: '30px', /* 완만한 아치형 상단 게이트 */
+        borderTopRightRadius: '30px',
+        boxShadow: '0 16px 40px rgba(43, 53, 48, 0.12)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        opacity: isOpen ? 1 : 0, // 오픈 시 밝아짐
+        transform: isOpen ? 'scale(1) translate3d(0, 0, 0)' : 'scale(0.12) translate3d(120px, 200px, 0)', // 우하단 기점에서 솟구침
+        transformOrigin: 'bottom right', // 팝업 출발점을 우측 하단 버튼으로 세팅
+        visibility: isOpen ? 'visible' : 'hidden',
+        pointerEvents: isOpen ? 'auto' : 'none',
+        transition: 'transform 0.48s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.38s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.48s'
+      }}>
+        {/* 상단 헤더 바 */}
         <div style={{
-          width: '380px',
-          height: '560px',
-          backgroundColor: '#FCFAF7',
-          border: '1px solid #CDBCB2',
-          borderRadius: '20px',
-          borderTopLeftRadius: '30px', /* 완만한 아치형 상단 게이트 */
-          borderTopRightRadius: '30px',
-          boxShadow: '0 16px 40px rgba(43, 53, 48, 0.12)',
+          backgroundColor: '#2B3530',
+          padding: '16px 20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          borderBottom: '1px solid #CDBCB2'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '1.2rem' }}>🎨</span>
+            <div>
+              <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#FCFAF7', fontFamily: 'Outfit, sans-serif' }}>AI 취향 & 추구미 스타일리스트</div>
+              <div style={{ fontSize: '0.75rem', color: '#C7B7AE' }}>나만의 인테리어 취향 맞춤 상담</div>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsOpen(false)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#C7B7AE',
+              fontSize: '1.2rem',
+              cursor: 'pointer',
+              padding: '4px',
+              transition: 'color 0.2s'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#FCFAF7'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#C7B7AE'; }}
+            title="닫기"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* 대화 목록 영역 */}
+        <div style={{
+          flex: 1,
+          padding: '16px',
+          overflowY: 'auto',
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden'
+          gap: '14px',
+          backgroundColor: '#F3EBE5'
         }}>
-          {/* 상단 헤더 바 */}
-          <div style={{
-            backgroundColor: '#2B3530',
-            padding: '16px 20px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            borderBottom: '1px solid #CDBCB2'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.2rem' }}>🎨</span>
-              <div>
-                <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#FCFAF7', fontFamily: 'Outfit, sans-serif' }}>AI 취향 & 추구미 스타일리스트</div>
-                <div style={{ fontSize: '0.75rem', color: '#C7B7AE' }}>나만의 인테리어 취향 맞춤 상담</div>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsOpen(false)}
+          {messages.map((msg, idx) => (
+            <div
+              key={idx}
               style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#C7B7AE',
-                fontSize: '1.2rem',
-                cursor: 'pointer',
-                padding: '4px',
-                transition: 'color 0.2s'
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start',
+                width: '100%'
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = '#FCFAF7'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = '#C7B7AE'; }}
-              title="닫기"
             >
-              ✕
-            </button>
-          </div>
-
-          {/* 대화 목록 영역 */}
-          <div style={{
-            flex: 1,
-            padding: '16px',
-            overflowY: 'auto',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '14px',
-            backgroundColor: '#F3EBE5'
-          }}>
-            {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: msg.sender === 'user' ? 'flex-end' : 'flex-start',
-                  width: '100%'
-                }}
-              >
-                <div style={{
-                  maxWidth: '85%',
-                  padding: '12px 16px',
-                  borderRadius: msg.sender === 'user' ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
-                  backgroundColor: msg.sender === 'user' ? '#2B3530' : '#FCFAF7',
-                  color: msg.sender === 'user' ? '#FCFAF7' : '#2A2825',
-                  border: msg.sender === 'user' ? 'none' : '1px solid #CDBCB2',
-                  fontSize: '0.9rem',
-                  lineHeight: '1.5',
-                  boxShadow: '0 2px 6px rgba(43, 53, 48, 0.05)'
-                }}>
-                  {msg.text}
-                </div>
-
-                {msg.image_url && (
-                  <div 
-                    style={{
-                      marginTop: '8px',
-                      maxWidth: '85%',
-                      borderRadius: '12px',
-                      overflow: 'hidden',
-                      boxShadow: '0 4px 15px rgba(43, 53, 48, 0.1)',
-                      border: '1px solid #CDBCB2',
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => setActiveImageUrl(msg.image_url)}
-                    title="클릭하여 크게 보기"
-                  >
-                    <img 
-                      src={msg.image_url} 
-                      alt="스타일 이미지" 
-                      style={{
-                        width: '100%',
-                        height: 'auto',
-                        display: 'block',
-                        objectFit: 'cover',
-                        transition: 'transform 0.25s ease'
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                      }}
-                    />
-                  </div>
-                )}
+              <div style={{
+                maxWidth: '85%',
+                padding: '12px 16px',
+                borderRadius: msg.sender === 'user' ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
+                backgroundColor: msg.sender === 'user' ? '#2B3530' : '#FCFAF7',
+                color: msg.sender === 'user' ? '#FCFAF7' : '#2A2825',
+                border: msg.sender === 'user' ? 'none' : '1px solid #CDBCB2',
+                fontSize: '0.9rem',
+                lineHeight: '1.5',
+                boxShadow: '0 2px 6px rgba(43, 53, 48, 0.05)'
+              }}>
+                {msg.text}
               </div>
-            ))}
+
+              {msg.image_url && (
+                <div 
+                  style={{
+                    marginTop: '8px',
+                    maxWidth: '85%',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    boxShadow: '0 4px 15px rgba(43, 53, 48, 0.1)',
+                    border: '1px solid #CDBCB2',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => setActiveImageUrl(msg.image_url)}
+                  title="클릭하여 크게 보기"
+                >
+                  <img 
+                    src={msg.image_url} 
+                    alt="스타일 이미지" 
+                    style={{
+                      width: '100%',
+                      height: 'auto',
+                      display: 'block',
+                      objectFit: 'cover',
+                      transition: 'transform 0.25s ease'
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
 
             {loading && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#7A6C62', fontSize: '0.85rem', paddingLeft: '8px' }}>
@@ -261,97 +276,88 @@ export default function ChatWidget({ sessionId, imageId, onGenerateSuccess, onEr
               </div>
             )}
 
-            <div ref={messagesEndRef} />
-          </div>
+          <div ref={messagesEndRef} />
+        </div>
 
-          {/* 추천 질문 칩 (Quick Chips) 영역 */}
-          <div style={{
-            padding: '10px 14px',
+        {/* 추천 질문 칩 (Quick Chips) 영역 */}
+        <div className="quick-chips-container">
+          {QUICK_QUESTIONS.map((qText, qIdx) => (
+            <button
+              key={qIdx}
+              onClick={() => handleSend(qText)}
+              disabled={loading}
+              style={{
+                background: '#F3EBE5',
+                border: '1px solid #CDBCB2',
+                color: '#2A2825',
+                padding: '6px 12px',
+                borderRadius: '12px',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                flexShrink: 0,
+                transition: 'all 0.2s ease',
+                fontWeight: '500'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E2D7CF'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F3EBE5'; }}
+            >
+              {qText}
+            </button>
+          ))}
+        </div>
+
+        {/* 하단 입력 영역 */}
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+          style={{
+            padding: '12px',
             backgroundColor: '#FCFAF7',
             borderTop: '1px solid #CDBCB2',
             display: 'flex',
-            gap: '6px',
-            overflowX: 'auto',
-            whiteSpace: 'nowrap'
-          }}>
-            {QUICK_QUESTIONS.map((qText, qIdx) => (
-              <button
-                key={qIdx}
-                onClick={() => handleSend(qText)}
-                disabled={loading}
-                style={{
-                  background: '#F3EBE5',
-                  border: '1px solid #CDBCB2',
-                  color: '#2A2825',
-                  padding: '6px 12px',
-                  borderRadius: '12px',
-                  fontSize: '0.75rem',
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                  transition: 'all 0.2s ease',
-                  fontWeight: '500'
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E2D7CF'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F3EBE5'; }}
-              >
-                {qText}
-              </button>
-            ))}
-          </div>
-
-          {/* 하단 입력 영역 */}
-          <form
-            onSubmit={(e) => { e.preventDefault(); handleSend(); }}
+            gap: '8px'
+          }}
+        >
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="취향이나 스타일링 팁을 물어보세요..."
+            disabled={loading}
             style={{
-              padding: '12px',
-              backgroundColor: '#FCFAF7',
-              borderTop: '1px solid #CDBCB2',
-              display: 'flex',
-              gap: '8px'
+              flex: 1,
+              backgroundColor: '#F3EBE5',
+              border: '1px solid #CDBCB2',
+              borderRadius: '8px',
+              padding: '10px 12px',
+              color: '#2A2825',
+              fontSize: '0.85rem',
+              outline: 'none',
+              transition: 'border-color 0.2s'
             }}
+            onFocus={(e) => e.target.style.borderColor = '#2B3530'}
+            onBlur={(e) => e.target.style.borderColor = '#CDBCB2'}
+          />
+          <button
+            type="submit"
+            disabled={loading || !input.trim()}
+            style={{
+              backgroundColor: loading || !input.trim() ? '#C7B7AE' : '#2B3530',
+              color: '#FCFAF7',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '0 18px',
+              fontWeight: '600',
+              fontSize: '0.85rem',
+              cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseEnter={(e) => { if (!loading && input.trim()) e.currentTarget.style.backgroundColor = '#19201C'; }}
+            onMouseLeave={(e) => { if (!loading && input.trim()) e.currentTarget.style.backgroundColor = '#2B3530'; }}
           >
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="취향이나 스타일링 팁을 물어보세요..."
-              disabled={loading}
-              style={{
-                flex: 1,
-                backgroundColor: '#F3EBE5',
-                border: '1px solid #CDBCB2',
-                borderRadius: '8px',
-                padding: '10px 12px',
-                color: '#2A2825',
-                fontSize: '0.85rem',
-                outline: 'none',
-                transition: 'border-color 0.2s'
-              }}
-              onFocus={(e) => e.target.style.borderColor = '#2B3530'}
-              onBlur={(e) => e.target.style.borderColor = '#CDBCB2'}
-            />
-            <button
-              type="submit"
-              disabled={loading || !input.trim()}
-              style={{
-                backgroundColor: loading || !input.trim() ? '#C7B7AE' : '#2B3530',
-                color: '#FCFAF7',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0 18px',
-                fontWeight: '600',
-                fontSize: '0.85rem',
-                cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
-                transition: 'background-color 0.2s'
-              }}
-              onMouseEnter={(e) => { if (!loading && input.trim()) e.currentTarget.style.backgroundColor = '#19201C'; }}
-              onMouseLeave={(e) => { if (!loading && input.trim()) e.currentTarget.style.backgroundColor = '#2B3530'; }}
-            >
-              전송
-            </button>
-          </form>
-        </div>
-      )}
+            전송
+          </button>
+        </form>
+      </div>
 
       {/* 이미지 확대 모달(라이트박스) */}
       {activeImageUrl && (
@@ -424,6 +430,6 @@ export default function ChatWidget({ sessionId, imageId, onGenerateSuccess, onEr
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
