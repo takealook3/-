@@ -167,9 +167,9 @@ def _load_db1_style_context(style_keyword: str) -> str:
                     feat1 = row[3].strip() if len(row) > 3 else ""
                     feat2 = row[4].strip() if len(row) > 4 else ""
                     feat3 = row[5].strip() if len(row) > 5 else ""
-                    wallpaper = row[7].strip() if len(row) > 7 else ""
-                    floor = row[8].strip() if len(row) > 8 else ""
-                    target = row[21].strip() if len(row) > 21 else ""
+                    wallpaper = row[14].strip() if len(row) > 14 else ""
+                    floor = row[16].strip() if len(row) > 16 else ""
+                    target = row[29].strip() if len(row) > 29 else ""
                     
                     context_text = (
                         f"[스타일: {style_ko} ({style_en})]\n"

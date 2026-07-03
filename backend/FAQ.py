@@ -533,23 +533,23 @@ def load_style_documents() -> list:
                         if match:
                             image_url = match.group(1)
                             
-                    wallpaper = row[7].strip()
-                    flooring = row[8].strip()
-                    wallpaper_weather = row[9].strip()
-                    flooring_weather = row[10].strip()
+                    wallpaper = row[14].strip() if len(row) > 14 else ""
+                    flooring = row[16].strip() if len(row) > 16 else ""
+                    wallpaper_weather = row[18].strip() if len(row) > 18 else ""
+                    flooring_weather = row[19].strip() if len(row) > 19 else ""
                     
-                    wallpaper_labor = row[11].strip()
-                    wallpaper_material_cost = row[12].strip()
-                    flooring_labor = row[13].strip()
-                    flooring_material_cost = row[14].strip()
+                    wallpaper_labor = row[20].strip() if len(row) > 20 else ""
+                    wallpaper_material_cost = row[21].strip() if len(row) > 21 else ""
+                    flooring_labor = row[22].strip() if len(row) > 22 else ""
+                    flooring_material_cost = row[23].strip() if len(row) > 23 else ""
                     
-                    precautions = row[15].strip()
+                    precautions = row[24].strip() if len(row) > 24 else ""
                     
                     target_customer = ""
                     difficulty = ""
-                    if len(row) > 21:
-                        target_customer = row[20].strip()
-                        difficulty = row[21].strip()
+                    if len(row) > 30:
+                        target_customer = row[29].strip()
+                        difficulty = row[30].strip()
                         
                     page_content = f"# 인테리어 스타일: {style_ko} ({style_en})\n"
                     page_content += f"- 주요 특징: {feat1}, {feat2}, {feat3}\n"
