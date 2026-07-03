@@ -28,9 +28,9 @@ services:
       - "8188:8188"
     volumes:
       # 로컬에 다운로드 완료된 AI 모델 폴더를 컨테이너 내부로 그대로 공유 마운트
-      - C:/Users/USER/Desktop/ComfyUI_windows_portable_nvidia/ComfyUI_windows_portable/ComfyUI/models:/home/user/ComfyUI/models
-      - C:/Users/USER/Desktop/ComfyUI_windows_portable_nvidia/ComfyUI_windows_portable/ComfyUI/input:/home/user/ComfyUI/input
-      - C:/Users/USER/Desktop/ComfyUI_windows_portable_nvidia/ComfyUI_windows_portable/ComfyUI/output:/home/user/ComfyUI/output
+      - ${COMFYUI_PATH}/ComfyUI/models:/home/user/ComfyUI/models
+      - ${COMFYUI_PATH}/ComfyUI/input:/home/user/ComfyUI/input
+      - ${COMFYUI_PATH}/ComfyUI/output:/home/user/ComfyUI/output
     deploy:
       resources:
         reservations:

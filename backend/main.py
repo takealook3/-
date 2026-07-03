@@ -155,6 +155,18 @@ from schemas import (
 app = FastAPI(title="ZipPT API - 종합 이미지 복원 & 편집 & 대화 서비스")
 
 # =====================================================================
+# [ComfyUI 로컬 실행 경로 환경설정]
+# =====================================================================
+COMFYUI_PATH = os.getenv(
+    "COMFYUI_PATH",
+    r"C:\Users\USER\Desktop\ComfyUI_windows_portable_nvidia\ComfyUI_windows_portable"
+)
+COMFYUI_INPUT_DIR = os.path.join(COMFYUI_PATH, "ComfyUI", "input")
+COMFYUI_OUTPUT_DIR = os.path.join(COMFYUI_PATH, "ComfyUI", "output")
+COMFYUI_MODEL_PATH = os.path.join(COMFYUI_PATH, "ComfyUI", "models", "checkpoints", "realisticVisionV60B1_v51HyperVAE.safetensors")
+
+
+# =====================================================================
 # [CORS 미들웨어 설정]
 # 비유: 백엔드 서버라는 성문 입구에서, 프론트엔드(React, 5173 포트)라는
 # 반가운 사절단이 안전하게 통행할 수 있도록 출입증을 발급해 주는 역할을 합니다.
@@ -502,9 +514,8 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                             print(f"🎨 [comfyui_API] 마스크 이미지를 RGB(R채널 마스크)로 변환 완료: {mask_filename}")
                             
                             # 변환된 마스크 파일을 ComfyUI input 폴더에 덮어쓰기 복사
-                            comfy_input_dir = "C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia\\ComfyUI_windows_portable\\ComfyUI\\input"
-                            if os.path.exists(comfy_input_dir):
-                                shutil.copy(mask_full_path, os.path.join(comfy_input_dir, mask_filename))
+                            if os.path.exists(COMFYUI_INPUT_DIR):
+                                shutil.copy(mask_full_path, os.path.join(COMFYUI_INPUT_DIR, mask_filename))
                                 print(f"📁 [comfyui_API] 변환된 마스크 파일을 ComfyUI input 폴더에 복사 완료.")
                     except Exception as e:
                         print(f"⚠️ [comfyui_API] 마스크 이미지 RGB 변환 중 에러: {e}")
@@ -559,9 +570,43 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
             
             # 4. 아웃풋 파일명 접두사 설정 (SaveImage: Node 9)
             prompt_api_data["9"]["inputs"]["filename_prefix"] = f"ComfyUI_inpaint_{int(time.time())}"
+        
+        # 고해상도 입력 이미지 리사이징 헬퍼 함수 정의
+        def copy_and_resize_image(src_path: str, dest_path: str) -> None:
+            try:
+                from PIL import Image
+                with Image.open(src_path) as img:
+                    w, h = img.size
+                    max_dim = 1024
+                    if max(w, h) > max_dim:
+                        if w > h:
+                            new_w = max_dim
+                            new_h = int(h * (max_dim / w))
+                        else:
+                            new_h = max_dim
+                            new_w = int(w * (max_dim / h))
+                        
+                        try:
+                            resample_filter = Image.Resampling.LANCZOS
+                        except AttributeError:
+                            resample_filter = Image.ANTIALIAS
+                        
+                        resized_img = img.resize((new_w, new_h), resample_filter)
+                        save_format = img.format if img.format else "JPEG"
+                        if save_format == "JPEG" or dest_path.lower().endswith((".jpg", ".jpeg")):
+                            resized_img.save(dest_path, "JPEG", quality=90)
+                        else:
+                            resized_img.save(dest_path, format=save_format)
+                        print(f"📁 [ComfyUI API] 고해상도 이미지 리사이징 복사 완료: {os.path.basename(src_path)} ({w}x{h} -> {new_w}x{new_h})")
+                    else:
+                        shutil.copy(src_path, dest_path)
+                        print(f"📁 [ComfyUI API] input 파일 복사 완료 (리사이징 미필요): {os.path.basename(src_path)}")
+            except Exception as img_err:
+                print(f"⚠️ [ComfyUI API] 이미지 리사이징 중 오류 발생, 일반 복사 수행: {img_err}")
+                shutil.copy(src_path, dest_path)
+
         # ComfyUI input 디렉터리에 이미지 파일 복사 (PROJECT_ROOT 절대경로 기준)
-        comfy_input_dir = "C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia\\ComfyUI_windows_portable\\ComfyUI\\input"
-        if os.path.exists(comfy_input_dir):
+        if os.path.exists(COMFYUI_INPUT_DIR):
             for key, filename in parameters.items():
                 if isinstance(filename, str) and (filename.endswith(".jpg") or filename.endswith(".jpeg") or filename.endswith(".png")):
                     # uploads, results 등 폴더를 순회하며 파일 복사
@@ -569,8 +614,7 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                     for folder in ("uploads", "results"):
                         src_path = os.path.join(PROJECT_ROOT, folder, filename)
                         if os.path.exists(src_path):
-                            shutil.copy(src_path, os.path.join(comfy_input_dir, filename))
-                            print(f"📁 [ComfyUI API] input 파일 복사 완료: {filename} (from {folder})")
+                            copy_and_resize_image(src_path, os.path.join(COMFYUI_INPUT_DIR, filename))
                             copied = True
                             break
                     if not copied:
@@ -578,8 +622,7 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                         for folder in ("uploads", "results"):
                             src_path = os.path.join(folder, filename)
                             if os.path.exists(src_path):
-                                shutil.copy(src_path, os.path.join(comfy_input_dir, filename))
-                                print(f"📁 [ComfyUI API] input 파일 복사 완료: {filename} (CWD {folder})")
+                                copy_and_resize_image(src_path, os.path.join(COMFYUI_INPUT_DIR, filename))
                                 break
                                     
 
@@ -590,8 +633,8 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
             return None
         print(f"🚀 [ComfyUI API] 작업 제출완료. Prompt ID: {prompt_id}")
         history_url = f"{COMFYUI_API_URL}/history/{prompt_id}"
-        # 최대 120초 대기 (이미지 생성에 시간이 걸림)
-        for _ in range(120):
+        # 최대 120초 대기 (0.3초 단위 폴링하므로 약 400회 루프)
+        for _ in range(400):
             h_res = requests.get(history_url, timeout=5)
             h_data = h_res.json()
             if prompt_id in h_data:
@@ -599,17 +642,14 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                 for node_id, out_data in outputs.items():
                     if "images" in out_data:
                         filename = out_data["images"][0].get("filename")
-                        comfy_out_path = os.path.join(
-                            "C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia"
-                            "\\ComfyUI_windows_portable\\ComfyUI\\output", filename
-                        )
+                        comfy_out_path = os.path.join(COMFYUI_OUTPUT_DIR, filename)
                         os.makedirs(os.path.join(PROJECT_ROOT, "results"), exist_ok=True)
                         if os.path.exists(comfy_out_path):
                             dest_path = os.path.join(PROJECT_ROOT, "results", filename)
                             shutil.copy(comfy_out_path, dest_path)
                             print(f"🟢 [ComfyUI API] 완료본 복사완료: {dest_path}")
                         return filename
-            time.sleep(1)
+            time.sleep(0.3)
     except Exception as e:
         print(f"⚠️ [ComfyUI API Error] Fallback 작동: {e}")
     return None
@@ -1243,7 +1283,7 @@ async def generate_interior_image(request: Request):
         try:
             sys.path.append(PROJECT_ROOT)
             import sd_tutorial
-            sd_model_path = r"C:\Users\USER\Desktop\ComfyUI_windows_portable_nvidia\ComfyUI_windows_portable\ComfyUI\models\checkpoints\realisticVisionV60B1_v51HyperVAE.safetensors"
+            sd_model_path = COMFYUI_MODEL_PATH
             
             if os.path.exists(sd_model_path) and os.path.exists(orig_path):
                 sd_tutorial.run_interior_style_change(
@@ -1434,7 +1474,7 @@ def generate_image(req: ImageGenerateRequest):
         try:
             sys.path.append(PROJECT_ROOT)
             import sd_tutorial
-            sd_model_path = r"C:\Users\USER\Desktop\ComfyUI_windows_portable_nvidia\ComfyUI_windows_portable\ComfyUI\models\checkpoints\realisticVisionV60B1_v51HyperVAE.safetensors"
+            sd_model_path = COMFYUI_MODEL_PATH
             
             if os.path.exists(sd_model_path) and os.path.exists(orig_path):
                 sd_tutorial.run_interior_style_change(
@@ -1750,10 +1790,9 @@ def edit_image(req: ImageEditRequest):
         print(f"⚠️ [Masking] 마스크 채널 생성 중 에러 발생: {e}")
         
     # 실제 포터블 ComfyUI input 디렉토리 절대경로 지정하여 흑백 마스크 파일 복사
-    comfy_input_dir = "C:\\Users\\USER\\Desktop\\ComfyUI_windows_portable_nvidia\\ComfyUI_windows_portable\\ComfyUI\\input"
-    if os.path.exists(comfy_input_dir) and os.path.exists(mask_path):
+    if os.path.exists(COMFYUI_INPUT_DIR) and os.path.exists(mask_path):
         import shutil
-        shutil.copy(mask_path, os.path.join(comfy_input_dir, mask_filename))
+        shutil.copy(mask_path, os.path.join(COMFYUI_INPUT_DIR, mask_filename))
         print(f"📁 [ComfyUI API] mask 파일 복사 완료: {mask_filename}")
         
     parameters = {

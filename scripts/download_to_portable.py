@@ -2,6 +2,16 @@ import os
 import urllib.request
 import sys
 import time
+from dotenv import load_dotenv
+
+# .env 파일 활성화
+# (프로젝트 루트 디렉토리 기준 상위/동일 레벨 탐색)
+dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path=dotenv_path)
+else:
+    load_dotenv()
+
 
 def download_file(url, dest_path, max_retries=5):
     if os.path.exists(dest_path):
@@ -58,8 +68,12 @@ def download_file(url, dest_path, max_retries=5):
             else:
                 raise e
 
-# 실제 포터블 경로
-PORTABLE_COMFY_ROOT = "C:/Users/USER/Desktop/ComfyUI_windows_portable_nvidia/ComfyUI_windows_portable/ComfyUI"
+# 실제 포터블 경로 (환경변수 또는 기본 Fallback 경로 조합)
+COMFYUI_PATH = os.getenv(
+    "COMFYUI_PATH",
+    r"C:\Users\USER\Desktop\ComfyUI_windows_portable_nvidia\ComfyUI_windows_portable"
+)
+PORTABLE_COMFY_ROOT = os.path.join(COMFYUI_PATH, "ComfyUI")
 
 models_to_download = [
     {
