@@ -40,7 +40,7 @@
   },
   "5": {
     "inputs": {
-      "image": "user_room.png"
+      "image": "images.jpg"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -71,6 +71,22 @@
     "class_type": "CLIPTextEncode",
     "_meta": {
       "title": "부정 프롬프트"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "최종 이미지 복원 디코드"
     }
   },
   "9": {
@@ -105,22 +121,6 @@
     "class_type": "VAEEncodeForInpaint",
     "_meta": {
       "title": "VAE 인코드 (마스크 영역 결합)"
-    }
-  },
-  "8": {
-    "inputs": {
-      "samples": [
-        "3",
-        0
-      ],
-      "vae": [
-        "4",
-        2
-      ]
-    },
-    "class_type": "VAEDecode",
-    "_meta": {
-      "title": "최종 이미지 복원 디코드"
     }
   },
   "17": {

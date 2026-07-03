@@ -517,10 +517,9 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
             
             # 5. 아웃풋 파일명 접두사 설정 (SaveImage: Node 8)
             prompt_api_data["8"]["inputs"]["filename_prefix"] = f"ComfyUI_room_redesign_{int(time.time())}"
-                
         else:
-            # ── [NEW] comfyui_workflow_api.json 직접 로딩 및 다이렉트 바인딩 ──
-            api_workflow_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "comfyui_workflow_api.json")
+            # ── [NEW] gemini-code-1783051694407.json 직접 로딩 및 다이렉트 바인딩 ──
+            api_workflow_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "gemini-code-1783051694407.json")
             if not os.path.exists(api_workflow_path):
                 print(f"⚠️ [ComfyUI API] API format 파일이 존재하지 않습니다: {api_workflow_path}")
                 return None
@@ -528,7 +527,7 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
             with open(api_workflow_path, "r", encoding="utf-8") as f:
                 prompt_api_data = json.load(f)
             
-            # 1. 입력 이미지 파일명 주입 (LoadImage: Node 5 & Node 11)
+            # 1. 입력 이미지 파일명 주입 (LoadImage: Node 5 & Node 17)
             if "image_filename" in parameters:
                 mask_filename = parameters["image_filename"]
                 mask_full_path = os.path.join(PROJECT_ROOT, "uploads", mask_filename)
@@ -551,53 +550,28 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                     except Exception as e:
                         print(f"⚠️ [comfyui_API] 마스크 이미지 RGB 변환 중 에러: {e}")
 
-                # [노드 17] 첫 번째 마스크 이미지 주입 (LoadImageMask)
+                # [노드 17] 마스크 이미지 주입 (LoadImageMask)
                 prompt_api_data["17"]["inputs"]["image"] = mask_filename
-                print(f"✅ [comfyui_API] 첫 번째 마스크 주입 완료: {mask_filename}")
+                print(f"✅ [comfyui_API] 마스크 주입 완료: {mask_filename}")
 
             # [노드 5] 원본 입력 이미지 주입 (LoadImage)
             if "orig_image" in parameters:
                 prompt_api_data["5"]["inputs"]["image"] = parameters["orig_image"]
                 print(f"✅ [comfyui_API] 원본 입력 이미지 주입 완료: {parameters['orig_image']}")
-
-            # [노드 18] 두 번째 마스크 이미지 주입 (LoadImageMask)
-            img_b = parameters.get("image_filename_b")
-            if not img_b or img_b == "":
-                img_b = parameters.get("image_filename")
-            if img_b:
-                prompt_api_data["18"]["inputs"]["image"] = img_b
-                print(f"✅ [comfyui_API] 두 번째 마스크 주입 완료: {img_b}")
             
-            # 2. 포지티브 프롬프트 주입 (CLIPTextEncode: Node 6 & Node 12)
+            # 2. 포지티브 프롬프트 주입 (CLIPTextEncode: Node 6)
             if "prompt" in parameters:
                 prompt_api_data["6"]["inputs"]["text"] = (
-                    f"{parameters['prompt']}, high quality, 4k"
+                    f"{parameters['prompt']}, high quality, 8k"
                 )
-                print(f"✅ [comfyui_API] 첫 번째 포지티브 프롬프트 주입 완료: {parameters['prompt'][:50]}...")
+                print(f"✅ [comfyui_API] 포지티브 프롬프트 주입 완료: {parameters['prompt'][:50]}...")
             
-            if "prompt_b" in parameters and parameters["prompt_b"]:
-                prompt_api_data["12"]["inputs"]["text"] = (
-                    f"{parameters['prompt_b']}, high quality, 4k"
-                )
-                print(f"✅ [comfyui_API] 두 번째 포지티브 프롬프트 주입 완료: {parameters['prompt_b'][:50]}...")
-            
-            # 3. KSampler 파라미터 주입 (KSampler: Node 3 & Node 15)
+            # 3. KSampler 파라미터 주입 (KSampler: Node 3)
             if "seed" in parameters:
                 seed_val = int(parameters["seed"])
                 prompt_api_data["3"]["inputs"]["seed"] = seed_val
-                prompt_api_data["15"]["inputs"]["seed"] = seed_val
             
-            # 첫 번째 KSampler denoise
-            # denoise_val = float(parameters.get("denoise", 0.6))
-            # prompt_api_data["3"]["inputs"]["denoise"] = denoise_val
-            
-            # 두 번째 KSampler denoise (image_filename_b가 없으면 0.0으로 비활성화)
-            # if "image_filename_b" not in parameters or not parameters.get("image_filename_b"):
-            #     prompt_api_data["15"]["inputs"]["denoise"] = 0.0
-            # else:
-            #     prompt_api_data["15"]["inputs"]["denoise"] = float(parameters.get("denoise_b", 0.6))
-            
-            print(f"✅ [comfyui_API] KSampler 설정 완료: seed={prompt_api_data['3']['inputs']['seed']}, denoise={prompt_api_data['3']['inputs']['denoise']}, denoise_b={prompt_api_data['15']['inputs']['denoise']}")
+            print(f"✅ [comfyui_API] KSampler 설정 완료: seed={prompt_api_data['3']['inputs']['seed']}")
             
             # 4. 아웃풋 파일명 접두사 설정 (SaveImage: Node 9)
             prompt_api_data["9"]["inputs"]["filename_prefix"] = f"ComfyUI_inpaint_{int(time.time())}"
@@ -1865,7 +1839,36 @@ def edit_image(req: ImageEditRequest):
                 w, h = img.size
                 # 1. 흑백 채널 레이어 생성 (기본 0, 검은색 = 마스크 없음)
                 mask_layer = Image.new("L", (w, h), 0)
-                if req.mask and len(req.mask) == 4:
+                
+                # [NEW] 웹 브라우저 캔버스로부터 추출된 Base64 PNG 마스크 이미지 처리 지원
+                if isinstance(req.mask, str) and req.mask.startswith("data:image"):
+                    try:
+                        import base64
+                        from io import BytesIO
+                        # "data:image/png;base64," 접두사 분리
+                        header, encoded = req.mask.split(",", 1)
+                        decoded_data = base64.b64decode(encoded)
+                        decoded_img = Image.open(BytesIO(decoded_data)).convert("L")
+                        
+                        # 해상도 크기 정합성 보정
+                        if decoded_img.size != (w, h):
+                            decoded_img = decoded_img.resize((w, h), Image.Resampling.NEAREST)
+                        
+                        # [자연스러운 합성] 프론트엔드가 보낸 마스크도 경계를 부드럽게 깃털화(Feathering) 및 Dilation 보정합니다.
+                        # 가구가 원본 이미지 배경에 매끄럽게 녹아들게 하기 위한 핵심 필터링입니다.
+                        feather = max(10, min(w, h) // 40)
+                        expand_size = feather + 1
+                        decoded_img = decoded_img.filter(ImageFilter.MaxFilter(expand_size))
+                        decoded_img = decoded_img.filter(ImageFilter.GaussianBlur(feather))
+                        
+                        mask_layer = decoded_img
+                        print("🎭 [Masking] 클라이언트 전송 Base64 마스크 이미지 디코딩 및 매핑 성공.")
+                    except Exception as base64_err:
+                        print(f"⚠️ [Masking] Base64 디코딩 실패, 기본 BBox 렌더러로 전환: {base64_err}")
+                        req.mask = None
+
+                # 드래그 바운딩 박스 리스트 좌표 처리 ([x1, y1, x2, y2])
+                if req.mask and isinstance(req.mask, list) and len(req.mask) == 4:
                     x1, y1, x2, y2 = req.mask
                     # 바운더리 검증 및 정렬
                     x1, x2 = sorted([max(0, min(x1, w)), max(0, min(x2, w))])
@@ -1880,10 +1883,10 @@ def edit_image(req: ImageEditRequest):
                     mask_layer = mask_layer.filter(ImageFilter.MaxFilter(expand_size))
                     mask_layer = mask_layer.filter(ImageFilter.GaussianBlur(feather))
                     print(f"🎭 [Masking] 사용자가 지정한 BBox 영역 마스킹 채널 생성 (깃털 효과 완료): ({x1}, {y1}) ~ ({x2}, {y2})")
-                else:
+                elif not (isinstance(req.mask, str) and req.mask.startswith("data:image")):
                     draw = ImageDraw.Draw(mask_layer)
                     draw.rectangle([int(w * 0.2), int(h * 0.2), int(w * 0.8), int(h * 0.8)], fill=255)
-                    print("🎭 [Masking] 영역 좌표가 없으므로 중앙 60% 기본 마스킹 생성")
+                    print("🎭 [Masking] 마스크 정보가 유효하지 않아 중앙 60% 기본 마스킹 생성")
                 
                 # 2. 흑백 PNG 마스크 직접 저장
                 mask_layer.save(mask_path, "PNG")
@@ -1914,6 +1917,21 @@ def edit_image(req: ImageEditRequest):
         real_filename = execute_real_comfyui("comfyui_workflow.json", parameters.copy())
         
     if real_filename:
+        # [NEW] 결과 이미지 해상도 강제 원본 정합 복원
+        # ComfyUI 인페인팅 렌더링에 의해 변경/왜곡된 해상도를 사용자가 업로드했던 원래의 픽셀 해상도로 정형 복원합니다.
+        result_path = os.path.join(PROJECT_ROOT, "results", real_filename)
+        if os.path.exists(result_path) and orig_path:
+            try:
+                with Image.open(orig_path) as orig_img:
+                    orig_w, orig_h = orig_img.size
+                with Image.open(result_path) as res_img:
+                    if res_img.size != (orig_w, orig_h):
+                        print(f"📏 [Resizing] 결과 이미지 해상도({res_img.size})를 원본 해상도({orig_w}x{orig_h})로 정밀 복원 리사이징합니다.")
+                        resized_img = res_img.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
+                        resized_img.save(result_path, "PNG" if real_filename.lower().endswith(".png") else "JPEG")
+            except Exception as resize_err:
+                print(f"⚠️ [Resizing] 결과 이미지 원본 해상도 복원 중 에러: {resize_err}")
+                
         result_url = f"/static/results/{real_filename}"
         workflow_info["execution_mode"] = "real_comfyui"
     else:
