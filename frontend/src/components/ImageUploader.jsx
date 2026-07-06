@@ -78,6 +78,7 @@ export default function ImageUploader({
   };
 
   return (
+  return (
     /* 아이폰6 시스템 폰트(Helvetica Neue)를 최상단 카드 컨테이너에 적용 */
     <div className="card" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
       <div className="card-title" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>변환할 인테리어 사진 업로드</div>

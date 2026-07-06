@@ -18,8 +18,8 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
   const [messages, setMessages] = useState([
     {
       sender: 'ai',
-      text: "안녕하세요! 🎨 나만의 인테리어 취향(추구미), 공간별 컬러 조합, 가구 스타일링 팁에 대해 무엇이든 편하게 물어보세요. AI 인테리어 스타일리스트가 맞춤 조언을 드립니다!",
-      references: ["ZipPT 5대 인테리어 취향 데이터베이스", "공간 감성 컬러 매칭 가이드"]
+      text: "안녕하세요! 🎨 나만의 인테리어 취향(추구미) 분석부터 공간별 자재/벽지 매칭, 시공 매뉴얼 등 다양한 인테리어 공간 정보에 대해 무엇이든 편하게 물어보세요. AI 큐레이터가 친절하게 맞춤 안내를 드립니다!",
+      references: ["ZipPT 인테리어 취향 데이터베이스", "공간 자재 및 시공 가이드북"]
     }
   ]);
   const [input, setInput] = useState('');
@@ -156,7 +156,7 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
         }}
       >
         <span style={{ fontSize: '1.2rem' }}>💬</span>
-        <span>AI 인테리어 취향 상담</span>
+        <span>AI 취향 & 인테리어 정보 상담</span>
       </button>
 
       {/* 2. [메신저 대화창 패널: 상시 렌더링 및 iOS 찰진 줌인 팝업 트랜지션] */}
@@ -196,8 +196,8 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '1.2rem' }}>🎨</span>
             <div>
-              <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#FCFAF7', fontFamily: 'Outfit, sans-serif' }}>AI 취향 & 추구미 스타일리스트</div>
-              <div style={{ fontSize: '0.75rem', color: '#C7B7AE' }}>나만의 인테리어 취향 맞춤 상담</div>
+              <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#FCFAF7', fontFamily: 'Outfit, sans-serif' }}>AI 인테리어 취향 & 정보 큐레이터</div>
+              <div style={{ fontSize: '0.75rem', color: '#C7B7AE' }}>나만의 취향 매칭부터 시공·자재 가이드까지 종합 안내</div>
             </div>
           </div>
           <button
