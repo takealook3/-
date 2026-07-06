@@ -13,7 +13,7 @@ const QUICK_QUESTIONS = [
   "🕶️ 차분하고 도시적인 모던 서재 공간 꾸미는 가이드"
 ];
 
-export default function ChatWidget({ sessionId, onError, pendingPrompt, setPendingPrompt }) {
+export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt, setPendingPrompt }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -238,17 +238,34 @@ export default function ChatWidget({ sessionId, onError, pendingPrompt, setPendi
                 width: '100%'
               }}
             >
-              <div style={{
-                maxWidth: '85%',
-                padding: '12px 16px',
-                borderRadius: msg.sender === 'user' ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
-                backgroundColor: msg.sender === 'user' ? '#2B3530' : '#FCFAF7',
-                color: msg.sender === 'user' ? '#FCFAF7' : '#2A2825',
-                border: msg.sender === 'user' ? 'none' : '1px solid #CDBCB2',
-                fontSize: '0.9rem',
-                lineHeight: '1.5',
-                boxShadow: '0 2px 6px rgba(43, 53, 48, 0.05)'
-              }}>
+              <div 
+                onClick={() => {
+                  if (msg.sender === 'ai') {
+                    // AI의 조언 답변 텍스트를 클릭하면 자동으로 챗봇에 입력되어 RAG 질의응답이 연쇄적으로 동작하게 합니다.
+                    handleSend(msg.text);
+                  }
+                }}
+                style={{
+                  maxWidth: '85%',
+                  padding: '12px 16px',
+                  borderRadius: msg.sender === 'user' ? '16px 16px 2px 16px' : '16px 16px 16px 2px',
+                  backgroundColor: msg.sender === 'user' ? '#2B3530' : '#FCFAF7',
+                  color: msg.sender === 'user' ? '#FCFAF7' : '#2A2825',
+                  border: msg.sender === 'user' ? 'none' : '1px solid #CDBCB2',
+                  fontSize: '0.9rem',
+                  lineHeight: '1.5',
+                  boxShadow: '0 2px 6px rgba(43, 53, 48, 0.05)',
+                  cursor: msg.sender === 'ai' ? 'pointer' : 'default',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (msg.sender === 'ai') e.currentTarget.style.backgroundColor = '#F5ECE5';
+                }}
+                onMouseLeave={(e) => {
+                  if (msg.sender === 'ai') e.currentTarget.style.backgroundColor = '#FCFAF7';
+                }}
+                title={msg.sender === 'ai' ? "클릭 시 이 텍스트로 질문을 이어갑니다 💬" : undefined}
+              >
                 {msg.text}
               </div>
 
@@ -293,7 +310,12 @@ export default function ChatWidget({ sessionId, onError, pendingPrompt, setPendi
           {QUICK_QUESTIONS.map((qText, qIdx) => (
             <button
               key={qIdx}
-              onClick={() => handleSend(qText)}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleSend(qText);
+              }}
               disabled={loading}
               style={{
                 background: '#F3EBE5',

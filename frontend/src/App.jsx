@@ -764,6 +764,7 @@ export default function App() {
       {/* 5단계: AI 인테리어 취향 & 추구미 1:1 상담 메신저 위젯 (순수 인테리어 RAG 상담 전용) */}
       <ChatWidget 
         sessionId={sessionId} 
+        imageId={imageId}
         onError={setCurrentError}
         pendingPrompt={pendingPrompt}
         setPendingPrompt={setPendingPrompt}
