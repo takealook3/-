@@ -4,7 +4,8 @@
 // 마우스로 빨간 테이프를 둘러 지정한 뒤, 새 가구로 교체해 달라고 의뢰하는 곳입니다.
 // =====================================================================
 import React, { useState, useRef } from 'react';
-import { editImage, API_BASE_URL } from '../services/api';
+import { editImage, inpaintImage, API_BASE_URL } from '../services/api';
+
 
 export default function ImageEditor({ imageId, sessionId, originalImageUrl, onError }) {
   // 드래그 마스킹 좌표 State (비율 0~100 및 픽셀)
@@ -82,6 +83,10 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
 
   // 수정하기 실행
   const handleEditSubmit = async () => {
+    if (!maskPixels) {
+      onError({ errorCode: "MASK_REQUIRED", message: "수정할 가구 영역이 선택되지 않았습니다. 좌측 사진 위에서 마우스로 드래그하여 영역을 지정해 주세요." });
+      return;
+    }
     if (!prompt.trim()) {
       onError({ errorCode: "PROMPT_REQUIRED", message: "교체할 가구 설명 프롬프트를 입력해 주세요." });
       return;
@@ -89,19 +94,22 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
     onError(null);
     setEditing(true);
 
-    const res = await editImage({
+    // 신규 inpaintImage API 호출 (Realistic Vision V6.0 B1 기반 Inpainting)
+    const res = await inpaintImage({
       imageId,
       sessionId,
       mask: maskPixels,
-      prompt: prompt.trim()
+      bbox: maskPixels,
+      prompt: prompt.trim(),
+      mode: "inpainting"
     });
 
     setEditing(false);
     if (res.success) {
-      const eUrl = res.data?.edited_image_url || res.data?.editedImageUrl;
+      const eUrl = res.result_image_url || res.data?.result_image_url || res.data?.edited_image_url || res.data?.editedImageUrl;
       setEditedResultUrl(eUrl);
     } else {
-      onError({ errorCode: res.errorCode || "PROCESSING_FAILED", message: res.message });
+      onError({ errorCode: res.errorCode || "INPAINTING_FAILED", message: res.message });
     }
   };
 
@@ -198,10 +206,26 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
               <div>
                 <div className="success-banner" style={{ marginBottom: '12px' }}>
                   <span>☑️</span>
-                  <span>편집 결과가 생성되었습니다! 아래에서 변경된 가구를 확인해 보세요.</span>
+                  <span>부분 가구 교체가 완료되었습니다! 원본 구조는 100% 보존되었습니다.</span>
                 </div>
-                <div className="preview-box" style={{ height: '240px', border: '2px solid #f43f5e' }}>
-                  <img src={getFullUrl(editedResultUrl)} alt="편집 완료 이미지" className="preview-img" />
+                {/* 요구사항 7번 준수: Before / After 좌우 비교 뷰 */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <div style={{ fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600', textAlign: 'center' }}>
+                      🖼️ Before (원본 사진)
+                    </div>
+                    <div className="preview-box" style={{ height: '220px', border: '1px solid #475569' }}>
+                      <img src={fullOrigUrl} alt="Before 원본" className="preview-img" />
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.85rem', color: '#f43f5e', marginBottom: '4px', fontWeight: '600', textAlign: 'center' }}>
+                      ✨ After (가구 교체 완료)
+                    </div>
+                    <div className="preview-box" style={{ height: '220px', border: '2px solid #f43f5e' }}>
+                      <img src={getFullUrl(editedResultUrl)} alt="After 부분 수정 결과" className="preview-img" />
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : (

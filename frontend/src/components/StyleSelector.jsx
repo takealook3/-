@@ -127,8 +127,25 @@ export default function StyleSelector({
           className="btn btn-primary btn-full"
           style={{ padding: '14px', fontSize: '1rem' }}
         >
-          {generating ? "✨ AI가 인테리어 리모델링 변환 중... (잠시만 기다려주세요)" : "✨ 이미지 변환 실행 (POST /api/image/generate)"}
+          {generating ? "⏳ 이미지 생성 중입니다. 시간이 걸릴 수 있습니다..." : "✨ 이미지 변환 실행 (Realistic Vision V6.0 B1)"}
         </button>
+
+        {generating && (
+          <div style={{
+            marginTop: '16px',
+            padding: '14px',
+            backgroundColor: 'rgba(99, 102, 241, 0.15)',
+            border: '1px solid #6366f1',
+            borderRadius: '10px',
+            color: '#c7d2fe',
+            fontSize: '0.9rem',
+            textAlign: 'center',
+            lineHeight: '1.5'
+          }}>
+            🎨 <strong>Realistic Vision V6.0 B1 AI 모델 렌더링 진행 중</strong><br />
+            실제 Stable Diffusion img2img 연산이 수행되고 있습니다. (디바이스 성능에 따라 약 10~30초 소요)
+          </div>
+        )}
       </form>
     </div>
   );

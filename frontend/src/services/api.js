@@ -159,6 +159,46 @@ export async function editImage({ imageId, sessionId, mask = null, selectedObjec
 }
 
 /**
+ * 9번 창구: 부분 가구 교체 및 수선 인페인팅 (POST /api/image/inpaint)
+ * 비유: 선택한 영역(bbox 또는 mask) 내 가구만 지정한 프롬프트대로 교체해 줍니다.
+ */
+export async function inpaintImage({ imageId, sessionId, prompt = "하얀색 소파로 교체", mask = null, bbox = null, mode = "inpainting" }) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/image/inpaint`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        image_id: imageId,
+        session_id: sessionId,
+        prompt: prompt,
+        mask: mask,
+        bbox: bbox,
+        mode: mode
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        errorCode: data.error_code || "INPAINTING_FAILED",
+        message: data.message || "부분 가구 수정 중 오류가 발생했습니다."
+      };
+    }
+    return data;
+  } catch (error) {
+    return {
+      success: false,
+      errorCode: "SERVER_CONNECTION_FAILED",
+      message: `서버 통신 실패: ${error.message}`
+    };
+  }
+}
+
+
+/**
  * 6번 창구: AI 인테리어 취향 & 추구미 상담 챗봇 호출 (POST /api/chat)
  * 비유: 내 공간에 어울리는 스타일이나 가구 컬러, 취향 상담 지시서를 AI 스타일리스트에게 전달합니다.
  */
