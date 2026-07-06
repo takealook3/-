@@ -34,7 +34,7 @@ def clean_image_url(image_raw):
 def preprocess():
     # 경로 설정
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    source_path = r"c:\Users\USER\Downloads\db1111.csv"
+    source_path = os.path.join(base_dir, "DB1.csv") # [수정] 다운로드 폴더가 아닌 로컬 백엔드의 DB1.csv를 원본으로 사용
     target_csv_path = os.path.join(base_dir, "DB1.csv")
     
     frontend_dir = os.path.abspath(os.path.join(base_dir, "..", "frontend", "src", "components"))
@@ -108,11 +108,16 @@ def preprocess():
             if bathroom_img:
                 categories.append("화장실")
                 images_by_category["화장실"] = bathroom_img
-            # 오브제는 3개 중 존재하는 첫 번째를 대표로 지정
-            obj_img = obj1_img or obj2_img or obj3_img
-            if obj_img:
+            # 오브제는 존재하는 모든 오브제 이미지(1, 2, 3)를 개별 키로 이식
+            if obj1_img or obj2_img or obj3_img:
                 categories.append("오브제")
-                images_by_category["오브제"] = obj_img
+                if obj1_img:
+                    images_by_category["오브제1"] = obj1_img
+                if obj2_img:
+                    images_by_category["오브제2"] = obj2_img
+                if obj3_img:
+                    images_by_category["오브제3"] = obj3_img
+                images_by_category["오브제"] = obj1_img or obj2_img or obj3_img
                 
             # 프론트엔드용 JSON 구성요소 추가
             style_list.append({
@@ -130,10 +135,11 @@ def preprocess():
             # Featured Collections용 썸네일 이미지 맵 빌드
             style_images_map[name_ko] = style_img
 
-    # 2. backend/DB1.csv 자리에 파일 복사 (UTF-8 인코딩)
-    print(f"💾 백엔드 DB 복사 중: {target_csv_path}")
-    import shutil
-    shutil.copy(source_path, target_csv_path)
+    # 2. backend/DB1.csv 자리에 파일 복사 (단, 원본과 대상이 다를 때만 복사)
+    if os.path.abspath(source_path) != os.path.abspath(target_csv_path):
+        print(f"💾 백엔드 DB 복사 중: {target_csv_path}")
+        import shutil
+        shutil.copy(source_path, target_csv_path)
     
     # 3. 프론트엔드 JSON 파일들 쓰기
     if not os.path.exists(frontend_dir):

@@ -57,6 +57,7 @@ RAG_TEMPLATE = """\
 4. [참고 문서]에서 관련 내용을 찾을 수 없는 경우, 추측하거나 지어내지 말고 "해당 내용은 현재 보유한 자료에서 확인이 어렵습니다. 추가 상담이 필요하시면 말씀해 주세요"라고 안내하십시오.
 5. "참고 문서에 따르면", "문서에 의하면" 등 출처를 직접 언급하는 서두 문구 없이 바로 본론부터 자연스럽게 안내하십시오.
 6. [이전 대화 기록]에서 이미 안내한 내용은 반복하지 말고, 고객의 최신 질문에 집중하여 새로운 정보만 추가로 제공하십시오.
+7. [참고 문서]나 [참고 데이터] 내에 추천 벽지 이미지 URL 또는 추천 바닥재 이미지 URL이 존재하는 경우, "이미지를 보여줄 수 없다"고 하지 말고 반드시 마크다운 이미지 문법인 `![자재명](이미지URL)` 형식(예: `![신한 실크벽지](https://...)`)을 사용하여 답변 내에 이미지를 직접 렌더링하여 표시하십시오.
 
 [이전 대화 기록]
 {chat_history}
@@ -120,6 +121,7 @@ PREFERENCE_TEMPLATE = """\
 5. 3~5문장 이내로 간결하게 핵심만 전달하십시오.
 6. "참고 데이터에 따르면", "데이터에 기재된 바와 같이" 같은 출처 언급 서두는 절대 사용하지 마십시오. 곧바로 자연스럽게 컨설팅을 시작하십시오.
 7. [이전 대화 기록]에서 이미 안내한 내용(자재명, 특징 설명 등)은 반복하지 마십시오. 고객의 최신 질문에서 새로 요구한 부분에만 집중하십시오.
+8. [참고 문서]나 [참고 데이터] 내에 추천 벽지 이미지 URL 또는 추천 바닥재 이미지 URL이 존재하는 경우, "이미지를 보여줄 수 없다"고 하지 말고 반드시 마크다운 이미지 문법인 `![자재명](이미지URL)` 형식(예: `![신한 실크벽지](https://...)`)을 사용하여 답변 내에 이미지를 직접 렌더링하여 표시하십시오.
 
 [이전 대화 기록]
 {chat_history}
@@ -149,6 +151,14 @@ def _load_db1_style_context(style_keyword: str) -> str:
     """
     import csv
     
+    # 구글시트 수식 `=IMAGE("URL")`에서 순수 이미지 URL 주소만 정규식으로 추출하는 헬퍼 함수
+    def extract_url(text: str) -> str:
+        if not text:
+            return ""
+        # 따옴표나 괄호 사이에 있는 http/https 링크만 매칭
+        match = re.search(r'https?://[^\s"\'\)]+', text)
+        return match.group(0) if match else text
+
     db1_path = os.path.join(current_dir, "DB1.csv")
     if not os.path.exists(db1_path):
         return ""
@@ -168,7 +178,9 @@ def _load_db1_style_context(style_keyword: str) -> str:
                     feat2 = row[4].strip() if len(row) > 4 else ""
                     feat3 = row[5].strip() if len(row) > 5 else ""
                     wallpaper = row[14].strip() if len(row) > 14 else ""
+                    wallpaper_img = extract_url(row[15].strip()) if len(row) > 15 else "" # 벽지 이미지 URL 추출
                     floor = row[16].strip() if len(row) > 16 else ""
+                    floor_img = extract_url(row[17].strip()) if len(row) > 17 else "" # 바닥재 이미지 URL 추출
                     target = row[29].strip() if len(row) > 29 else ""
                     
                     context_text = (
@@ -177,7 +189,9 @@ def _load_db1_style_context(style_keyword: str) -> str:
                         f"핵심 특징2: {feat2}\n"
                         f"핵심 특징3: {feat3}\n"
                         f"추천 벽지: {wallpaper}\n"
+                        f"추천 벽지 이미지 URL: {wallpaper_img}\n"
                         f"추천 바닥재: {floor}\n"
+                        f"추천 바닥재 이미지 URL: {floor_img}\n"
                         f"주요 타겟층: {target}"
                     )
                     print(f"✅ [DB1 Direct Match] '{style_ko}' 스타일 데이터 직접 로드 성공")

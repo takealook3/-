@@ -98,6 +98,28 @@ export default function ChatWidget({ sessionId, onError, pendingPrompt, setPendi
 
   return (
     <>
+      {/* 카톡 말줄임표 애니메이션을 위한 스타일 [카톡 입력중 스타일] */}
+      <style>{`
+        @keyframes kakaoDot {
+          0% { opacity: 0.3; transform: translateY(0); }
+          50% { opacity: 1; transform: translateY(-4px); }
+          100% { opacity: 0.3; transform: translateY(0); }
+        }
+        .kakao-dot {
+          width: 6px;
+          height: 6px;
+          background-color: #7A6C62;
+          border-radius: 50%;
+          display: inline-block;
+          animation: kakaoDot 1.4s infinite both;
+        }
+        .kakao-dot:nth-child(2) {
+          animation-delay: .2s;
+        }
+        .kakao-dot:nth-child(3) {
+          animation-delay: .4s;
+        }
+      `}</style>
       {/* 1. [플로팅 아이콘 버튼: 상시 렌더링 및 iOS 감성 작아짐 트랜지션] */}
       <button
         onClick={() => setIsOpen(true)}
@@ -234,8 +256,32 @@ export default function ChatWidget({ sessionId, onError, pendingPrompt, setPendi
           ))}
 
             {loading && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#7A6C62', fontSize: '0.85rem', paddingLeft: '8px' }}>
-                <span>✨ AI 스타일리스트가 공간 정보를 분석하고 있습니다...</span>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                width: '100%',
+                gap: '6px'
+              }}>
+                {/* 카톡 스타일의 입력 중 말풍선 [카톡 스타일 입력 중 말풍선] */}
+                <div style={{
+                  maxWidth: '85%',
+                  padding: '12px 16px',
+                  borderRadius: '16px 16px 16px 2px',
+                  backgroundColor: '#FCFAF7',
+                  border: '1px solid #CDBCB2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  boxShadow: '0 2px 6px rgba(43, 53, 48, 0.05)'
+                }}>
+                  <div className="kakao-dot" />
+                  <div className="kakao-dot" />
+                  <div className="kakao-dot" />
+                </div>
+                <span style={{ color: '#7A6C62', fontSize: '0.78rem', paddingLeft: '4px', fontWeight: '500' }}>
+                  {imageId ? "AI가 인테리어를 분석하고 새 스타일로 변환하는 중입니다..." : "AI 스타일리스트가 공간 정보를 분석하고 있습니다..."}
+                </span>
               </div>
             )}
 

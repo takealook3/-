@@ -12,6 +12,7 @@ from starlette.concurrency import run_in_threadpool # [이유: 동기 함수를 
 from typing import Optional, Dict, Any
 import uuid, os, time, datetime, sys, json, shutil
 import websocket # [이유: ComfyUI 서버와 실시간 양방향 이벤트를 주고받기 위해 websocket-client 패키지를 임포트합니다.]
+from PIL import Image
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
@@ -787,6 +788,16 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
 
 
         res = requests.post(f"{COMFYUI_API_URL}/prompt", json={"prompt": prompt_api_data}, timeout=5)
+        print(f"📡 [ComfyUI API] 응답 상태코드: {res.status_code}")
+        try:
+            res_json = res.json()
+            if "node_errors" in res_json or "error" in res_json:
+                print(f"❌ [ComfyUI API 에러 상세]: {res_json}")
+            else:
+                print(f"📡 [ComfyUI API] 응답 데이터: {res_json}")
+        except Exception as json_err:
+            print(f"📡 [ComfyUI API] 응답 JSON 파싱 실패: {res.text} (에러: {json_err})")
+            
         prompt_id = res.json().get("prompt_id")
         if not prompt_id:
             return None

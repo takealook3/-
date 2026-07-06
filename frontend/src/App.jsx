@@ -13,6 +13,7 @@ import StyleTransformer from './components/StyleTransformer';
 import ChatWidget from './components/ChatWidget';
 import StyleEncyclopedia, { STYLE_DATABASE } from './components/StyleEncyclopedia';
 import StyleQuiz from './components/StyleQuiz';
+import FurnitureShopShowroom from './components/FurnitureShopShowroom';
 import { checkHealth } from './services/api';
 import { Sofa, Bed, Table, Monitor, Trees, Archive, Lamp, Palette, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -75,6 +76,27 @@ function TopNav({ activeTab, onTabClick, serverStatus, onRefreshHealth, sessionI
         </span>
       </nav>
       <div className="top-nav-actions">
+        {/* [신설] 상단 오른쪽 Shop 새 창 열기 버튼 */}
+        <button 
+          onClick={() => window.open(window.location.origin + window.location.pathname + '?page=shop', '_blank')} 
+          className="btn btn-primary" 
+          style={{ 
+            padding: '8px 18px', 
+            fontSize: '0.85rem', 
+            borderRadius: '20px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '6px',
+            backgroundColor: 'var(--accent)',
+            color: '#1C1714',
+            border: 'none',
+            fontWeight: '700',
+            cursor: 'pointer',
+            fontFamily: 'Outfit, sans-serif'
+          }}
+        >
+          🛍️ Shop
+        </button>
         {serverStatus.online ? (
           <span className="badge badge-online" style={{ cursor: 'pointer' }} onClick={onRefreshHealth} title="서버 연결됨 (클릭하여 새로고침)">🟢 Online</span>
         ) : (
@@ -93,6 +115,12 @@ function TopNav({ activeTab, onTabClick, serverStatus, onRefreshHealth, sessionI
 export default function App() {
   const [serverStatus, setServerStatus] = useState({ loading: true, online: false, error: null });
   
+  // [신설] ?page=shop 여부 판별 상태 추가
+  const [isShopPage] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('page') === 'shop';
+  });
+
   const [imageId, setImageId] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [originalImageUrl, setOriginalImageUrl] = useState(null);
@@ -105,9 +133,15 @@ export default function App() {
   const [heroImageIndex, setHeroImageIndex] = useState(0);
 
   const [activeStyleId, setActiveStyleId] = useState(1); // 도감 탭 연동을 위한 전역 활성 스타일 ID
+  const [isStyleModalOpen, setIsStyleModalOpen] = useState(false); // [스타일 도감 모달 오픈 상태 추가]
   const [startIndex, setStartIndex] = useState(0); // Featured Collections 카루셀 시작 인덱스 (모던=0으로 고정 기동)
 
   const [pendingPrompt, setPendingPrompt] = useState(''); // 취향 퀴즈 연동용 자동 프롬프트 상태
+  // [수정] 숍 카테고리 초기값은 URL 파라미터에서 가져옴
+  const [selectedShopCategory, setSelectedShopCategory] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('category') || null;
+  });
 
   // 5초 간격 최상단 히어로 배경 롤링 타이머
   useEffect(() => {
@@ -227,14 +261,50 @@ export default function App() {
   // =====================================================================
   // [28가지 인테리어 가로 트랙 슬라이딩 슬라이더 핸들러]
   // =====================================================================
-  // 화면에 4개의 카드가 동시에 보이므로, 최대 24번 인덱스까지만 이동 가능 (25 모듈러)
+  // 한번에 4개의 카드가 통째로 이동하도록 설정 (28개 스타일 카드 기준 4개씩 순환) [캐러셀 한번에 4개씩 이동 처리]
   const handleNextSlide = () => {
-    setStartIndex(prev => (prev + 1) % 25);
+    setStartIndex(prev => (prev + 4) % 28);
   };
 
   const handlePrevSlide = () => {
-    setStartIndex(prev => (prev - 1 + 25) % 25);
+    setStartIndex(prev => (prev - 4 + 28) % 28);
   };
+
+  // [신설] Shop 페이지(page=shop) 단독 렌더링을 위한 전용 럭셔리 레이아웃 분기
+  if (isShopPage) {
+    return (
+      <div className="app-layout" style={{ backgroundColor: '#FCFAF7', minHeight: '100vh', color: '#2A2521' }}>
+        {/* Shop 전용 상단 헤더 바 */}
+        <header className="top-nav" style={{ position: 'static', marginBottom: '24px', backgroundColor: '#1C1714', color: '#FCFAF7' }}>
+          {/* [수정] 클릭 시 쿼리 파라미터가 날아가 메인 스튜디오(Home)로 되돌아가는 로고 버튼화 */}
+          <div 
+            className="top-nav-logo" 
+            onClick={() => window.location.href = window.location.origin + window.location.pathname}
+            style={{ cursor: 'pointer', transition: 'opacity 0.2s' }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.8'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            title="홈 화면(스튜디오)으로 돌아가기"
+          >
+            ZIPPT SHOP
+          </div>
+          <div style={{ color: 'var(--accent)', fontSize: '0.85rem', fontWeight: '600', letterSpacing: '0.05em' }}>
+            Premium Furniture Curation
+          </div>
+        </header>
+        {/* 가구 카탈로그 단독 렌더링 영역 */}
+        <main className="main-content" style={{ padding: '40px 24px 80px', maxWidth: '1200px', margin: '0 auto', gap: '32px' }}>
+          <FurnitureShopShowroom
+            selectedCategory={selectedShopCategory}
+            setSelectedCategory={setSelectedShopCategory}
+            onSelectStyle={(styleId) => {
+              // 새 탭 내에서는 도감 이동 대신 친절한 안내 알림
+              alert(`이 상품은 도감 스타일 번호 ${styleId}번에 어울리는 매칭 가구입니다. 메인 스튜디오(Home) 창에서 확인하실 수 있습니다.`);
+            }}
+          />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="app-layout">
@@ -279,15 +349,28 @@ export default function App() {
               🏠 ZipPT Interior Transform MVP
             </div>
             <h1 className="hero-title">Refined Living Starts Here</h1>
-            <p className="hero-subtitle">
-              Discover timeless furniture and curated essentials designed for elevated spaces.<br />
-              거실, 방, 침실 사진을 업로드하여 <strong>전면 리모델링(스타일 변환)</strong>을 하거나, 
-              마우스 드래그로 <strong>특정 가구만 선택 교체(부분 수선)</strong>할 수 있는 AI 인테리어 스튜디오입니다.
+            <p className="hero-subtitle" style={{ marginTop: '-8px' }}> {/* [위쪽 큰 글씨와 더 가깝게 밀착되도록 여백 조정] */}
+              {/* 영문 부제목 행 간격 줄이기 [영문 행간격 축소] */}
+              <span style={{ lineHeight: '1.3', display: 'block' }}>
+                Discover timeless furniture and curated essentials designed for elevated spaces.
+              </span>
+              {/* 한국어 텍스트만 가독성 높이기 위해 글자 포인트를 줄이고 아이폰6 스타일의 얇은 폰트로 처리 [한국어 얇은 폰트 가독성 최적화] */}
+              <span style={{ 
+                display: 'block', 
+                marginTop: '8px', /* [영문 텍스트 줄어든 행간에 비례해 마진 소폭 조정] */
+                fontSize: '0.88rem', /* [글씨 포인트 작게 조정] */
+                fontWeight: '300', /* [아이폰6 느낌의 얇은 폰트 두께 지정] */
+                lineHeight: '1.7', 
+                letterSpacing: '-0.02em' 
+              }}>
+                거실, 방, 침실 사진을 업로드하여 <strong>전면 리모델링(스타일 변환)</strong>을 하거나, 
+                마우스 드래그로 <strong>특정 가구만 선택 교체(부분 수선)</strong>할 수 있는 AI 인테리어 스튜디오입니다.
+              </span>
             </p>
             {/* 시안 이미지 속 2대 프리미엄 버튼의 실 작동 연동 */}
             <div className="hero-buttons">
               <button 
-                onClick={() => document.getElementById('uploader-card')?.scrollIntoView({ behavior: 'smooth' })} 
+                onClick={() => window.open(window.location.origin + window.location.pathname + '?page=shop', '_blank')} /* [쇼핑몰 새 탭 이동 처리] */
                 className="btn btn-primary"
               >
                 Shop Now
@@ -333,9 +416,9 @@ export default function App() {
                     key={style.id} 
                     className="featured-card"
                     onClick={() => {
-                      // 카드 클릭 시 하단 28 Styles 도감으로 순간이동하고 클릭한 탭이 즉시 켜짐
+                      // 카드 클릭 시 도감 모달을 활성화하고 클릭한 스타일을 세팅 [캐러셀 클릭시 스타일 상세 모달 오픈]
                       setActiveStyleId(style.id);
-                      document.getElementById('style-encyclopedia')?.scrollIntoView({ behavior: 'smooth' });
+                      setIsStyleModalOpen(true);
                     }}
                   >
                     <div className="featured-card-img-wrapper">
@@ -346,7 +429,7 @@ export default function App() {
                       )}
                     </div>
                     <div className="featured-card-body">
-                      <h3 className="featured-card-title">{style.name}</h3>
+                      <h3 className="featured-card-title">{String(style.id).padStart(2, '0')}. {style.name}</h3> {/* [스타일 번호 01. 형식으로 출력] */}
                       <span className="featured-card-link">Explore Style &rarr;</span>
                     </div>
                   </div>
@@ -372,6 +455,64 @@ export default function App() {
             <h2 className="section-title text-glow">Style Quiz</h2>
           </div>
           <StyleQuiz onApplyPrompt={handleApplyQuizPrompt} />
+        </section>
+
+        {/* [럭셔리 가구 카테고리 퀵 카드 섹션 (소파, 침대, 오브제)] */}
+        <section className="category-cards-section">
+          <div className="featured-header" style={{ marginBottom: '8px' }}>
+            <span className="featured-sub">Product Categories</span>
+            <h2 className="featured-title" style={{ color: '#FCFAF7' }}>Shop by Category</h2> {/* [어두운 배경 대비 글자색 흰색 변경] */}
+          </div>
+          <div className="category-cards-grid">
+            {/* 1. 소파 - [숍 새 창 연결] */}
+            <div className="category-card" onClick={() => {
+              window.open(window.location.origin + window.location.pathname + '?page=shop&category=소파', '_blank');
+            }}>
+              <div className="category-card-img-wrapper">
+                <img 
+                  src="https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&fit=crop&w=800&q=80" 
+                  alt="Sofa" 
+                  className="category-card-img" 
+                />
+              </div>
+              <div className="category-card-body">
+                <h3 className="category-card-title">Sofa</h3>
+                <span className="category-card-explore">Explore &rarr;</span>
+              </div>
+            </div>
+            {/* 2. 침대 - [숍 새 창 연결] */}
+            <div className="category-card" onClick={() => {
+              window.open(window.location.origin + window.location.pathname + '?page=shop&category=침대', '_blank');
+            }}>
+              <div className="category-card-img-wrapper">
+                <img 
+                  src="https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80" 
+                  alt="Bed" 
+                  className="category-card-img" 
+                />
+              </div>
+              <div className="category-card-body">
+                <h3 className="category-card-title">Bed</h3>
+                <span className="category-card-explore">Explore &rarr;</span>
+              </div>
+            </div>
+            {/* 3. 오브제 - [숍 새 창 연결] */}
+            <div className="category-card" onClick={() => {
+              window.open(window.location.origin + window.location.pathname + '?page=shop&category=오브제', '_blank');
+            }}>
+              <div className="category-card-img-wrapper">
+                <img 
+                  src="https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=80" 
+                  alt="Decor" 
+                  className="category-card-img" 
+                />
+              </div>
+              <div className="category-card-body">
+                <h3 className="category-card-title">Decor</h3>
+                <span className="category-card-explore">Explore &rarr;</span>
+              </div>
+            </div>
+          </div>
         </section>
 
         {/* 에러 안내판 */}
@@ -486,8 +627,15 @@ export default function App() {
           </div>
         )}
 
+        {/* [메인에서 가구 카탈로그 제거 - Shop 버튼을 통해 새 창으로 제공됨] */}
+
         {/* 28대 인테리어 스타일 도감 전시장 (GNB 28 Styles 메뉴 매핑) */}
-        <StyleEncyclopedia activeId={activeStyleId} setActiveId={setActiveStyleId} />
+        <StyleEncyclopedia 
+          activeId={activeStyleId} 
+          setActiveId={setActiveStyleId} 
+          isModalOpen={isStyleModalOpen} 
+          setIsModalOpen={setIsStyleModalOpen} 
+        />
 
         {/* 하단 럭셔리 브랜드 푸터 (NÜMA 시안 감성 완벽 재현) */}
         <footer style={{
