@@ -78,14 +78,14 @@ export default function ImageUploader({
   };
 
   return (
-    <div className="card">
-      <div className="card-title">📸 변환할 인테리어 사진 업로드</div>
+    /* 아이폰6 시스템 폰트(Helvetica Neue)를 최상단 카드 컨테이너에 적용 */
+    <div className="card" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+      <div className="card-title" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>변환할 인테리어 사진 업로드</div>
       <div className="card-desc">거실, 방, 주방 등 스타일을 바꾸고 싶은 공간의 원본 사진을 선택해 주세요. 이미지를 등록하면 자동으로 서버에 업로드됩니다. (지원 형식: JPG, JPEG, PNG)</div>
 
-      {/* Streamlit 동기화: 등록 완료 초록색 알림 띠 */}
+      {/* Streamlit 동기화: 등록 완료 초록색 알림 띠 - 이모지 제거 */}
       {imageId && (
         <div className="success-banner" style={{ marginBottom: '20px' }}>
-          <span>🎉</span>
           <span><strong>인테리어 사진 등록 완료!</strong> 아래 단계에서 스타일 변환이나 부분 가구 교체를 진행하실 수 있습니다.</span>
         </div>
       )}
@@ -102,7 +102,7 @@ export default function ImageUploader({
       <div style={{ position: 'relative' }}>
         {!previewUrl ? (
           <label htmlFor="file-upload-input" className="dropzone" style={{ width: '100%', minHeight: '180px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📂</div>
+            {/* 📂 폴더 이모지 제거 */}
             <div style={{ fontWeight: '600', color: '#fff', marginBottom: '6px' }}>클릭하여 공간 사진 업로드</div>
             <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>JPG, JPEG, PNG 이미지 선택</div>
           </label>
@@ -112,13 +112,14 @@ export default function ImageUploader({
               <img src={previewUrl} alt="원본 미리보기" style={{ width: '100%', height: 'auto', maxHeight: '400px', objectFit: 'contain', borderRadius: '10px' }} />
               {uploading && (
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.75)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', borderRadius: '10px', color: '#fff' }}>
-                  <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🚀</div>
+                  {/* 🚀 로켓 이모지 제거 */}
                   <div style={{ fontWeight: '600' }}>서버 등록 중...</div>
                 </div>
               )}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0 10px' }}>
-              <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>📦 {selectedFile?.name} ({roundSize(selectedFile?.size)})</span>
+              {/* 📦 박스 이모지 제거 */}
+              <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{selectedFile?.name} ({roundSize(selectedFile?.size)})</span>
               <label htmlFor="file-upload-input" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
                 사진 변경
               </label>
