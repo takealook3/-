@@ -14,7 +14,7 @@ import ChatWidget from './components/ChatWidget';
 import StyleEncyclopedia, { STYLE_DATABASE } from './components/StyleEncyclopedia';
 import StyleQuiz from './components/StyleQuiz';
 import FurnitureShopShowroom from './components/FurnitureShopShowroom';
-import { checkHealth } from './services/api';
+import { checkHealth, sendChatMessage, API_BASE_URL } from './services/api';
 import { Sofa, Bed, Table, Monitor, Trees, Archive, Lamp, Palette, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // [가구 카테고리 퀵 링크 아이콘 정보 리스트 (시안 이미지 스타일 그대로 구현)]
@@ -138,6 +138,12 @@ export default function App() {
 
   const [pendingPrompt, setPendingPrompt] = useState(''); // 취향 퀴즈 연동용 자동 프롬프트 상태
   const [quizPendingPrompt, setQuizPendingPrompt] = useState(''); // 퀴즈 결과 주입 전용 독립 프롬프트 상태
+  
+  // [신설] 스타일 변환 비동기 연산 부모 끌어올리기 상태들 (탭 전환 시에도 백그라운드 작업 및 비교 쇼룸 유지 보장)
+  const [transformLoading, setTransformLoading] = useState(false);
+  const [transformResultUrl, setTransformResultUrl] = useState(null);
+  const [transformRawAnswer, setTransformRawAnswer] = useState('');
+  const [transformSummary, setTransformSummary] = useState(null);
   // [수정] 숍 카테고리 초기값은 URL 파라미터에서 가져옴
   const [selectedShopCategory, setSelectedShopCategory] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -263,6 +269,100 @@ export default function App() {
     setCurrentError(null);
   };
 
+  // AI 응답 텍스트를 분석하여 벽지, 자재, 스타일링으로 요약 분류하는 파서 헬퍼
+  const parseInteriorRecommendation = (text) => {
+    if (!text) return null;
+    const lines = text.split('\n');
+    
+    const recs = {
+      wallpaper: [],  // 벽지 추천
+      materials: [],  // 자재 추천
+      furniture: [],  // 가구/소품 추천
+      general: []     // 종합 조언
+    };
+
+    lines.forEach(line => {
+      const cleanLine = line.replace(/^[-*•\s\d.]+\s*/, '').trim();
+      if (!cleanLine || cleanLine.length < 4) return;
+
+      const lowerLine = cleanLine.toLowerCase();
+      
+      if (lowerLine.includes('벽지') || lowerLine.includes('도배') || lowerLine.includes('실크 벽지') || lowerLine.includes('페인트') || lowerLine.includes('벽면')) {
+        recs.wallpaper.push(cleanLine);
+      }
+      else if (lowerLine.includes('자재') || lowerLine.includes('바닥') || lowerLine.includes('마루') || lowerLine.includes('원목') || lowerLine.includes('타일') || lowerLine.includes('대리석') || lowerLine.includes('석재')) {
+        recs.materials.push(cleanLine);
+      }
+      else if (lowerLine.includes('가구') || lowerLine.includes('소파') || lowerLine.includes('테이블') || lowerLine.includes('의자') || lowerLine.includes('조명') || lowerLine.includes('카펫') || lowerLine.includes('러그') || lowerLine.includes('식물') || lowerLine.includes('화분')) {
+        recs.furniture.push(cleanLine);
+      }
+      else {
+        recs.general.push(cleanLine);
+      }
+    });
+
+    return recs;
+  };
+
+  const handleTransformSubmitGlobal = async (promptText) => {
+    if (!promptText || !promptText.trim() || transformLoading) return;
+
+    setTransformLoading(true);
+    setTransformResultUrl(null);
+    setTransformRawAnswer('');
+    setTransformSummary(null);
+    setCurrentError(null);
+
+    const getFullUrl = (url) => {
+      if (!url) return "";
+      if (url.startsWith("http://") || url.startsWith("https://")) return url;
+      return `${API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+    };
+
+    try {
+      const res = await sendChatMessage({
+        sessionId: sessionId || "session_default",
+        question: promptText.trim(),
+        imageId: imageId
+      });
+
+      if (res.success) {
+        const respData = res.data || {};
+        const fullImg = getFullUrl(respData.image_url);
+        setTransformResultUrl(fullImg);
+        setTransformRawAnswer(respData.answer || "");
+        
+        const parsed = parseInteriorRecommendation(respData.answer);
+        setTransformSummary(parsed);
+
+        if (respData.result_id && handleGenerateSuccess) {
+          handleGenerateSuccess({
+            resultId: respData.result_id,
+            resultImageUrl: fullImg,
+            style: respData.style || "modern",
+            prompt: promptText.trim(),
+            processingTime: respData.processing_time || 0,
+            status: "completed",
+            recommendations: parsed
+          });
+        }
+      } else {
+        setCurrentError({
+          errorCode: res.errorCode || "PROCESSING_FAILED",
+          message: res.message || "스타일 변환 작업에 실패했습니다."
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      setCurrentError({
+        errorCode: "SERVER_ERROR",
+        message: `스타일 변환 통신 오류: ${err.message}`
+      });
+    } finally {
+      setTransformLoading(false);
+    }
+  };
+
   // =====================================================================
   // [28가지 인테리어 가로 트랙 슬라이딩 슬라이더 핸들러]
   // =====================================================================
@@ -307,6 +407,15 @@ export default function App() {
             }}
           />
         </main>
+        
+        {/* Shop 가도 챗봇은 항상 사용할 수 있도록 추가 마운트 */}
+        <ChatWidget 
+          sessionId={sessionId} 
+          imageId={imageId}
+          onError={setCurrentError}
+          pendingPrompt={pendingPrompt}
+          setPendingPrompt={setPendingPrompt}
+        />
       </div>
     );
   }
@@ -547,7 +656,7 @@ export default function App() {
                 color: studioTab === 'upload' ? '#FCFAF7' : 'var(--text-muted)',
               }}
             >
-              {imageId ? "🎨 스타일 변환" : "📸 공간 사진 업로드"}
+              {imageId ? "🎨 스타일 변환" : "📸 사진 업로드"}
             </button>
             <button
               onClick={() => setStudioTab('repair')}
@@ -569,37 +678,47 @@ export default function App() {
             </button>
           </div>
 
-          {/* 탭 본문 렌더링 */}
-          {studioTab === 'upload' ? (
-            !imageId ? (
-              <ImageUploader
-                imageId={imageId}
-                sessionId={sessionId}
-                originalImageUrl={originalImageUrl}
-                onUploadSuccess={(data) => {
-                  handleUploadSuccess(data);
-                }}
-                onError={setCurrentError}
-              />
-            ) : (
-              <StyleTransformer
-                imageId={imageId}
-                sessionId={sessionId}
-                originalImageUrl={originalImageUrl}
-                onGenerateSuccess={handleGenerateSuccess}
-                onError={setCurrentError}
-                pendingPrompt={quizPendingPrompt}
-                setPendingPrompt={setQuizPendingPrompt}
-                onResetImage={() => {
-                  setImageId(null);
-                  setOriginalImageUrl(null);
-                  setResultData(null);
-                }}
-              />
-            )
+          {/* 탭 본문 렌더링 ( display: none 을 통한 컴포넌트 마운트 상시 유지 및 상태 보존 ) */}
+          {!imageId ? (
+            <ImageUploader
+              imageId={imageId}
+              sessionId={sessionId}
+              originalImageUrl={originalImageUrl}
+              onUploadSuccess={(data) => {
+                handleUploadSuccess(data);
+              }}
+              onError={setCurrentError}
+            />
           ) : (
-            <div id="editor-card">
-              {imageId && originalImageUrl ? (
+            <div className="tab-contents-container">
+              {/* 1. 스타일 변환 컴포넌트 (DOM을 유지하여 다른 탭 이동 시에도 진행 중인 AI 변환 백그라운드 상태 보존) */}
+              <div style={{ display: studioTab === 'upload' ? 'block' : 'none' }}>
+                <StyleTransformer
+                  imageId={imageId}
+                  sessionId={sessionId}
+                  originalImageUrl={originalImageUrl}
+                  onGenerateSuccess={handleGenerateSuccess}
+                  onError={setCurrentError}
+                  pendingPrompt={quizPendingPrompt}
+                  setPendingPrompt={setQuizPendingPrompt}
+                  onResetImage={() => {
+                    setImageId(null);
+                    setOriginalImageUrl(null);
+                    setResultData(null);
+                    setTransformResultUrl(null);
+                    setTransformRawAnswer('');
+                    setTransformSummary(null);
+                  }}
+                  globalLoading={transformLoading}
+                  globalResultImageUrl={transformResultUrl}
+                  globalRawAnswer={transformRawAnswer}
+                  globalSummaryData={transformSummary}
+                  onSubmitTransform={handleTransformSubmitGlobal}
+                />
+              </div>
+
+              {/* 2. 부분 가구 교체 컴포넌트 (DOM을 유지하여 다른 탭 이동 시에도 마스킹/에디터 캔버스 상태 보존) */}
+              <div id="editor-card" style={{ display: studioTab === 'repair' ? 'block' : 'none' }}>
                 <ImageEditor
                   imageId={imageId}
                   sessionId={sessionId}
@@ -607,16 +726,7 @@ export default function App() {
                   onGenerateSuccess={handleGenerateSuccess}
                   onError={setCurrentError}
                 />
-              ) : (
-                <div className="card" style={{ textAlign: 'center', padding: '60px 40px', background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-                  <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>📸</div>
-                  <div style={{ fontWeight: '700', color: 'var(--text-main)', fontSize: '1.25rem', marginBottom: '8px' }}>등록된 공간 사진이 없습니다.</div>
-                  <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>먼저 [공간 사진 업로드] 탭에서 원본 이미지를 업로드해 주세요.</p>
-                  <button onClick={() => setStudioTab('upload')} className="btn btn-primary" style={{ marginTop: '20px', padding: '10px 24px', fontSize: '0.9rem' }}>
-                    사진 업로드하러 가기
-                  </button>
-                </div>
-              )}
+              </div>
             </div>
           )}
         </div>

@@ -78,13 +78,13 @@ export default function ImageUploader({
   };
 
   return (
-    <div className="card">
-      <div className="card-title">📸 변환할 인테리어 사진 업로드</div>
-      <div className="card-desc">거실, 방, 주방 등 스타일을 바꾸고 싶은 공간의 원본 사진을 선택해 주세요. 이미지를 등록하면 자동으로 서버에 업로드됩니다. (지원 형식: JPG, JPEG, PNG)</div>
+    <div className="card" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
+      <div className="card-title" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', fontSize: '1.35rem', fontWeight: '800', color: 'var(--primary)', letterSpacing: '-0.02em' }}>📸 사진 업로드</div>
+      <div className="card-desc" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', lineHeight: '1.6', opacity: 0.9 }}>거실, 방, 주방 등 스타일을 바꾸고 싶은 공간의 원본 사진을 선택해 주세요. 이미지를 등록하면 자동으로 서버에 업로드됩니다. (지원 형식: JPG, JPEG, PNG)</div>
 
       {/* Streamlit 동기화: 등록 완료 초록색 알림 띠 */}
       {imageId && (
-        <div className="success-banner" style={{ marginBottom: '20px' }}>
+        <div className="success-banner" style={{ marginBottom: '20px', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
           <span>🎉</span>
           <span><strong>인테리어 사진 등록 완료!</strong> 아래 단계에서 스타일 변환이나 부분 가구 교체를 진행하실 수 있습니다.</span>
         </div>
@@ -99,27 +99,27 @@ export default function ImageUploader({
         id="file-upload-input"
       />
 
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
         {!previewUrl ? (
-          <label htmlFor="file-upload-input" className="dropzone" style={{ width: '100%', minHeight: '180px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+          <label htmlFor="file-upload-input" className="dropzone" style={{ width: '100%', minHeight: '180px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
             <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📂</div>
-            <div style={{ fontWeight: '600', color: '#fff', marginBottom: '6px' }}>클릭하여 공간 사진 업로드</div>
-            <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>JPG, JPEG, PNG 이미지 선택</div>
+            <div style={{ fontWeight: '700', color: '#fff', marginBottom: '6px', fontFamily: 'Outfit, "Noto Sans KR", sans-serif', fontSize: '0.95rem' }}>클릭하여 공간 사진 업로드</div>
+            <div style={{ fontSize: '0.8rem', color: '#94a3b8', fontFamily: 'Outfit, sans-serif' }}>JPG, JPEG, PNG 이미지 선택</div>
           </label>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
             <div className="preview-box" style={{ height: 'auto', marginBottom: '15px', position: 'relative', width: '100%', maxHeight: '400px', display: 'flex', justifyContent: 'center', background: '#0f172a', borderRadius: '10px' }}>
               <img src={previewUrl} alt="원본 미리보기" style={{ width: '100%', height: 'auto', maxHeight: '400px', objectFit: 'contain', borderRadius: '10px' }} />
               {uploading && (
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.75)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', borderRadius: '10px', color: '#fff' }}>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.75)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', borderRadius: '10px', color: '#fff', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
                   <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🚀</div>
                   <div style={{ fontWeight: '600' }}>서버 등록 중...</div>
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0 10px' }}>
-              <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>📦 {selectedFile?.name} ({roundSize(selectedFile?.size)})</span>
-              <label htmlFor="file-upload-input" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0 10px', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
+              <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>📦 {selectedFile?.name} ({roundSize(selectedFile?.size)})</span>
+              <label htmlFor="file-upload-input" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
                 사진 변경
               </label>
             </div>
