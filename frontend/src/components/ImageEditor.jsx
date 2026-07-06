@@ -315,8 +315,8 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 1fr', gap: '32px', alignItems: 'start' }}>
-        {/* 좌측: 순수 마스킹 캔버스 영역 (글씨나 불필요한 컨트롤 제외) */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.48fr 1fr', gap: '24px', alignItems: 'start' }}>
+        {/* /좌측: 순수 마스킹 캔버스 영역 (글씨나 불필요한 컨트롤 제외) */}
         <div>
           <div
             ref={containerRef}
@@ -402,35 +402,34 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
         <div style={{ 
           display: 'flex', 
           flexDirection: 'column', 
-          gap: '24px',
+          gap: '16px',
           background: 'rgba(255, 255, 255, 0.45)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           border: '1px solid rgba(255, 255, 255, 0.45)',
           borderRadius: '20px',
-          padding: '24px',
+          padding: '16px 20px',
           boxShadow: '0 8px 32px rgba(46, 40, 36, 0.03)'
         }}>
           
           {/* 수선 영역 탭 스위처 - 파스텔 색상 배경 & 이모지 및 가이드 문구 삭제, 탭 대제목 굵기 복구 (두껍게) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: '700', color: '#7A6C62', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <span style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', color: '#7A6C62', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               지정할 가구 선택
             </span>
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 type="button"
                 onClick={() => setMaskMode('A')}
                 style={{
                   flex: 1,
-                  padding: '14px 8px', // 패딩을 8px로 조절하여 여백 확보
-                  borderRadius: '12px',
-                  fontWeight: '500', // 얇은 폰트 두께 적용
-                  fontSize: '0.82rem', // 줄바꿈 방지를 위해 폰트 크기 미세 감소
-                  whiteSpace: 'nowrap', // 텍스트 한 줄 정렬 강제
+                  padding: '10px 6px',
+                  borderRadius: '10px',
+                  fontWeight: '500',
+                  fontSize: '0.8rem',
+                  whiteSpace: 'nowrap',
                   cursor: 'pointer',
                   transition: 'all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1)',
-                  // 파스텔 파란색 배경을 깔고 활성화 테두리 지정
                   background: '#e0f2fe',
                   border: `2px solid ${maskMode === 'A' ? '#3B82F6' : 'transparent'}`,
                   color: '#0369a1',
@@ -445,14 +444,13 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                 onClick={() => setMaskMode('B')}
                 style={{
                   flex: 1,
-                  padding: '14px 8px', // 패딩을 8px로 조절하여 여백 확보
-                  borderRadius: '12px',
-                  fontWeight: '500', // 얇은 폰트 두께 적용
-                  fontSize: '0.82rem', // 줄바꿈 방지를 위해 폰트 크기 미세 감소
-                  whiteSpace: 'nowrap', // 텍스트 한 줄 정렬 강제
+                  padding: '10px 6px',
+                  borderRadius: '10px',
+                  fontWeight: '500',
+                  fontSize: '0.8rem',
+                  whiteSpace: 'nowrap',
                   cursor: 'pointer',
                   transition: 'all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1)',
-                  // 파스텔 빨간색 배경을 깔고 활성화 테두리 지정
                   background: '#ffe4e6',
                   border: `2px solid ${maskMode === 'B' ? '#EC4899' : 'transparent'}`,
                   color: '#be185d',
@@ -486,8 +484,8 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
           </div>
 
           {/* 인풋 영역 A - 이모지 및 사진 드래그 필요 문구 삭제, 얇은 폰트 적용 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontSize: '0.88rem', fontWeight: '400', color: '#1E40AF', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <label style={{ fontSize: '0.82rem', fontWeight: '400', color: '#1E40AF', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', display: 'flex', alignItems: 'center', gap: '6px' }}>
               가구 A 교체 스타일 입력 (필수)
               {maskPixelsA && (
                 <span style={{ fontSize: '0.72rem', background: '#3B82F6', color: '#fff', padding: '1px 6px', borderRadius: '4px' }}>영역 등록됨</span>
@@ -500,11 +498,12 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
               placeholder="예: 현대적이고 고급스러운 가죽 소파"
               className="input-field"
               style={{ 
-                padding: '14px 16px', 
-                fontSize: '0.9rem', 
+                padding: '10px 12px', 
+                fontSize: '0.85rem', 
                 fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
                 border: `1.5px solid ${maskMode === 'A' ? '#3B82F6' : 'var(--border-color)'}`,
-                borderRadius: '12px',
+                borderRadius: '10px',
+                borderWidth: '1.5px',
                 background: '#FFFFFF',
                 outline: 'none',
                 transition: 'all 0.3s'
@@ -513,9 +512,9 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
           </div>
 
           {/* 인풋 영역 B - 이모지 제거 및 얇은 폰트 적용 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label style={{ 
-              fontSize: '0.88rem', 
+              fontSize: '0.82rem', 
               fontWeight: '400', 
               color: '#9D174D', 
               fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
@@ -537,13 +536,13 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
               className="input-field"
               disabled={!maskPixelsB}
               style={{ 
-                padding: '14px 16px',
-                fontSize: '0.9rem',
+                padding: '10px 12px',
+                fontSize: '0.85rem',
                 opacity: maskPixelsB ? 1 : 0.6,
                 cursor: maskPixelsB ? 'text' : 'not-allowed',
                 fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
                 border: `1.5px solid ${maskMode === 'B' ? '#EC4899' : 'var(--border-color)'}`,
-                borderRadius: '12px',
+                borderRadius: '10px',
                 background: maskPixelsB ? '#FFFFFF' : '#F8FAFC',
                 outline: 'none',
                 transition: 'all 0.3s'
@@ -552,35 +551,35 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
           </div>
 
           {/* 주요 작업 실행 버튼들 - 이모지 및 사진 드래그 관련 문구/아이콘 삭제 및 얇은 폰트 변경 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
             <button
               type="button"
               onClick={handleEditSubmit}
               disabled={editing || !maskPixelsA}
               className="btn btn-primary btn-full"
               style={{ 
-                padding: '16px', 
-                fontSize: '0.95rem', 
-                fontWeight: '400', // 얇은 글씨체 적용
+                padding: '12px', 
+                fontSize: '0.9rem', 
+                fontWeight: '400',
                 cursor: (!maskPixelsA || editing) ? 'not-allowed' : 'pointer',
                 background: (!maskPixelsA) ? '#E2E8F0' : 'var(--primary)',
                 color: (!maskPixelsA) ? '#94A3B8' : '#FCFAF7',
                 border: 'none',
-                borderRadius: '12px',
+                borderRadius: '10px',
                 transition: 'all 0.25s ease',
                 fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
-                boxShadow: maskPixelsA ? '0 8px 24px rgba(43, 53, 48, 0.15)' : 'none'
+                boxShadow: maskPixelsA ? '0 6px 18px rgba(43, 53, 48, 0.12)' : 'none'
               }}
               onMouseEnter={(e) => {
                 if (maskPixelsA && !editing) {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 12px 28px rgba(43, 53, 48, 0.25)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 8px 20px rgba(43, 53, 48, 0.2)';
                 }
               }}
               onMouseLeave={(e) => {
                 if (maskPixelsA && !editing) {
                   e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(43, 53, 48, 0.15)';
+                  e.currentTarget.style.boxShadow = '0 6px 18px rgba(43, 53, 48, 0.12)';
                 }
               }}
             >
@@ -593,14 +592,14 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
               disabled={searchingProducts || (!maskPixelsA && !maskPixelsB)}
               className="btn btn-secondary btn-full"
               style={{ 
-                padding: '14px', 
-                fontSize: '0.95rem', 
+                padding: '12px', 
+                fontSize: '0.9rem', 
                 fontWeight: '400',
                 cursor: (((maskMode === 'A' ? !maskPixelsA : !maskPixelsB) || searchingProducts) ? 'not-allowed' : 'pointer'),
                 background: '#FFFFFF',
                 color: 'var(--primary)',
                 border: (maskMode === 'A' ? !maskPixelsA : !maskPixelsB) ? '1px solid rgba(0,0,0,0.06)' : '1.5px solid var(--primary)',
-                borderRadius: '12px',
+                borderRadius: '10px',
                 transition: 'all 0.25s ease',
                 fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
               }}
@@ -619,158 +618,177 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
             </button>
           </div>
 
-          {/* 쇼핑 정보 카드 리스트 (A영역 & B영역 분리 렌더링 - 찌그러짐 없는 컴팩트 레이아웃 병합) */}
-          {(productsListA.length > 0 || productsListB.length > 0) && (
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ fontSize: '1.02rem', fontWeight: '700', color: 'var(--text-main)', marginBottom: '4px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-                실시간 매칭 유사 상품 정보
-              </div>
-              
-              {/* A 영역 추천 리스트 */}
-              {productsListA.length > 0 && (
-                <div>
-                  <div style={{ fontSize: '0.82rem', fontWeight: '500', color: '#8B7E74', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#8B7E74' }}></span>
-                    A 영역 매칭 상품
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
-                    {productsListA.map((item, idx) => (
-                      <div 
-                        key={`A-${idx}`} 
-                        style={{ 
-                          display: 'flex', 
-                          background: '#FFFFFF', 
-                          borderRadius: '12px', 
-                          border: '1px solid var(--border-color)',
-                          padding: '12px 18px 12px 12px',
-                          gap: '12px',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
-                          minHeight: '100px',
-                          alignItems: 'center',
-                          fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
-                          boxSizing: 'border-box'
-                        }}
-                      >
-                        <img 
-                          src={item.image_url} 
-                          alt={item.product_name} 
-                          style={{ 
-                            width: '76px', 
-                            height: '76px', 
-                            objectFit: 'cover', 
-                            borderRadius: '8px',
-                            border: '1px solid var(--border-color)',
-                            flexShrink: 0,
-                            alignSelf: 'flex-start'
-                          }} 
-                        />
-                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1, minHeight: '76px', gap: '6px', paddingRight: '4px' }}>
-                          <div>
-                            <div style={{ fontSize: '0.82rem', fontWeight: '500', color: 'var(--text-main)', lineHeight: '1.3', marginBottom: '4px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-                              {item.product_name}
-                            </div>
-                            <div style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--accent)', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-                              {item.price}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px', gap: '8px' }}>
-                            <span style={{ fontSize: '0.68rem', color: '#1E40AF', background: '#EFF6FF', padding: '3px 8px', borderRadius: '4px', fontWeight: '400', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', whiteSpace: 'nowrap' }}>
-                              유사도 {Math.round(item.similarity * 100)}%
-                            </span>
-                            <a 
-                              href={item.purchase_link} 
-                              target="_blank" 
-                              rel="noreferrer"
-                              style={{ 
-                                fontSize: '0.72rem', 
-                                fontWeight: '400', 
-                                color: '#fff', 
-                                background: 'var(--primary)', 
-                                padding: '6px 14px', 
-                                borderRadius: '6px',
-                                textDecoration: 'none',
-                                whiteSpace: 'nowrap',
-                                textAlign: 'center',
-                                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
-                              }}
-                            >
-                              구매 링크 ↗
-                            </a>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+        </div>  {/* 우측 패널의 닫기 태그 */}
+      </div>    {/* 상단 1.25fr 1fr 그리드 레이아웃의 닫기 태그 */}
 
-              {/* B 영역 추천 리스트 */}
-              {productsListB.length > 0 && (
-                <div style={{ borderTop: productsListA.length > 0 ? '1px dashed var(--border-color)' : 'none', paddingTop: productsListA.length > 0 ? '12px' : '0' }}>
-                  <div style={{ fontSize: '0.82rem', fontWeight: '500', color: '#C7B7AE', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#C7B7AE' }}></span>
-                    B 영역 매칭 상품
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
-                    {productsListB.map((item, idx) => (
-                      <div 
-                        key={`B-${idx}`} 
+      {/* 쇼핑 정보 카드 리스트 (하단 독립 대형 행으로 완전 분리) */}
+      {(productsListA.length > 0 || productsListB.length > 0) && (
+        <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '28px', marginTop: '28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ fontSize: '1.02rem', fontWeight: '700', color: 'var(--text-main)', marginBottom: '4px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+            실시간 매칭 유사 상품 정보
+          </div>
+          
+          {/* 좌우 1fr 1fr 대형 듀얼 컬럼 그리드 배치 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
+            
+            {/* A 영역 추천 리스트 */}
+            {productsListA.length > 0 && (
+              <div>
+                <div style={{ fontSize: '0.82rem', fontWeight: '500', color: '#8B7E74', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                  <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#8B7E74' }}></span>
+                  A 영역 매칭 상품
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {productsListA.map((item, idx) => (
+                    <div 
+                      key={`A-${idx}`} 
+                      style={{ 
+                        display: 'flex', 
+                        background: '#FFFFFF', 
+                        borderRadius: '12px', 
+                        border: '1px solid var(--border-color)',
+                        padding: '12px 18px 12px 12px',
+                        gap: '12px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                        minHeight: '100px',
+                        alignItems: 'center',
+                        fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <img 
+                        src={item.image_url} 
+                        alt={item.product_name} 
                         style={{ 
-                          display: 'flex', 
-                        }}
-                      >
-                        <img 
-                          src={item.image_url} 
-                          alt={item.product_name} 
-                          style={{ 
-                            width: '64px', 
-                            height: '64px', 
-                            objectFit: 'cover', 
-                            borderRadius: '6px',
-                            border: '1px solid var(--border-color)'
-                          }} 
-                        />
-                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1 }}>
-                          <div>
-                            <div style={{ fontSize: '0.78rem', fontWeight: '700', color: 'var(--text-main)', lineHeight: '1.25', marginBottom: '2px' }}>
-                              {item.product_name}
-                            </div>
-                            <div style={{ fontSize: '0.82rem', fontWeight: '800', color: 'var(--text-main)' }}>
-                              {item.price}
-                            </div>
+                          width: '76px', 
+                          height: '76px', 
+                          objectFit: 'cover', 
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color)',
+                          flexShrink: 0,
+                          alignSelf: 'flex-start'
+                        }} 
+                      />
+                      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1, minHeight: '76px', gap: '6px', paddingRight: '4px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.82rem', fontWeight: '500', color: 'var(--text-main)', lineHeight: '1.3', marginBottom: '4px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', textAlign: 'left' }}>
+                            {item.product_name}
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
-                            <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.05)', padding: '1px 5px', borderRadius: '4px' }}>
-                              유사도 {Math.round(item.similarity * 100)}%
-                            </span>
-                            <a 
-                              href={item.purchase_link} 
-                              target="_blank" 
-                              rel="noreferrer"
-                              style={{ 
-                                fontSize: '0.68rem', 
-                                fontWeight: '700', 
-                                color: 'var(--primary)', 
-                                background: '#C7B7AE', 
-                                padding: '3px 8px', 
-                                borderRadius: '4px',
-                                textDecoration: 'none'
-                              }}
-                            >
-                              구매 링크 ↗
-                            </a>
+                          <div style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--accent)', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', textAlign: 'left' }}>
+                            {item.price}
                           </div>
                         </div>
->>>>>>> theirs
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px', gap: '8px' }}>
+                          <span style={{ fontSize: '0.68rem', color: '#1E40AF', background: '#EFF6FF', padding: '3px 8px', borderRadius: '4px', fontWeight: '400', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', whiteSpace: 'nowrap' }}>
+                            유사도 {Math.round(item.similarity * 100)}%
+                          </span>
+                          <a 
+                            href={item.purchase_link} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            style={{ 
+                              fontSize: '0.72rem', 
+                              fontWeight: '400', 
+                              color: '#fff', 
+                              background: 'var(--primary)', 
+                              padding: '6px 14px', 
+                              borderRadius: '6px',
+                              textDecoration: 'none',
+                              whiteSpace: 'nowrap',
+                              textAlign: 'center',
+                              fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+                            }}
+                          >
+                            구매 링크 ↗
+                          </a>
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+ 
+            {/* B 영역 추천 리스트 */}
+            {productsListB.length > 0 && (
+              <div>
+                <div style={{ fontSize: '0.82rem', fontWeight: '500', color: '#C7B7AE', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                  <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#C7B7AE' }}></span>
+                  B 영역 매칭 상품
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '350px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {productsListB.map((item, idx) => (
+                    <div 
+                      key={`B-${idx}`} 
+                      style={{ 
+                        display: 'flex', 
+                        background: '#FFFFFF', 
+                        borderRadius: '12px', 
+                        border: '1px solid var(--border-color)',
+                        padding: '12px 18px 12px 12px',
+                        gap: '12px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                        minHeight: '100px',
+                        alignItems: 'center',
+                        fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
+                        boxSizing: 'border-box'
+                      }}
+                    >
+                      <img 
+                        src={item.image_url} 
+                        alt={item.product_name} 
+                        style={{ 
+                          width: '76px', 
+                          height: '76px', 
+                          objectFit: 'cover', 
+                          borderRadius: '8px',
+                          border: '1px solid var(--border-color)',
+                          flexShrink: 0,
+                          alignSelf: 'flex-start'
+                        }} 
+                      />
+                      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1, minHeight: '76px', gap: '6px', paddingRight: '4px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.82rem', fontWeight: '500', color: 'var(--text-main)', lineHeight: '1.3', marginBottom: '4px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', textAlign: 'left' }}>
+                            {item.product_name}
+                          </div>
+                          <div style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--accent)', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', textAlign: 'left' }}>
+                            {item.price}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px', gap: '8px' }}>
+                          <span style={{ fontSize: '0.68rem', color: '#1E40AF', background: '#EFF6FF', padding: '3px 8px', borderRadius: '4px', fontWeight: '400', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', whiteSpace: 'nowrap' }}>
+                            유사도 {Math.round(item.similarity * 100)}%
+                          </span>
+                          <a 
+                            href={item.purchase_link} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            style={{ 
+                              fontSize: '0.72rem', 
+                              fontWeight: '400', 
+                              color: '#fff', 
+                              background: 'var(--primary)', 
+                              padding: '6px 14px', 
+                              borderRadius: '6px',
+                              textDecoration: 'none',
+                              whiteSpace: 'nowrap',
+                              textAlign: 'center',
+                              fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+                            }}
+                          >
+                            구매 링크 ↗
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

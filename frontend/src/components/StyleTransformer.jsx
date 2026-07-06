@@ -130,15 +130,13 @@ export default function StyleTransformer({
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
             
-            {/* 로딩 인디케이터 오버레이 - 이모지 제거 */}
             {loading && (
               <div style={{ 
                 position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, 
                 background: 'rgba(15, 23, 42, 0.8)', 
                 display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: '#fff' 
               }}>
-                <div style={{ fontWeight: '700', fontSize: '1rem' }}>공간 리모델링 및 자재 분석 중...</div>
-                <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>대략 5~10초 소요됩니다. 잠시만 기다려주세요.</div>
+                <div style={{ fontWeight: '700', fontSize: '1rem' }}>이미지 변환 중...</div>
               </div>
             )}
 
@@ -187,39 +185,20 @@ export default function StyleTransformer({
           minHeight: '340px'
         }}>
           {loading ? (
-            /* 로딩 중 모션 플레이트 */
             <div style={{ 
               display: 'flex', 
               flexDirection: 'column', 
               height: '100%', 
               justifyContent: 'center', 
-              alignItems: 'stretch',
+              alignItems: 'center',
               gap: '20px',
               padding: '10px 0'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--accent)', animation: 'pulse 1.2s infinite' }} />
-                <span style={{ fontSize: '0.82rem', fontWeight: '800', color: 'var(--primary)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                  AI Spatial Analysis
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', margin: 'auto' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: 'var(--accent)', animation: 'pulse 1.2s infinite' }} />
+                <span style={{ fontSize: '0.95rem', fontWeight: '800', color: 'var(--primary)', letterSpacing: '0.02em' }}>
+                  이미지 변환 중...
                 </span>
-              </div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div className="skeleton-line" style={{ width: '100%', height: '18px', borderRadius: '4px', background: 'linear-gradient(90deg, #F5EFEB 25%, #EAE5DF 50%, #F5EFEB 75%)', backgroundSize: '200% 100%', animation: 'skeleton-glow 1.5s infinite' }} />
-                <div className="skeleton-line" style={{ width: '85%', height: '14px', borderRadius: '4px', background: 'linear-gradient(90deg, #F5EFEB 25%, #EAE5DF 50%, #F5EFEB 75%)', backgroundSize: '200% 100%', animation: 'skeleton-glow 1.5s infinite' }} />
-                <div className="skeleton-line" style={{ width: '60%', height: '14px', borderRadius: '4px', background: 'linear-gradient(90deg, #F5EFEB 25%, #EAE5DF 50%, #F5EFEB 75%)', backgroundSize: '200% 100%', animation: 'skeleton-glow 1.5s infinite' }} />
-              </div>
-
-              <div style={{ 
-                marginTop: '10px',
-                padding: '16px', 
-                backgroundColor: 'rgba(234, 229, 223, 0.3)', 
-                borderRadius: '12px',
-                border: '1px solid rgba(255,255,255,0.5)'
-              }}>
-                <p style={{ margin: 0, fontSize: '0.82rem', lineHeight: '1.5', color: 'var(--text-main)', fontWeight: '600' }}>
-                  공간의 벽지 질감 and 광원 정보를 기반으로 신규 가구 텍스처를 맵핑하고 있습니다. 잠시만 기다려주세요.
-                </p>
               </div>
 
               <button
@@ -227,13 +206,14 @@ export default function StyleTransformer({
                 className="btn btn-primary"
                 style={{ 
                   marginTop: 'auto',
+                  width: '100%',
                   padding: '14px', fontSize: '0.95rem', fontWeight: '700',
                   background: 'rgba(43, 53, 48, 0.1)',
                   color: 'var(--text-muted)',
                   border: 'none', borderRadius: '12px'
                 }}
               >
-                스타일 리모델링 변환 중...
+                이미지 변환 중...
               </button>
             </div>
           ) : (
