@@ -578,37 +578,39 @@ export default function App() {
             </button>
           </div>
 
-          {/* 탭 본문 렌더링 */}
-          {studioTab === 'upload' ? (
-            !imageId ? (
-              <ImageUploader
-                imageId={imageId}
-                sessionId={sessionId}
-                originalImageUrl={originalImageUrl}
-                onUploadSuccess={(data) => {
-                  handleUploadSuccess(data);
-                }}
-                onError={setCurrentError}
-              />
-            ) : (
-              <StyleTransformer
-                imageId={imageId}
-                sessionId={sessionId}
-                originalImageUrl={originalImageUrl}
-                onGenerateSuccess={handleGenerateSuccess}
-                onError={setCurrentError}
-                pendingPrompt={quizPendingPrompt}
-                setPendingPrompt={setQuizPendingPrompt}
-                onResetImage={() => {
-                  setImageId(null);
-                  setOriginalImageUrl(null);
-                  setResultData(null);
-                }}
-              />
-            )
+          {/* 탭 본문 렌더링 ( display: none 을 통한 컴포넌트 마운트 상시 유지 및 상태 보존 ) */}
+          {!imageId ? (
+            <ImageUploader
+              imageId={imageId}
+              sessionId={sessionId}
+              originalImageUrl={originalImageUrl}
+              onUploadSuccess={(data) => {
+                handleUploadSuccess(data);
+              }}
+              onError={setCurrentError}
+            />
           ) : (
-            <div id="editor-card">
-              {imageId && originalImageUrl ? (
+            <div className="tab-contents-container">
+              {/* 1. 스타일 변환 컴포넌트 (DOM을 유지하여 다른 탭 이동 시에도 진행 중인 AI 변환 백그라운드 상태 보존) */}
+              <div style={{ display: studioTab === 'upload' ? 'block' : 'none' }}>
+                <StyleTransformer
+                  imageId={imageId}
+                  sessionId={sessionId}
+                  originalImageUrl={originalImageUrl}
+                  onGenerateSuccess={handleGenerateSuccess}
+                  onError={setCurrentError}
+                  pendingPrompt={quizPendingPrompt}
+                  setPendingPrompt={setQuizPendingPrompt}
+                  onResetImage={() => {
+                    setImageId(null);
+                    setOriginalImageUrl(null);
+                    setResultData(null);
+                  }}
+                />
+              </div>
+
+              {/* 2. 부분 가구 교체 컴포넌트 (DOM을 유지하여 다른 탭 이동 시에도 마스킹/에디터 캔버스 상태 보존) */}
+              <div id="editor-card" style={{ display: studioTab === 'repair' ? 'block' : 'none' }}>
                 <ImageEditor
                   imageId={imageId}
                   sessionId={sessionId}
@@ -616,16 +618,7 @@ export default function App() {
                   onGenerateSuccess={handleGenerateSuccess}
                   onError={setCurrentError}
                 />
-              ) : (
-                <div className="card" style={{ textAlign: 'center', padding: '60px 40px', background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
-                  <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>📸</div>
-                  <div style={{ fontWeight: '700', color: 'var(--text-main)', fontSize: '1.25rem', marginBottom: '8px' }}>등록된 공간 사진이 없습니다.</div>
-                  <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>먼저 [공간 사진 업로드] 탭에서 원본 이미지를 업로드해 주세요.</p>
-                  <button onClick={() => setStudioTab('upload')} className="btn btn-primary" style={{ marginTop: '20px', padding: '10px 24px', fontSize: '0.9rem' }}>
-                    사진 업로드하러 가기
-                  </button>
-                </div>
-              )}
+              </div>
             </div>
           )}
         </div>
