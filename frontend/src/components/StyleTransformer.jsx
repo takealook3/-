@@ -261,50 +261,7 @@ export default function StyleTransformer({
                 />
               </div>
 
-              {/* [퀵 칩 추천 영역] */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#7A6C62', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Quick Recommendation
-                </span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {STYLES_CHIPS.map((chip, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setPrompt(chip.text)}
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: '0.78rem',
-                        fontWeight: '700',
-                        borderRadius: '30px',
-                        border: '1px solid rgba(43, 53, 48, 0.1)',
-                        backgroundColor: '#FFFFFF',
-                        color: 'var(--primary)',
-                        cursor: 'pointer',
-                        transition: 'all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        boxShadow: '0 2px 6px rgba(46, 40, 36, 0.02)'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--accent)';
-                        e.currentTarget.style.backgroundColor = '#FCFAF7';
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(195, 159, 125, 0.15)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = 'rgba(43, 53, 48, 0.1)';
-                        e.currentTarget.style.backgroundColor = '#FFFFFF';
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 2px 6px rgba(46, 40, 36, 0.02)';
-                      }}
-                    >
-                      {chip.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+
 
               <button
                 type="submit"

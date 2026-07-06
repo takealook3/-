@@ -770,13 +770,7 @@ export default function App() {
 
         {/* [메인에서 가구 카탈로그 제거 - Shop 버튼을 통해 새 창으로 제공됨] */}
 
-        {/* 28대 인테리어 스타일 도감 전시장 (GNB 28 Styles 메뉴 매핑) */}
-        <StyleEncyclopedia 
-          activeId={activeStyleId} 
-          setActiveId={setActiveStyleId} 
-          isModalOpen={isStyleModalOpen} 
-          setIsModalOpen={setIsStyleModalOpen} 
-        />
+
 
         {/* 하단 럭셔리 브랜드 푸터 (NÜMA 시안 감성 완벽 재현) */}
         <footer style={{
