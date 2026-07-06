@@ -1072,22 +1072,27 @@ body {
 }
 
 .prompt-text-field {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-top: 4px;
+  gap: 12px;
+  margin-top: 8px;
+  width: 100%;
 }
 
 .prompt-text-content {
-  font-family: 'Consolas', monospace;
+  display: block;
+  font-family: inherit;
   font-size: 0.82rem;
+  line-height: 1.5;
   color: var(--text-main);
   background-color: var(--bg-card-inner);
-  padding: 10px 14px;
+  padding: 12px 14px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
   flex-grow: 1;
-  overflow-x: auto;
-  white-space: nowrap;
+  white-space: pre-wrap;
+  word-break: break-word;
   max-width: calc(100% - 44px);
 }
 

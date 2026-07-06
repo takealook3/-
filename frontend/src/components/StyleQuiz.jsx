@@ -300,20 +300,12 @@ export default function StyleQuiz({ onApplyPrompt }) {
 
             {/* 우측: 감성 설명 및 프롬프트 연동 섹션 */}
             <div className="quiz-result-info flex-column gap-md">
-              <div className="style-description-box p-md bg-glass-dark">
-                <h3 className="style-info-title text-accent flex-center gap-xs">
-                  <Sparkles size={20} />
-                  시각적 정체성 & 큐레이션 가이드
-                </h3>
-                <p className="style-desc-text mt-sm">
-                  {resultStyle.description || '이 공간은 사용자가 선택한 정돈된 비례감과 마감 요소들의 장점들을 아름답게 극대화한 독창적인 큐레이션 스타일입니다.'}
-                </p>
-                <div className="style-tips-list mt-md">
-                  <strong className="text-primary text-sm" style={{ color: 'var(--primary)', fontWeight: 'bold' }}>💡 공간 스타일링 연출 팁:</strong>
-                  <ul className="mt-xs text-xs flex-column gap-xs" style={{ color: 'var(--text-main)', opacity: 0.9 }}>
-                    <li>선택하신 질감과 톤이 가장 돋보일 수 있는 베이직 가구를 중심으로 공간의 무게중심을 잡아주세요.</li>
-                    <li>빛의 방향과 색감(웜/쿨)에 반응하여 전체적인 마감재가 조화롭게 어우러지도록 메인 패브릭 컬러를 세팅하세요.</li>
-                  </ul>
+              <div className="style-description-box p-md bg-glass-dark" style={{ padding: '16px' }}>
+                <div className="style-tips-list">
+                  <strong className="text-accent text-sm" style={{ fontWeight: 'bold' }}>💡 공간 스타일링 연출 팁: </strong>
+                  <span className="text-sm ml-xs" style={{ color: 'var(--text-main)', opacity: 0.9 }}>
+                    선택하신 질감과 톤이 가장 돋보일 수 있는 베이직 가구를 중심으로 공간의 분위기를 극대화해 보세요.
+                  </span>
                 </div>
               </div>
 
