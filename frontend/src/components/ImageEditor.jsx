@@ -51,8 +51,8 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
 
   // 마우스 클릭 시작
   const handleMouseDown = (e) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
+    if (!imgRef.current) return;
+    const rect = imgRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     setIsDragging(true);
@@ -69,8 +69,8 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
 
   // 마우스 드래그 중
   const handleMouseMove = (e) => {
-    if (!isDragging || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
+    if (!isDragging || !imgRef.current) return;
+    const rect = imgRef.current.getBoundingClientRect();
     const currentX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
     const currentY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
 
@@ -95,9 +95,9 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
     if (!isDragging) return;
     setIsDragging(false);
 
-    if (!containerRef.current || !imgRef.current) return;
+    if (!imgRef.current) return;
 
-    const rect = containerRef.current.getBoundingClientRect();
+    const rect = imgRef.current.getBoundingClientRect();
     // React state 비동기 갱신 대신 ref에서 최신 좌표를 즉시 동기적으로 읽음
     const currentX = dragCurrentRef.current.x;
     const currentY = dragCurrentRef.current.y;
