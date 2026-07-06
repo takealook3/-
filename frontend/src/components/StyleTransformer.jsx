@@ -12,13 +12,20 @@ export default function StyleTransformer({
   onError,
   onResetImage,
   pendingPrompt,
-  setPendingPrompt
+  setPendingPrompt,
+  globalLoading,
+  globalResultImageUrl,
+  globalRawAnswer,
+  globalSummaryData,
+  onSubmitTransform
 }) {
   const [prompt, setPrompt] = useState('밝고 미니멀한 거실로 바꿔줘');
-  const [loading, setLoading] = useState(false);
-  const [resultImageUrl, setResultImageUrl] = useState(null);
-  const [rawAnswer, setRawAnswer] = useState('');
-  const [summaryData, setSummaryData] = useState(null);
+
+  // 부모의 상태를 Alias하여 마크업 무수정 연동 보장
+  const loading = globalLoading;
+  const resultImageUrl = globalResultImageUrl;
+  const rawAnswer = globalRawAnswer;
+  const summaryData = globalSummaryData;
 
   // 퀴즈 결과 프롬프트 주입 감지 및 인풋 갱신
   useEffect(() => {
@@ -76,59 +83,9 @@ export default function StyleTransformer({
   const handleTransformSubmit = async (e) => {
     e?.preventDefault();
     if (!prompt || !prompt.trim() || loading) return;
-
-    setLoading(true);
-    setResultImageUrl(null);
-    setRawAnswer('');
-    setSummaryData(null);
-    onError(null);
-
-    // 사용자의 자연어 요구사항 프롬프트 전송
-    const combinedQuestion = prompt.trim();
-
-    try {
-      const res = await sendChatMessage({
-        sessionId: sessionId || "session_default",
-        question: combinedQuestion,
-        imageId: imageId
-      });
-
-      if (res.success) {
-        const respData = res.data || {};
-        const fullImg = getFullUrl(respData.image_url);
-        setResultImageUrl(fullImg);
-        setRawAnswer(respData.answer || "");
-        
-        // AI 코멘트 자재 요약 분석 실행
-        const parsed = parseInteriorRecommendation(respData.answer);
-        setSummaryData(parsed);
-
-        if (respData.result_id && onGenerateSuccess) {
-          onGenerateSuccess({
-            resultId: respData.result_id,
-            resultImageUrl: fullImg,
-            style: respData.style || "modern",
-            prompt: respData.prompt || prompt.trim(),
-            processingTime: respData.processing_time || 0,
-            status: "completed",
-            recommendations: parsed
-          });
-        }
-      } else {
-        onError({
-          errorCode: res.errorCode || "PROCESSING_FAILED",
-          message: res.message || "스타일 변환 작업에 실패했습니다."
-        });
-      }
-    } catch (err) {
-      console.error(err);
-      onError({
-        errorCode: "SERVER_ERROR",
-        message: `스타일 변환 통신 오류: ${err.message}`
-      });
-    } finally {
-      setLoading(false);
-    }
+    
+    // 부모의 글로벌 비동기 격발 함수 실행!
+    onSubmitTransform(prompt);
   };
 
   return (
