@@ -2,7 +2,6 @@
 // [App.jsx: Streamlit 100% 동기화 + 부분 수선 Inpainting 통합 지휘관]
 // =====================================================================
 import React, { useState, useEffect, useCallback } from 'react';
-import Sidebar from './components/Sidebar';
 import ErrorBanner from './components/ErrorBanner';
 import ImageUploader from './components/ImageUploader';
 // StyleSelector는 ChatWidget 통합으로 인해 제거되었습니다.
