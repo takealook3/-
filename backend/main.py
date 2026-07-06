@@ -2614,7 +2614,7 @@ def search_similar_products(payload: Dict[str, Any]):
                     cropped_img = img.crop((px1, y1, px2, y2)).convert("RGB")
                     crops_dir = os.path.join(PROJECT_ROOT, "uploads", "crops")
                     os.makedirs(crops_dir, exist_ok=True)
-                    cropped_img_path = os.path.join(crops_dir, f"{image_id}_crop.jpg")
+                    cropped_img_path = os.path.join(crops_dir, f"{image_id}_{px1}_{py1}_{px2}_{py2}_crop.jpg")
                     cropped_img.save(cropped_img_path, "JPEG", quality=90)
                     print(f"✂️ [Product Search] 가구 이미지 오려내기 완료: {cropped_img_path}")
         except Exception as e:
