@@ -10,7 +10,7 @@ import ComparisonGallery from './components/ComparisonGallery';
 import SessionModal from './components/SessionModal';
 import StyleTransformer from './components/StyleTransformer';
 import ChatWidget from './components/ChatWidget';
-import { STYLE_DATABASE } from './components/StyleEncyclopedia';
+import StyleEncyclopedia, { STYLE_DATABASE } from './components/StyleEncyclopedia';
 import StyleQuiz from './components/StyleQuiz';
 import FurnitureShopShowroom from './components/FurnitureShopShowroom';
 import { checkHealth, sendChatMessage, API_BASE_URL } from './services/api';
