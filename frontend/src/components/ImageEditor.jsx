@@ -625,7 +625,6 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
               </div>
             </>
           )}
->>>>>>> c9fbd41757bfcd0c5b18c9e176e49f16bcb0a1c7
 
         </div>  {/* 우측 패널의 닫기 태그 */}
       </div>    {/* 상단 1.25fr 1fr 그리드 레이아웃의 닫기 태그 */}
