@@ -504,50 +504,123 @@ A/S 절차가 궁금하다면?
 ]
 
 def load_style_documents() -> list:
-    url = "https://docs.google.com/spreadsheets/d/1FYOIu_GvwEO-oRIWl5XBlR-PlE13JlYCa4xi6F0PIpM/export?format=csv"
+    import re
+    import csv
+    db1_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "DB1.csv")
+    db2_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "DB2.csv")
     style_chunks = []
-    try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
-        csv_data = response.content.decode('utf-8')
-        f = StringIO(csv_data)
-        reader = csv.reader(f)
-        
-        # 첫 번째 라인은 헤더이므로 건너뜀
-        header = next(reader)
-        
-        for row in reader:
-            if not row or len(row) < 7:
-                continue
-            num = row[0].strip()
-            style_ko = row[1].strip()
-            style_en = row[2].strip()
-            feat1 = row[4].strip()
-            feat2 = row[5].strip()
-            feat3 = row[6].strip()
+    
+    # 1. DB1.csv 파싱 (인테리어 스타일 상세)
+    if os.path.exists(db1_path):
+        try:
+            with open(db1_path, "r", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                header = next(reader)
+                for row in reader:
+                    if not row or len(row) < 16:
+                        continue
+                    num = row[0].strip()
+                    style_ko = row[1].strip()
+                    style_en = row[2].strip()
+                    feat1 = row[3].strip()
+                    feat2 = row[4].strip()
+                    feat3 = row[5].strip()
+                    image_raw = row[6].strip()
+                    
+                    image_url = ""
+                    if image_raw:
+                        match = re.search(r'"(https?://[^"]+)"', image_raw)
+                        if match:
+                            image_url = match.group(1)
+                            
+                    wallpaper = row[14].strip() if len(row) > 14 else ""
+                    flooring = row[16].strip() if len(row) > 16 else ""
+                    wallpaper_weather = row[18].strip() if len(row) > 18 else ""
+                    flooring_weather = row[19].strip() if len(row) > 19 else ""
+                    
+                    wallpaper_labor = row[20].strip() if len(row) > 20 else ""
+                    wallpaper_material_cost = row[21].strip() if len(row) > 21 else ""
+                    flooring_labor = row[22].strip() if len(row) > 22 else ""
+                    flooring_material_cost = row[23].strip() if len(row) > 23 else ""
+                    
+                    precautions = row[24].strip() if len(row) > 24 else ""
+                    
+                    target_customer = ""
+                    difficulty = ""
+                    if len(row) > 30:
+                        target_customer = row[29].strip()
+                        difficulty = row[30].strip()
+                        
+                    page_content = f"# 인테리어 스타일: {style_ko} ({style_en})\n"
+                    page_content += f"- 주요 특징: {feat1}, {feat2}, {feat3}\n"
+                    page_content += f"- 어울리는 벽지: {wallpaper}\n"
+                    page_content += f"- 어울리는 바닥재: {flooring}\n"
+                    page_content += f"- 시공 난이도: {difficulty}\n"
+                    page_content += f"- 추천 날씨 (벽지 시공): {wallpaper_weather}\n"
+                    page_content += f"- 추천 날씨 (바닥 시공): {flooring_weather}\n"
+                    page_content += f"- 날씨별 시공 유의사항: {precautions}\n"
+                    page_content += f"- 예상 견적 비용 정보:\n"
+                    page_content += f"  * 평당 벽지 인건비: {wallpaper_labor}원\n"
+                    page_content += f"  * 벽지 부자재비: {wallpaper_material_cost}원\n"
+                    page_content += f"  * 평당 바닥 인건비: {flooring_labor}원\n"
+                    page_content += f"  * 바닥 부자재비: {flooring_material_cost}원\n"
+                    if target_customer:
+                        page_content += f"- 주요 타겟층: {target_customer}\n"
+                        
+                    metadata = {
+                        "source": "DB1.csv",
+                        "category": "interior_style_detail",
+                        "style_name_ko": style_ko,
+                        "style_name_en": style_en
+                    }
+                    if image_url:
+                        metadata["image_url"] = image_url
+                        
+                    style_chunks.append(Document(page_content=page_content.strip(), metadata=metadata))
+            print(f"✅ DB1.csv에서 {len(style_chunks)}개의 인테리어 스타일 세부 정보를 로드했습니다.")
+        except Exception as e:
+            print(f"⚠️ DB1.csv 로드 실패: {e}")
             
-            if not style_ko:
-                continue
-                
-            page_content = f"# 인테리어 스타일: {style_ko} ({style_en})\n"
-            if feat1:
-                page_content += f"- 특징 1: {feat1}\n"
-            if feat2:
-                page_content += f"- 특징 2: {feat2}\n"
-            if feat3:
-                page_content += f"- 특징 3: {feat3}\n"
-                
-            metadata = {
-                "source": f"Google Spreadsheet ({num})",
-                "category": "interior_style",
-                "style_name_ko": style_ko,
-                "style_name_en": style_en
-            }
-            style_chunks.append(Document(page_content=page_content.strip(), metadata=metadata))
+    # 2. DB2.csv 파싱 (평형대별 규격/가이드)
+    db2_count = 0
+    if os.path.exists(db2_path):
+        try:
+            with open(db2_path, "r", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                header = next(reader)
+                for row in reader:
+                    if not row or len(row) < 8:
+                        continue
+                    pyeong_cat = row[0].strip()
+                    sofa_spec = row[1].strip()
+                    bed_spec = row[2].strip()
+                    basic_unit_price = row[3].strip()
+                    premium_unit_price = row[4].strip()
+                    avg_total_cost = row[5].strip()
+                    recommended_styles = row[6].strip()
+                    layout_tips = row[7].strip()
+                    
+                    page_content = f"# 평형대 카테고리: {pyeong_cat}\n"
+                    page_content += f"- 소파 권장 규격 (Max/Min): {sofa_spec}\n"
+                    page_content += f"- 침대 권장 규격 (Max/Min): {bed_spec}\n"
+                    page_content += f"- 예상 견적 및 단가:\n"
+                    page_content += f"  * 실속형 평당 단가: {basic_unit_price}\n"
+                    page_content += f"  * 고급형 평당 단가: {premium_unit_price}\n"
+                    page_content += f"  * 전체 인테리어 평균 견적 범위: {avg_total_cost}\n"
+                    page_content += f"- 추천 스타일 매칭: {recommended_styles}\n"
+                    page_content += f"- 공간 레이아웃 팁 및 문 열림 반경 가이드: {layout_tips}\n"
+                    
+                    metadata = {
+                        "source": "DB2.csv",
+                        "category": "space_layout_guide",
+                        "pyeong_category": pyeong_cat
+                    }
+                    style_chunks.append(Document(page_content=page_content.strip(), metadata=metadata))
+                    db2_count += 1
+            print(f"✅ DB2.csv에서 {db2_count}개의 평형대 가이드 데이터를 로드했습니다.")
+        except Exception as e:
+            print(f"⚠️ DB2.csv 로드 실패: {e}")
             
-        print(f"✅ 구글 시트에서 {len(style_chunks)}개의 스타일 더미 데이터를 정상적으로 파싱했습니다.")
-    except Exception as e:
-        print(f"⚠️ 구글 시트 데이터 로드 실패: {e}")
     return style_chunks
 
 def main():

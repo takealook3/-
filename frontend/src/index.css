@@ -1,19 +1,20 @@
 /* =====================================================================
- * [index.css: Streamlit 맞춤 100% 순수 Vanilla CSS 디자인 시스템]
- * 비유: 외부 라이브러리에 의존하지 않고, 웹 브라우저가 직접 알아듣는
- * 명확하고 표준적인 도면으로 좌우 레이아웃과 카드 디자인을 설계합니다.
+ * [index.css: 하이엔드 풀스크린 시네마틱 & 글로벌 헤더 디자인 시스템]
+ * 비유: 좌우로 쪼개진 파티션을 부수고, 탁 트인 통유리창으로 외부 전경을 
+ * 비추듯 전체 화면에 소파 룸을 깔고 최상단 메뉴바를 얹습니다.
  * ===================================================================== */
 
 :root {
-  --bg-main: #0b1120;
-  --bg-sidebar: #111827;
-  --bg-card: #1e293b;
-  --bg-card-inner: #0f172a;
-  --border-color: #334155;
-  --primary: #6366f1;
-  --primary-hover: #4f46e5;
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
+  --bg-main: #1C1714;        /* 매우 차분하고 묵직한 에스프레소 다크 브라운 */
+  --bg-sidebar: #28211E;     /* 오크 다크 브라운 */
+  --bg-card: rgba(252, 250, 247, 0.93); /* 반투명 카라멜 크림 아이보리 */
+  --bg-card-inner: rgba(243, 236, 229, 0.85); /* 부드러운 밀크티 샌드 */
+  --border-color: rgba(132, 104, 83, 0.2); /* 브론즈/모래색 보더선 */
+  --primary: #2E2824;        /* 시안 속 어두운 코코아 블랙 버튼 색상 */
+  --primary-hover: #1F1A18;
+  --text-main: #2A2521;      /* 다크 매트 초콜릿 브라운 (카드 본문용) */
+  --text-muted: #7E7065;     /* 옅은 브라운 그레이 */
+  --accent: #C39F7D;         /* 은은한 샴페인 골드 브론즈 (포인트) */
 }
 
 * {
@@ -24,227 +25,303 @@
 
 body {
   background-color: var(--bg-main);
-  color: var(--text-main);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  line-height: 1.6;
+  color: #FCFAF7; /* 메인 배경 글씨는 환한 아이보리 화이트 */
+  font-family: 'Outfit', 'Inter', -apple-system, sans-serif;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* 1. 전체 레이아웃 (Streamlit 좌우 분할 구조) */
+/* 1. 전체 레이아웃 (세로 원페이지 스택 구조 - 사이드바 제거) */
 .app-layout {
   display: flex;
+  flex-direction: column;
   min-height: 100vh;
 }
 
-/* 2. 좌측 사이드바 */
-.sidebar {
-  width: 300px;
-  background-color: var(--bg-sidebar);
-  border-right: 1px solid var(--border-color);
-  padding: 24px;
+/* 2. 최상단 글로벌 가로형 내비게이션 바 (Top Nav - 시안 이미지 구현) */
+.top-nav {
+  width: 100%;
+  height: 80px;
+  background-color: rgba(28, 23, 20, 0.93);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 64px;
   display: flex;
-  flex-direction: column;
-  gap: 24px;
-  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  transition: all 0.3s ease;
 }
 
-.sidebar-title {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #fff;
+.top-nav-logo {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--accent); /* 골드 로고 */
+  letter-spacing: 0.1em;
+  flex: 1; /* 좌측 영역 너비 균등 분할 */
+  display: flex;
+  justify-content: flex-start;
+}
+
+.top-nav-menu {
+  display: flex;
+  gap: 32px;
+  justify-content: center;
+  flex: 0 0 auto; /* 중앙 메뉴는 고정 너비로 수평 중앙 정렬 보장 */
+}
+
+.top-nav-link {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #D3C2B5;
+  cursor: pointer;
+  transition: color 0.25s;
+  padding: 8px 4px;
+  border-bottom: 2px solid transparent;
+}
+
+.top-nav-link:hover {
+  color: var(--accent);
+}
+
+.top-nav-link.active {
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+}
+
+.top-nav-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color);
+  gap: 16px;
+  flex: 1; /* 우측 영역 너비 균등 분할 */
+  justify-content: flex-end; /* 우측 끝으로 정렬 */
 }
 
-.sidebar-section {
+/* 3. 우측 메인 작업 영역 - 갤러리 룸 구조 */
+.main-content {
+  flex: 1;
+  padding: 120px 64px 64px 64px; /* 탑 내비 고정 대비 패딩 확보 */
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
   display: flex;
   flex-direction: column;
+  gap: 48px;
+}
+
+/* 4. 풀스크린 시네마틱 히어로 섹션 (새로 제공된 고화질 젠 인테리어 마스터 이미지 적용) */
+.hero-fullscreen {
+  width: 100vw;
+  height: 90vh;
+  margin-left: calc(-50vw + 50%); /* 브라우저 뷰포트 꽉 채우기 트릭 */
+  margin-right: calc(-50vw + 50%);
+  position: relative;
+  /* 새로 구워낸 고해상도 젠 인테리어 룸 로컬 이미지 탑재 */
+  background-image: url('/zen_living_room.png');
+  background-size: cover;
+  /* 소파 몸체가 부드럽게 흘러나오고 우측 아치 분재 정원이 온전히 드러나는 황금 포지션 */
+  background-position: 25% center;
+  background-repeat: no-repeat;
+  display: flex;
+  align-items: center;
+  padding: 0 10%;
+  box-shadow: inset 0 0 100px rgba(0,0,0,0.5);
+  margin-bottom: 20px;
+  margin-top: -40px; /* 메인 콘텐츠 탑 여백 조율 */
+}
+
+/* 히어로 내부 텍스트 글래스모피즘 박스 */
+.hero-overlay {
+  max-width: 560px; /* 420px × 4/3 확대 */
+  background-color: rgba(28, 23, 20, 0.72);
+  backdrop-filter: blur(24px) saturate(120%);
+  -webkit-backdrop-filter: blur(24px) saturate(120%);
+  border: 1px solid var(--border-color);
+  padding: 38px 48px; /* 28×4/3, 36×4/3 */
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+.hero-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 2.4rem; /* 1.8 × 4/3 = 2.4rem */
+  font-weight: 800;
+  color: #FCFAF7;
+  margin-bottom: 16px;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.hero-subtitle {
+  color: #D3C2B5;
+  font-size: 1.13rem; /* 0.85 × 4/3 = 1.13rem */
+  line-height: 1.6;
+  margin-bottom: 28px;
+}
+
+.hero-buttons {
+  display: flex;
   gap: 12px;
 }
 
-.code-box {
-  background-color: #030712;
-  border: 1px solid #1f2937;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-family: monospace;
-  font-size: 0.85rem;
-  color: #a5b4fc;
-  word-break: break-all;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+/* 좁아진 히어로 상자 내부에 알맞은 컴팩트 버튼 패딩 적용 */
+.hero-overlay .btn {
+  padding: 14px 28px; /* 10×4/3, 20×4/3 */
+  font-size: 1.09rem; /* 0.82 × 4/3 = 1.09rem */
   border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 600;
 }
 
-.badge-online {
-  background-color: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-}
-
-.badge-offline {
-  background-color: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-}
-
-/* 3. 우측 메인 작업 영역 */
-.main-content {
-  flex: 1;
-  padding: 40px 56px;
-  max-width: 1150px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-}
-
-.main-header {
-  border-bottom: 1px solid var(--border-color);
-  padding-bottom: 24px;
-}
-
-.main-title {
-  font-size: 2.2rem;
-  font-weight: 800;
-  color: #fff;
-  margin-bottom: 8px;
-}
-
-.main-subtitle {
-  color: var(--text-muted);
-  font-size: 1rem;
-}
-
-/* 4. 카드 공통 스타일 */
+/* 5. 카드 공통 스타일 - 포근한 웜 크림 아이보리 */
 .card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  padding: 28px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  padding: 36px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.15);
+  color: var(--text-main);
 }
 
 .card-title {
-  font-size: 1.25rem;
+  font-family: 'Playfair Display', serif;
+  font-size: 1.45rem;
   font-weight: 700;
-  color: #fff;
-  margin-bottom: 6px;
+  color: var(--text-main);
+  margin-bottom: 8px;
+  letter-spacing: -0.01em;
 }
 
 .card-desc {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   color: var(--text-muted);
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
-/* 5. 그리드 유틸리티 */
+/* 6. 그리드 레이아웃 */
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  gap: 28px;
 }
 
 .grid-4 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  gap: 16px;
 }
 
 .grid-5 {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 12px;
+  gap: 16px;
 }
 
-/* 반응형 모바일 처리 */
-@media (max-width: 900px) {
-  .app-layout {
-    flex-direction: column;
+@media (max-width: 1000px) {
+  .top-nav {
+    padding: 0 24px;
+    height: 70px;
   }
-  .sidebar {
-    width: 100%;
+  .top-nav-menu {
+    display: none; /* 모바일 메뉴 숨김 */
+  }
+  .main-content {
+    padding: 100px 20px 48px 20px;
+  }
+  .hero-fullscreen {
+    height: auto;
+    padding: 80px 24px;
+    margin-top: -30px;
+  }
+  .hero-overlay {
+    padding: 24px;
+  }
+  .hero-title {
+    font-size: 2rem;
   }
   .grid-2, .grid-4, .grid-5 {
     grid-template-columns: 1fr;
   }
-  .main-content {
-    padding: 24px 16px;
-  }
 }
 
-/* 6. 버튼 공통 스타일 */
+/* 7. 버튼 공통 스타일 - 시안의 럭셔리 버튼 재현 */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 24px;
-  border-radius: 10px;
+  padding: 14px 28px;
+  border-radius: 8px;
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
   border: none;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: -0.01em;
 }
 
+/* 시안의 Shop Now 어두운 코코아 버튼 */
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary), #818cf8);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  background-color: #2E2824;
+  color: #FCFAF7;
+  border: 1px solid #4D3F36;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--primary-hover), #6366f1);
+  background-color: #1F1A18;
   transform: translateY(-1px);
 }
 
 .btn-primary:disabled {
-  opacity: 0.5;
+  background-color: var(--bg-card-inner);
+  color: var(--text-muted);
+  opacity: 0.6;
   cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
+/* 시안의 Explore 대리석 연회색 버튼 */
 .btn-secondary {
-  background-color: #334155;
-  color: #fff;
-  border: 1px solid #475569;
+  background-color: #F3ECE5;
+  color: #2A2521;
+  border: 1px solid var(--border-color);
 }
 
 .btn-secondary:hover {
-  background-color: #475569;
+  background-color: #E2D7CF;
 }
 
 .btn-full {
   width: 100%;
 }
 
-/* 7. 업로드 및 이미지 미리보기 */
+/* 8. 업로드 및 이미지 미리보기 - 밀크티 샌드 코너 */
 .dropzone {
-  border: 2px dashed #475569;
+  border: 2px dashed var(--border-color);
   border-radius: 12px;
-  padding: 40px 20px;
+  padding: 50px 30px;
   text-align: center;
   cursor: pointer;
   background-color: var(--bg-card-inner);
-  transition: border-color 0.2s;
+  transition: all 0.25s ease;
   height: 100%;
+  min-height: 280px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  color: var(--text-main);
 }
 
 .dropzone:hover {
   border-color: var(--primary);
+  background-color: rgba(132, 104, 83, 0.05);
 }
 
 .preview-box {
@@ -252,7 +329,7 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 12px;
   overflow: hidden;
-  height: 260px;
+  height: 280px;
 }
 
 .preview-img {
@@ -261,111 +338,124 @@ body {
   object-fit: cover;
 }
 
-/* 8. 스타일 선택 카드 */
+/* 9. 스타일 선택 카드 */
 .style-btn {
   background-color: var(--bg-card-inner);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 14px 12px;
+  border-radius: 8px;
+  padding: 16px 14px;
   text-align: left;
   cursor: pointer;
-  color: #fff;
-  transition: all 0.2s;
+  color: var(--text-main);
+  transition: all 0.25s ease;
 }
 
 .style-btn:hover {
-  border-color: #64748b;
+  border-color: var(--primary);
 }
 
 .style-btn.active {
-  background-color: rgba(99, 102, 241, 0.2);
+  background-color: var(--primary);
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px var(--primary);
+  color: #FCFAF7;
+  box-shadow: 0 4px 15px rgba(132, 104, 83, 0.25);
 }
 
-/* 9. 입력창 */
+/* 10. 입력창 */
 .input-field {
   width: 100%;
-  padding: 12px 16px;
+  padding: 14px 18px;
   background-color: var(--bg-card-inner);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  color: #fff;
+  border-radius: 8px;
+  color: var(--text-main);
   font-size: 0.95rem;
   outline: none;
+  transition: border-color 0.25s;
+}
+
+.input-field::placeholder {
+  color: var(--text-muted);
 }
 
 .input-field:focus {
   border-color: var(--primary);
 }
 
-/* 10. 지표 카드 및 알람 배너 */
+/* 11. 지표 카드 및 알람 배너 */
 .metric-card {
   background-color: var(--bg-card-inner);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 14px;
+  border-radius: 8px;
+  padding: 16px;
 }
 
 .metric-label {
   font-size: 0.8rem;
   color: var(--text-muted);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  font-weight: 600;
 }
 
 .metric-value {
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-main);
 }
 
 .error-banner {
-  background-color: rgba(185, 28, 28, 0.2);
-  border-left: 4px solid #ef4444;
-  border-top: 1px solid rgba(239, 68, 68, 0.3);
-  border-right: 1px solid rgba(239, 68, 68, 0.3);
-  border-bottom: 1px solid rgba(239, 68, 68, 0.3);
-  padding: 16px;
+  background-color: rgba(176, 91, 72, 0.08);
+  border-left: 4px solid var(--accent);
+  border-top: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  padding: 16px 20px;
   border-radius: 8px;
-  color: #fecaca;
-  margin-bottom: 20px;
+  color: var(--accent);
+  margin-bottom: 24px;
+  font-size: 0.95rem;
 }
 
-/* 11. Streamlit 초록색 성공 알림 띠 (.success-banner) */
+/* 12. 성공 알림 배너 */
 .success-banner {
-  background-color: rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  color: #a7f3d0;
-  padding: 12px 16px;
-  border-radius: 10px;
-  margin: 12px 0;
-  font-size: 0.9rem;
+  background-color: rgba(132, 104, 83, 0.08);
+  border: 1px solid var(--border-color);
+  color: var(--primary);
+  padding: 14px 20px;
+  border-radius: 8px;
+  margin: 16px 0;
+  font-size: 0.95rem;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
-/* 12. 부분 가구 수선 (Inpainting) 스타일 */
+/* 13. 부분 가구 수선 (Inpainting) 스타일 */
 .btn-coral {
-  background: linear-gradient(135deg, #f43f5e, #fb7185);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(244, 63, 94, 0.35);
+  background-color: var(--accent);
+  color: #1C1714;
+  box-shadow: 0 4px 12px rgba(195, 159, 125, 0.25);
+  font-weight: 700;
 }
 
 .btn-coral:hover:not(:disabled) {
-  background: linear-gradient(135deg, #e11d48, #f43f5e);
+  background-color: #b08d6d;
   transform: translateY(-1px);
 }
 
 .btn-coral:disabled {
-  opacity: 0.5;
+  background-color: var(--bg-card-inner);
+  color: var(--text-muted);
+  opacity: 0.6;
   cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 .canvas-container {
   position: relative;
   width: 100%;
-  background-color: #030712;
+  background-color: var(--bg-card-inner);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   overflow: hidden;
@@ -380,28 +470,804 @@ body {
 
 .bbox-rect {
   position: absolute;
-  border: 2px solid #ef4444;
-  background-color: rgba(239, 68, 68, 0.35);
+  border: 2px solid var(--accent);
+  background-color: rgba(195, 159, 125, 0.25);
   pointer-events: none;
 }
 
 .toolbar {
   display: flex;
   gap: 8px;
-  margin: 10px 0;
+  margin: 12px 0;
 }
 
 .toolbar-btn {
-  background-color: #1e293b;
-  border: 1px solid #334155;
-  color: #fff;
-  padding: 8px 12px;
-  border-radius: 8px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 8px 14px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 1.1rem;
-  transition: background-color 0.2s;
+  font-size: 1.15rem;
+  transition: all 0.2s ease;
 }
 
 .toolbar-btn:hover {
-  background-color: #334155;
+  background-color: var(--bg-card-inner);
+  border-color: var(--primary);
+}
+
+/* =====================================================================
+ * [가구 카테고리 아이콘 영역 스타일링: 오트밀 미니멀리즘 데코]
+ * ===================================================================== */
+.category-icons-section {
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  background-color: #FCFAF7; /* 맑고 화사한 크림 아이보리 배경 */
+  padding: 48px 10% 32px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.category-icons-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap; /* 모바일 반응형 자동 꺾임 */
+}
+
+.category-icon-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 90px;
+  transition: all 0.3s ease;
+}
+
+.category-icon-circle {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background-color: #F5EFEB; /* 시안 속 옅은 베이지 서클 배경 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary); /* 진한 에스프레소 브라운 */
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(46, 40, 36, 0.02);
+}
+
+.category-icon-item:hover .category-icon-circle {
+  transform: translateY(-6px);
+  background-color: var(--primary); /* 호버 시 가독성 반전 기법 */
+  color: #FCFAF7;
+  box-shadow: 0 12px 24px rgba(46, 40, 36, 0.12);
+}
+
+.category-icon-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+  transition: color 0.3s ease;
+}
+
+.category-icon-item:hover .category-icon-label {
+  color: var(--accent); /* 포인트 골드 브론즈 색상 전환 */
+}
+
+/* =====================================================================
+ * [Featured Collections 큐레이션 추천 카드 스타일링: Unsplash 고화질 뷰어]
+ * ===================================================================== */
+.featured-collections-section {
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  background-color: #FCFAF7;
+  padding: 64px 10%;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.featured-header {
+  text-align: center;
+}
+
+.featured-sub {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.featured-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: -0.01em;
+}
+
+.featured-grid {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+
+.featured-card {
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 24px rgba(46, 40, 36, 0.02);
+  display: flex;
+  flex-direction: column;
+}
+
+.featured-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 24px 48px rgba(46, 40, 36, 0.08);
+  border-color: rgba(132, 104, 83, 0.4);
+}
+
+.featured-card-img-wrapper {
+  width: 100%;
+  height: 220px;
+  overflow: hidden;
+  position: relative;
+  background-color: #F5EFEB;
+}
+
+.featured-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.featured-card:hover .featured-card-img {
+  transform: scale(1.05); /* 마이크로 줌인 인터랙션 */
+}
+
+.featured-card-no-img {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.featured-card-body {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.featured-card-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+}
+
+.featured-card-link {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  transition: color 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.featured-card:hover .featured-card-link {
+  color: var(--primary);
+}
+
+/* 모바일 및 태블릿 반응형 레이아웃 튜닝 */
+@media (max-width: 1024px) {
+  .featured-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .featured-grid {
+    grid-template-columns: 1fr;
+  }
+  .category-icons-container {
+    justify-content: center;
+    gap: 24px;
+  }
+}
+
+/* =====================================================================
+ * [Featured Collections 카루셀 래퍼 및 이전/다음 화살표 플로팅 버튼]
+ * ===================================================================== */
+.featured-carousel-wrapper {
+  position: relative;
+  max-width: 1300px; /* 1200px 카드 그리드 바깥에 화살표가 플로팅될 수 있게 넉넉히 설정 */
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 60px; /* 화살표 버튼의 absolute 배치를 위한 좌우 여백 */
+}
+
+.carousel-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 52px;
+  height: 52px;
+  background-color: transparent; /* [수정] 주변 동그라미 배경 제거 */
+  border: none;                  /* [수정] 테두리 제거 */
+  color: var(--primary);         /* 에스프레소 브라운 화살표 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.3s ease;
+  box-shadow: none;              /* [수정] 그림자 제거 */
+}
+
+.carousel-arrow:hover {
+  background-color: transparent; /* [수정] 호버 시 동그라미 배경 유지 안함 */
+  color: var(--accent);          /* [수정] 갈색 포인트 골드 브론즈 색상 전환 */
+  transform: translateY(-50%) scale(1.15); /* [수정] 마우스 오버 시 미세하게 확대 */
+  box-shadow: none;
+}
+
+.carousel-arrow:active {
+  transform: translateY(-50%) scale(0.9);
+}
+
+.carousel-arrow.prev {
+  left: -20px; /* [수정] 양옆으로 더 띄우기 위해 0에서 -20px로 조정 */
+}
+
+.carousel-arrow.next {
+  right: -20px; /* [수정] 양옆으로 더 띄우기 위해 0에서 -20px로 조정 */
+}
+
+/* 태블릿/모바일 반응형 조율 */
+@media (max-width: 768px) {
+  .featured-carousel-wrapper {
+    padding: 0 24px;
+  }
+  .carousel-arrow {
+    width: 42px;
+    height: 42px;
+  }
+  .carousel-arrow.prev {
+    left: -4px;
+  }
+  .carousel-arrow.next {
+    right: -4px;
+  }
+}
+
+/* =====================================================================
+ * [Featured Collections 부드러운 가로 슬라이더 뷰포트 및 트랙 레일]
+ * ===================================================================== */
+.featured-carousel-viewport {
+  --card-width: 282px; /* 데스크탑 기본: (1200px - (3 * 24px)) / 4 = 282px */
+  --gap-width: 24px;
+  max-width: 1200px;
+  width: 100%;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.featured-carousel-track {
+  display: flex;
+  gap: var(--gap-width);
+  transition: transform 0.65s cubic-bezier(0.25, 1, 0.5, 1); /* 쫀득하고 찰진 이징 함수 감속 모션 */
+  width: max-content;
+  transform: translateX(calc(-1 * var(--start-index) * (var(--card-width) + var(--gap-width))));
+}
+
+/* 트랙 내부에서 변수 기반으로 카드 가로 너비 고정 */
+.featured-carousel-track .featured-card {
+  flex: 0 0 var(--card-width);
+  width: var(--card-width);
+}
+
+/* 태블릿 반응형 (1024px 이하): 한 화면에 카드 2개 보장 */
+@media (max-width: 1024px) {
+  .featured-carousel-viewport {
+    --card-width: calc((100vw - 160px - 24px) / 2); /* 패딩 160px 및 갭 24px 제외 2열 나열 */
+    --gap-width: 24px;
+  }
+}
+
+/* 모바일 반응형 (600px 이하): 한 화면에 카드 1개 보장 */
+@media (max-width: 600px) {
+  .featured-carousel-viewport {
+    --card-width: calc(100vw - 120px); /* 모바일 여백 제외 1열 꽉 채움 */
+    --gap-width: 0px;
+  }
+}
+
+/* =====================================================================
+ * [챗봇 추천 질문 칩 가로 스크롤바 숨김 (스크롤 기능은 유지)]
+ * ===================================================================== */
+.quick-chips-container {
+  padding: 10px 14px;
+  background-color: #FCFAF7;
+  border-top: 1px solid #CDBCB2;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  white-space: nowrap;
+  -ms-overflow-style: none;  /* IE and Edge: 스크롤바 제거 */
+  scrollbar-width: none;  /* Firefox: 스크롤바 제거 */
+}
+
+.quick-chips-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera: 스크롤바 제거 */
+}
+
+/* =====================================================================
+ * [AI 인테리어 취향 진단 퀴즈 (Style Quiz) 스타일링]
+ * ===================================================================== */
+.quiz-section-wrapper {
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  background-color: var(--bg-main); /* 클래식하고 따뜻한 크림 베이지 톤에서 어두운 갈색 배경으로 변경 */
+  padding: 80px 10%;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  color: #FCFAF7 !important; /* 바디 상속 화이트 방지 및 가독성 확보 -> 갈색 배경 위에서 흰색으로 변경 */
+}
+
+.section-header-centered {
+  text-align: center;
+}
+
+.section-subtitle {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.quiz-container {
+  width: 100%;
+  max-width: 1000px;
+  min-height: 520px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.quiz-card {
+  width: 100%;
+  max-width: 840px;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 24px;
+  box-shadow: 0 30px 60px rgba(46, 40, 36, 0.05);
+  transition: all 0.4s ease;
+  color: var(--text-main) !important;
+}
+
+.quiz-result-card {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 28px;
+  box-shadow: 0 40px 80px rgba(46, 40, 36, 0.07);
+  color: var(--text-main) !important;
+}
+
+.quiz-header {
+  width: 100%;
+}
+
+.progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background-color: rgba(43, 53, 48, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.quiz-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1.4;
+}
+
+.quiz-options-layout {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 32px;
+  margin-top: 16px;
+}
+
+.quiz-option-card {
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 24px rgba(46, 40, 36, 0.02);
+}
+
+.quiz-option-card:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 24px 48px rgba(46, 40, 36, 0.08);
+  border-color: var(--accent);
+}
+
+.quiz-option-image-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 11;
+  overflow: hidden;
+  background-color: #F5EFEB;
+}
+
+.quiz-option-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.quiz-option-card:hover .quiz-option-img {
+  transform: scale(1.06);
+}
+
+.option-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: #FFFFFF;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  font-family: 'Outfit', sans-serif;
+}
+
+.option-badge.select-a {
+  background-color: var(--accent);
+}
+
+.option-badge.select-b {
+  background-color: var(--primary);
+}
+
+.quiz-option-label {
+  padding: 18px 20px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+  background-color: #FFFFFF;
+  border-top: 1px solid var(--border-color);
+}
+
+/* 결과 화면 레이아웃 */
+.quiz-result-layout {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 40px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.quiz-result-image-box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 16px 36px rgba(46, 40, 36, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.quiz-result-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.quiz-result-img-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(28, 23, 20, 0.8));
+  padding: 24px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.quiz-style-badge {
+  background-color: var(--accent);
+  color: #FFFFFF;
+  padding: 8px 16px;
+  border-radius: 30px;
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 10px rgba(195, 159, 125, 0.3);
+}
+
+.quiz-result-info {
+  justify-content: center;
+}
+
+.style-description-box {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.bg-glass-dark {
+  background-color: rgba(43, 53, 48, 0.03);
+}
+
+.style-info-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.style-desc-text {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-main);
+}
+
+.prompt-output-box {
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-color);
+  padding: 16px;
+  border-radius: 12px;
+  position: relative;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.01);
+}
+
+.prompt-text-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.prompt-text-content {
+  display: block;
+  font-family: inherit;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text-main);
+  background-color: var(--bg-card-inner);
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  flex-grow: 1;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: calc(100% - 44px);
+}
+
+/* Spinner */
+.spinner-wrapper {
+  padding: 20px;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .quiz-options-layout {
+    gap: 20px;
+  }
+  .quiz-result-layout {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .quiz-title {
+    font-size: 1.4rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .quiz-options-layout {
+    grid-template-columns: 1fr;
+  }
+  .quiz-section-wrapper {
+    padding: 60px 5%;
+  }
+  .quiz-option-card {
+    max-width: 100%;
+  }
+}
+
+/* =====================================================================
+ * [럭셔리 3단 카테고리 퀵 카드 섹션 및 쇼룸 모션 추가]
+ * ===================================================================== */
+.category-cards-section {
+  width: 100vw; /* 화면 전체 가로 폭 꽉 채우기 */
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  background-color: #F8F5F0; /* 흰색(클래식 베이지) 배경 적용 */
+  padding: 64px 10% 80px 10%; /* 위아래 패딩 넉넉하게 확장 */
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.category-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+
+.category-card {
+  background-color: #FCFAF7;
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+  box-shadow: 0 10px 24px rgba(43,53,48,0.03);
+}
+
+.category-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 48px rgba(43,53,48,0.12);
+}
+
+.category-card-img-wrapper {
+  width: 100%;
+  height: 280px;
+  overflow: hidden;
+  background-color: #EAE5DF;
+  position: relative;
+}
+
+.category-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.category-card:hover .category-card-img {
+  transform: scale(1.06);
+}
+
+.category-card-body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background-color: #FCFAF7;
+}
+
+.category-card-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.category-card-explore {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent);
+  transition: transform 0.25s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.category-card:hover .category-card-explore {
+  transform: translateX(4px);
+}
+
+@keyframes fadeInEffect {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 태블릿 반응형 (1024px 이하): 3열 -> 1열 혹은 2열 조율 */
+@media (max-width: 900px) {
+  .category-cards-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .category-card-img-wrapper {
+    height: 240px;
+  }
+}
+
+/* =====================================================================
+ * [스타일 변환용 프리미엄 스켈레톤 로딩 & 펄스 애니메이션]
+ * ===================================================================== */
+@keyframes skeleton-glow {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.15);
+  }
 }

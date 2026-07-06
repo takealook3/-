@@ -2,6 +2,16 @@ import os
 import urllib.request
 import sys
 import time
+from dotenv import load_dotenv
+
+# .env 파일 활성화
+# (프로젝트 루트 디렉토리 기준 상위/동일 레벨 탐색)
+dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path=dotenv_path)
+else:
+    load_dotenv()
+
 
 def download_file(url, dest_path, max_retries=5):
     if os.path.exists(dest_path):
@@ -58,13 +68,25 @@ def download_file(url, dest_path, max_retries=5):
             else:
                 raise e
 
-# 실제 포터블 경로
-PORTABLE_COMFY_ROOT = "C:/Users/USER/Desktop/ComfyUI_windows_portable_nvidia/ComfyUI_windows_portable/ComfyUI"
+# 실제 포터블 경로 (환경변수 또는 기본 Fallback 경로 조합)
+COMFYUI_PATH = os.getenv(
+    "COMFYUI_PATH",
+    r"C:\Users\USER\Desktop\ComfyUI_windows_portable_nvidia\ComfyUI_windows_portable"
+)
+PORTABLE_COMFY_ROOT = os.path.join(COMFYUI_PATH, "ComfyUI")
 
 models_to_download = [
     {
         "url": "https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors",
         "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/checkpoints/v1-5-pruned-emaonly.safetensors")
+    },
+    {
+        "url": "https://huggingface.co/SicariusSicariiStuff/Stable-Diffusion_1.5_Collection/resolve/main/realisticVisionV60B1_v51HyperInpaintVAE.safetensors",
+        "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/checkpoints/realisticVisionV60B1_v51HyperInpaintVAE.safetensors")
+    },
+    {
+        "url": "https://huggingface.co/SicariusSicariiStuff/Stable-Diffusion_1.5_Collection/resolve/main/realisticVisionV60B1_v51HyperVAE.safetensors",
+        "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/checkpoints/realisticVisionV60B1_v51HyperVAE.safetensors")
     },
     {
         "url": "https://huggingface.co/lllyasviel/control_v11p_sd15_inpaint/resolve/main/diffusion_pytorch_model.safetensors",
@@ -77,6 +99,14 @@ models_to_download = [
     {
         "url": "https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8x-oiv7.pt",
         "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/ultralytics/bbox/yolov8x-oiv7.pt")
+    },
+    {
+        "url": "https://huggingface.co/lokCX/4x-UltraSharp/resolve/main/4x-UltraSharp.pth",
+        "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/upscale_models/4x-UltraSharp.pth")
+    },
+    {
+        "url": "https://huggingface.co/ai-forever/Real-ESRGAN/resolve/main/RealESRGAN_x4plus.pth",
+        "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/upscale_models/RealESRGAN_x4plus.pth")
     }
 ]
 

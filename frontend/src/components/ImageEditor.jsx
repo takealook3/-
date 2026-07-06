@@ -1,28 +1,46 @@
 // =====================================================================
-// [ImageEditor.jsx: 부분 가구 교체 및 수선 (Image Inpainting) 창구]
-// 비유: 사진 속에서 바꾸고 싶은 가구(예: 침대, 소파) 영역 위에
-// 마우스로 빨간 테이프를 둘러 지정한 뒤, 새 가구로 교체해 달라고 의뢰하는 곳입니다.
+// [ImageEditor.jsx: 1/2차 원형 마스킹 (Circle Double Inpainting) 통합 편집소]
+// 비유: 사진 속에서 바꾸고 싶은 가구 영역들을 각각 블루(A)와 핑크(B) 원형 스티커로
+// 동그랗게 지정하여 흑백 이미지 파일로 개별 캔버스 추출한 뒤, 백엔드로 송신하여 
+// 1차 단독 혹은 2차 동시 수선을 의뢰하는 프리미엄 편집 컴포넌트입니다.
 // =====================================================================
 import React, { useState, useRef } from 'react';
-import { editImage, inpaintImage, API_BASE_URL } from '../services/api';
+import { editImage, searchProducts, API_BASE_URL } from '../services/api';
 
+export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGenerateSuccess, onError }) {
+  // 마스크 모드: 'A' (1차 가구 수선) 또는 'B' (2차 가구 수선)
+  const [maskMode, setMaskMode] = useState('A');
 
-export default function ImageEditor({ imageId, sessionId, originalImageUrl, onError }) {
-  // 드래그 마스킹 좌표 State (비율 0~100 및 픽셀)
+  // 드래그 원형 마스킹 좌표 (A 영역 - 네온 블루)
+  const [bboxNormA, setBboxNormA] = useState(null); // { x1, y1, x2, y2 }
+  const [maskPixelsA, setMaskPixelsA] = useState(null); // [x1, y1, x2, y2]
+
+  // 드래그 원형 마스킹 좌표 (B 영역 - 네온 핑크)
+  const [bboxNormB, setBboxNormB] = useState(null); // { x1, y1, x2, y2 }
+  const [maskPixelsB, setMaskPixelsB] = useState(null); // [x1, y1, x2, y2]
+
+  // 마우스 드래그 상태
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [bboxNorm, setBboxNorm] = useState(null); // { x1, y1, x2, y2 } (0~1 범위 비율)
-  const [maskPixels, setMaskPixels] = useState(null); // [x1, y1, x2, y2] 실제 픽셀 좌표
+  // 드래그 중 현재 좌표를 ref로 추적 (mouseUp에서 최신값 동기적으로 읽기 위함)
+  const dragCurrentRef = useRef({ x: 0, y: 0 });
 
-  // 편집 폼 State
-  const [prompt, setPrompt] = useState("하얀색 소파로 교체");
+  // 1차/2차 수선 프롬프트
+  const [promptA, setPromptA] = useState("현대적이고 고급스러운 가죽 소파");
+  const [promptB, setPromptB] = useState("아늑한 우드 사이드 테이블");
+
   const [editing, setEditing] = useState(false);
   const [editedResultUrl, setEditedResultUrl] = useState(null);
+
+  // 유사 가구 검색 상태 변수
+  const [searchingProducts, setSearchingProducts] = useState(false);
+  const [productsListA, setProductsListA] = useState([]);
+  const [productsListB, setProductsListB] = useState([]);
 
   const containerRef = useRef(null);
   const imgRef = useRef(null);
 
-  if (!imageId) return null; // Streamlit 동기화: 사진 등록 전에는 숨김
+  if (!imageId || !originalImageUrl) return null;
 
   const getFullUrl = (url) => {
     if (!url) return "";
@@ -34,94 +52,271 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
 
   // 마우스 클릭 시작
   const handleMouseDown = (e) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
+    if (!imgRef.current) return;
+    const rect = imgRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     setIsDragging(true);
     setDragStart({ x, y });
-    setBboxNorm(null);
-    setMaskPixels(null);
+
+    if (maskMode === 'A') {
+      setBboxNormA(null);
+      setMaskPixelsA(null);
+    } else {
+      setBboxNormB(null);
+      setMaskPixelsB(null);
+    }
   };
 
   // 마우스 드래그 중
   const handleMouseMove = (e) => {
-    if (!isDragging || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
+    if (!isDragging || !imgRef.current) return;
+    const rect = imgRef.current.getBoundingClientRect();
     const currentX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
     const currentY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
+
+    // ref에도 동기적으로 저장 (mouseUp에서 최신 좌표를 즉시 읽기 위함)
+    dragCurrentRef.current = { x: currentX, y: currentY };
 
     const x1Norm = Math.min(dragStart.x, currentX) / rect.width;
     const y1Norm = Math.min(dragStart.y, currentY) / rect.height;
     const x2Norm = Math.max(dragStart.x, currentX) / rect.width;
     const y2Norm = Math.max(dragStart.y, currentY) / rect.height;
 
-    setBboxNorm({ x1: x1Norm, y1: y1Norm, x2: x2Norm, y2: y2Norm });
+    const coords = { x1: x1Norm, y1: y1Norm, x2: x2Norm, y2: y2Norm };
+    if (maskMode === 'A') {
+      setBboxNormA(coords);
+    } else {
+      setBboxNormB(coords);
+    }
   };
 
-  // 마우스 클릭 종료 (바운딩 박스 확정)
-  const handleMouseUp = () => {
+  // 마우스 클릭 종료 (정밀 픽셀 좌표 바인딩)
+  const handleMouseUp = (e) => {
     if (!isDragging) return;
     setIsDragging(false);
 
-    if (bboxNorm && imgRef.current) {
-      const natW = imgRef.current.naturalWidth || 800;
-      const natH = imgRef.current.naturalHeight || 600;
-      const px1 = Math.round(bboxNorm.x1 * natW);
-      const py1 = Math.round(bboxNorm.y1 * natH);
-      const px2 = Math.round(bboxNorm.x2 * natW);
-      const py2 = Math.round(bboxNorm.y2 * natH);
-      setMaskPixels([px1, py1, px2, py2]);
+    if (!imgRef.current) return;
+
+    const rect = imgRef.current.getBoundingClientRect();
+    // React state 비동기 갱신 대신 ref에서 최신 좌표를 즉시 동기적으로 읽음
+    const currentX = dragCurrentRef.current.x;
+    const currentY = dragCurrentRef.current.y;
+
+    const x1Norm = Math.min(dragStart.x, currentX) / rect.width;
+    const y1Norm = Math.min(dragStart.y, currentY) / rect.height;
+    const x2Norm = Math.max(dragStart.x, currentX) / rect.width;
+    const y2Norm = Math.max(dragStart.y, currentY) / rect.height;
+
+    const finalCoords = { x1: x1Norm, y1: y1Norm, x2: x2Norm, y2: y2Norm };
+
+    const natW = imgRef.current.naturalWidth || 800;
+    const natH = imgRef.current.naturalHeight || 600;
+    const px1 = Math.round(x1Norm * natW);
+    const py1 = Math.round(y1Norm * natH);
+    const px2 = Math.round(x2Norm * natW);
+    const py2 = Math.round(y2Norm * natH);
+
+    if (maskMode === 'A') {
+      setBboxNormA(finalCoords);
+      setMaskPixelsA([px1, py1, px2, py2]);
+    } else {
+      setBboxNormB(finalCoords);
+      setMaskPixelsB([px1, py1, px2, py2]);
+    }
+  };
+  // 개별 마스크 영역 클리어
+  const handleClearActiveMask = () => {
+    if (maskMode === 'A') {
+      setBboxNormA(null);
+      setMaskPixelsA(null);
+      setProductsListA([]);
+    } else {
+      setBboxNormB(null);
+      setMaskPixelsB(null);
+      setProductsListB([]);
     }
   };
 
-  // 쓰레기통(지우기) 클릭
-  const handleClearMask = () => {
-    setBboxNorm(null);
-    setMaskPixels(null);
+  // 전체 마스크 영역 클리어
+  const handleClearAll = () => {
+    setBboxNormA(null);
+    setMaskPixelsA(null);
+    setBboxNormB(null);
+    setMaskPixelsB(null);
+    setEditedResultUrl(null);
+    setProductsListA([]);
+    setProductsListB([]);
+    onError(null);
   };
 
-  // 수정하기 실행
+  // 캔버스 드로잉을 통한 원형 마스크 PNG 추출 헬퍼 함수
+  const generateCircularBase64Mask = (bbox, width, height) => {
+    if (!bbox) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    
+    // 검은색 칠하기
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+    
+    // 흰색 타원 칠하기
+    const x = bbox.x1 * width;
+    const y = bbox.y1 * height;
+    const w = (bbox.x2 - bbox.x1) * width;
+    const h = (bbox.y2 - bbox.y1) * height;
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    const rx = w / 2;
+    const ry = h / 2;
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+    ctx.fill();
+    
+    return canvas.toDataURL('image/png');
+  };
+
+  // 수선하기 요청 제출
   const handleEditSubmit = async () => {
-    if (!maskPixels) {
-      onError({ errorCode: "MASK_REQUIRED", message: "수정할 가구 영역이 선택되지 않았습니다. 좌측 사진 위에서 마우스로 드래그하여 영역을 지정해 주세요." });
+    if (!promptA.trim()) {
+      onError({ errorCode: "PROMPT_REQUIRED", message: "1차 가구 수선 요청사항(Prompt A)을 입력해 주세요." });
       return;
     }
-    if (!prompt.trim()) {
-      onError({ errorCode: "PROMPT_REQUIRED", message: "교체할 가구 설명 프롬프트를 입력해 주세요." });
+    if (!maskPixelsA) {
+      onError({ errorCode: "MASK_REQUIRED", message: "1차 가구 수선 영역(A)을 지정해 주세요 (필수)" });
       return;
     }
+    
     onError(null);
     setEditing(true);
 
-    // 신규 inpaintImage API 호출 (Realistic Vision V6.0 B1 기반 Inpainting)
-    const res = await inpaintImage({
-      imageId,
-      sessionId,
-      mask: maskPixels,
-      bbox: maskPixels,
-      prompt: prompt.trim(),
-      mode: "inpainting"
-    });
+    try {
+      const natW = imgRef.current.naturalWidth;
+      const natH = imgRef.current.naturalHeight;
 
-    setEditing(false);
-    if (res.success) {
-      const eUrl = res.result_image_url || res.data?.result_image_url || res.data?.edited_image_url || res.data?.editedImageUrl;
-      setEditedResultUrl(eUrl);
-    } else {
-      onError({ errorCode: res.errorCode || "INPAINTING_FAILED", message: res.message });
+      // 마스크 1 (A) 원형 캔버스 추출
+      const base64MaskA = generateCircularBase64Mask(bboxNormA, natW, natH);
+      
+      // 마스크 2 (B) 원형 캔버스 추출 (지정된 경우에만)
+      const base64MaskB = bboxNormB ? generateCircularBase64Mask(bboxNormB, natW, natH) : null;
+
+      const res = await editImage({
+        imageId,
+        sessionId,
+        mask: base64MaskA,           // ComfyUI 인페인팅용 Base64 PNG 마스크
+        mask_b: base64MaskB,
+        mask_pixels_a: maskPixelsA,  // mock 폴백용 픽셀 좌표 배열 [x1,y1,x2,y2]
+        mask_pixels_b: maskPixelsB ? maskPixelsB : null,
+        prompt: promptA.trim(),
+        prompt_b: base64MaskB ? promptB.trim() : null
+      });
+
+      if (res.success) {
+        const eUrl = res.data?.edited_image_url || res.data?.editedImageUrl;
+        // 브라우저 캐시 방지를 위해 타임스탬프 쿼리 파라미터 추가
+        const cacheBustedUrl = eUrl ? `${eUrl}?t=${Date.now()}` : eUrl;
+        setEditedResultUrl(cacheBustedUrl);
+
+        if (onGenerateSuccess) {
+          onGenerateSuccess({
+            resultId: res.data?.result_id || imageId,
+            resultImageUrl: getFullUrl(cacheBustedUrl),
+            style: "repair",
+            prompt: promptA.trim(),
+            processingTime: res.data?.processing_time || 0.42,
+            status: "completed"
+          });
+        }
+      } else {
+        onError({ errorCode: res.errorCode || "PROCESSING_FAILED", message: res.message });
+      }
+    } catch (err) {
+      console.error(err);
+      onError({ errorCode: "CANVAS_ERROR", message: `마스크 픽셀 캔버스 렌더링 중 오류: ${err.message}` });
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  // 유사 가구 쇼핑 정보 검색 (A와 B 다중 영역 병렬 검색)
+  const handleSearchProducts = async () => {
+    if (!maskPixelsA && !maskPixelsB) {
+      onError({ errorCode: "MASK_REQUIRED", message: "유사 가구를 검색할 영역(A영역 또는 B영역)을 최소 한 개 이상 드래그하여 원형으로 지정해 주세요." });
+      return;
+    }
+    
+    onError(null);
+    setSearchingProducts(true);
+    setProductsListA([]);
+    setProductsListB([]);
+
+    try {
+      const promises = [];
+
+      if (maskPixelsA) {
+        promises.push((async () => {
+          const res = await searchProducts({
+            imageId,
+            sessionId,
+            maskPixels: maskPixelsA,
+            prompt: promptA.trim()
+          });
+          if (res.success) {
+            setProductsListA(res.data?.products || []);
+          } else {
+            console.warn("A 영역 상품 검색 실패:", res.message);
+          }
+        })());
+      }
+
+      if (maskPixelsB) {
+        promises.push((async () => {
+          const res = await searchProducts({
+            imageId,
+            sessionId,
+            maskPixels: maskPixelsB,
+            prompt: promptB.trim()
+          });
+          if (res.success) {
+            setProductsListB(res.data?.products || []);
+          } else {
+            console.warn("B 영역 상품 검색 실패:", res.message);
+          }
+        })());
+      }
+
+      await Promise.all(promises);
+    } catch (err) {
+      console.error(err);
+      onError({ errorCode: "SEARCH_ERROR", message: `상품 검색 중 장애가 발생했습니다: ${err.message}` });
+    } finally {
+      setSearchingProducts(false);
     }
   };
 
   return (
-    <div className="card">
-      <div className="card-title">🛠️ 4. 부분 가구 교체 및 수선 (Image Inpainting)</div>
-      <div className="card-desc">
-        왼쪽 원본 사진에서 마우스로 드래그하여 바꾸고 싶은 가구 영역(예: 침대, 소파)을 박스로 치고 수선 프롬프트를 입력하세요.
+    /* 아이폰6 시스템 폰트(Helvetica Neue)를 최상단 카드 컨테이너에 적용 */
+    <div className="card" style={{ border: '1px solid var(--border-color)', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', padding: '28px' }}>
+      {/* 헤더 영역 - 이모지 제거 및 타이틀 폰트 굵기 복구 (두껍게 강조) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div className="card-title" style={{ fontSize: '1.35rem', fontWeight: '700', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', color: 'var(--primary)', margin: 0, letterSpacing: '-0.02em' }}>
+          AI 가구 부분 교체 (수선)
+        </div>
+        <button 
+          onClick={handleClearAll}
+          className="btn btn-secondary" 
+          style={{ fontSize: '0.8rem', padding: '8px 16px', borderRadius: '20px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', border: '1px solid var(--border-color)', background: '#fff', cursor: 'pointer' }}
+        >
+          전체 초기화
+        </button>
       </div>
 
-      <div className="grid-2">
-        {/* 좌측: 마스킹 캔버스 및 도구모음 */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 1fr', gap: '32px', alignItems: 'start' }}>
+        {/* 좌측: 순수 마스킹 캔버스 영역 (글씨나 불필요한 컨트롤 제외) */}
         <div>
           <div
             ref={containerRef}
@@ -129,7 +324,16 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
-            style={{ cursor: 'crosshair' }}
+            style={{ 
+              cursor: 'crosshair', 
+              position: 'relative',
+              borderRadius: '16px',
+              border: `2px dashed ${maskMode === 'A' ? '#3B82F6' : '#EC4899'}`,
+              overflow: 'hidden',
+              boxShadow: '0 12px 36px rgba(0, 0, 0, 0.08)',
+              transition: 'border-color 0.3s ease',
+              backgroundColor: '#0f172a'
+            }}
           >
             <img
               ref={imgRef}
@@ -137,103 +341,433 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
               alt="부분 편집 원본"
               className="canvas-img"
               draggable={false}
+              style={{ width: '100%', height: 'auto', display: 'block' }}
             />
-            {/* 드래그된 바운딩 박스 표시 */}
-            {bboxNorm && (
+            
+            {/* 1차 마스크 영역 박스 (디지털 블루 네온 원형) */}
+            {bboxNormA && (
               <div
-                className="bbox-rect"
                 style={{
-                  left: `${bboxNorm.x1 * 100}%`,
-                  top: `${bboxNorm.y1 * 100}%`,
-                  width: `${(bboxNorm.x2 - bboxNorm.x1) * 100}%`,
-                  height: `${(bboxNorm.y2 - bboxNorm.y1) * 100}%`
+                  position: 'absolute',
+                  left: `${bboxNormA.x1 * 100}%`,
+                  top: `${bboxNormA.y1 * 100}%`,
+                  width: `${(bboxNormA.x2 - bboxNormA.x1) * 100}%`,
+                  height: `${(bboxNormA.y2 - bboxNormA.y1) * 100}%`,
+                  border: '3px solid #3B82F6',
+                  borderRadius: '50%',
+                  background: 'rgba(59, 130, 246, 0.15)',
+                  boxShadow: '0 0 16px rgba(59, 130, 246, 0.5)',
+                  pointerEvents: 'none'
                 }}
-              />
+              >
+                <span style={{ 
+                  position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', 
+                  background: '#3B82F6', color: '#FCFAF7', fontSize: '0.7rem', fontWeight: '800', 
+                  padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' 
+                }}>
+                  가구 A (선택됨)
+                </span>
+              </div>
             )}
-          </div>
-
-          {/* 하단 도구바 */}
-          <div className="toolbar">
-            <button type="button" className="toolbar-btn" title="다운로드" onClick={() => window.open(fullOrigUrl)}>📥</button>
-            <button type="button" className="toolbar-btn" title="실행취소" onClick={handleClearMask}>↩️</button>
-            <button type="button" className="toolbar-btn" title="다시실행">↪️</button>
-            <button type="button" className="toolbar-btn" title="마스크 초기화" onClick={handleClearMask}>🗑️</button>
-          </div>
-
-          {/* 알림 박스 */}
-          <div className="success-banner">
-            <span>☑️</span>
-            <span>
-              {maskPixels
-                ? `감지된 영역 (원본 픽셀 기준): [${maskPixels[0]}, ${maskPixels[1]}] ~ [${maskPixels[2]}, ${maskPixels[3]}]`
-                : "위 사진에서 변경할 영역을 마우스로 드래그(드래그 앤 드롭)해 보세요!"}
-            </span>
+            
+            {/* 2차 마스크 영역 박스 (로즈 핑크 네온 원형) - 이모지 제거 */}
+            {bboxNormB && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${bboxNormB.x1 * 100}%`,
+                  top: `${bboxNormB.y1 * 100}%`,
+                  width: `${(bboxNormB.x2 - bboxNormB.x1) * 100}%`,
+                  height: `${(bboxNormB.y2 - bboxNormB.y1) * 100}%`,
+                  border: '3px solid #EC4899',
+                  borderRadius: '50%',
+                  background: 'rgba(236, 72, 153, 0.15)',
+                  boxShadow: '0 0 16px rgba(236, 72, 153, 0.5)',
+                  pointerEvents: 'none'
+                }}
+              >
+                <span style={{ 
+                  position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', 
+                  background: '#EC4899', color: '#FCFAF7', fontSize: '0.7rem', fontWeight: '800', 
+                  padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' 
+                }}>
+                  가구 B (선택됨)
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* 우측: 수선 입력 및 완성 결과 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '600', color: '#e2e8f0', marginBottom: '8px' }}>
-              가구 수선 요청사항 (Prompt):
+        {/* 우측: 모든 글씨, 모드 스위처, 양식 및 실행 컨트롤 패널 */}
+        <div style={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '24px',
+          background: 'rgba(255, 255, 255, 0.45)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255, 255, 255, 0.45)',
+          borderRadius: '20px',
+          padding: '24px',
+          boxShadow: '0 8px 32px rgba(46, 40, 36, 0.03)'
+        }}>
+          
+          {/* 수선 영역 탭 스위처 - 파스텔 색상 배경 & 이모지 및 가이드 문구 삭제, 탭 대제목 굵기 복구 (두껍게) */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: '700', color: '#7A6C62', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              지정할 가구 선택
+            </span>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setMaskMode('A')}
+                style={{
+                  flex: 1,
+                  padding: '14px 8px', // 패딩을 8px로 조절하여 여백 확보
+                  borderRadius: '12px',
+                  fontWeight: '500', // 얇은 폰트 두께 적용
+                  fontSize: '0.82rem', // 줄바꿈 방지를 위해 폰트 크기 미세 감소
+                  whiteSpace: 'nowrap', // 텍스트 한 줄 정렬 강제
+                  cursor: 'pointer',
+                  transition: 'all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1)',
+                  // 파스텔 파란색 배경을 깔고 활성화 테두리 지정
+                  background: '#e0f2fe',
+                  border: `2px solid ${maskMode === 'A' ? '#3B82F6' : 'transparent'}`,
+                  color: '#0369a1',
+                  fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
+                  boxShadow: maskMode === 'A' ? '0 4px 12px rgba(59, 130, 246, 0.15)' : 'none'
+                }}
+              >
+                1순위: 가구 A 지정
+              </button>
+              <button
+                type="button"
+                onClick={() => setMaskMode('B')}
+                style={{
+                  flex: 1,
+                  padding: '14px 8px', // 패딩을 8px로 조절하여 여백 확보
+                  borderRadius: '12px',
+                  fontWeight: '500', // 얇은 폰트 두께 적용
+                  fontSize: '0.82rem', // 줄바꿈 방지를 위해 폰트 크기 미세 감소
+                  whiteSpace: 'nowrap', // 텍스트 한 줄 정렬 강제
+                  cursor: 'pointer',
+                  transition: 'all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1)',
+                  // 파스텔 빨간색 배경을 깔고 활성화 테두리 지정
+                  background: '#ffe4e6',
+                  border: `2px solid ${maskMode === 'B' ? '#EC4899' : 'transparent'}`,
+                  color: '#be185d',
+                  fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
+                  boxShadow: maskMode === 'B' ? '0 4px 12px rgba(236, 72, 153, 0.15)' : 'none'
+                }}
+              >
+                2순위: 가구 B 지정 (선택)
+              </button>
+            </div>
+            {/* 띠 박스 제거 대신 여백을 거의 먹지 않는 초경량 텍스트 정렬로 지우기 기능 유지 */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2px' }}>
+              <button
+                type="button"
+                onClick={handleClearActiveMask}
+                style={{ 
+                  fontSize: '0.72rem', 
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#EF4444',
+                  textDecoration: 'underline',
+                  fontWeight: '400',
+                  cursor: 'pointer',
+                  padding: 0,
+                  fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+                }}
+              >
+                현재 선택 지우기
+              </button>
+            </div>
+          </div>
+
+          {/* 인풋 영역 A - 이모지 및 사진 드래그 필요 문구 삭제, 얇은 폰트 적용 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label style={{ fontSize: '0.88rem', fontWeight: '400', color: '#1E40AF', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              가구 A 교체 스타일 입력 (필수)
+              {maskPixelsA && (
+                <span style={{ fontSize: '0.72rem', background: '#3B82F6', color: '#fff', padding: '1px 6px', borderRadius: '4px' }}>영역 등록됨</span>
+              )}
             </label>
             <input
               type="text"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="예: 하얀색 소파로 교체"
+              value={promptA}
+              onChange={(e) => setPromptA(e.target.value)}
+              placeholder="예: 현대적이고 고급스러운 가죽 소파"
               className="input-field"
+              style={{ 
+                padding: '14px 16px', 
+                fontSize: '0.9rem', 
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
+                border: `1.5px solid ${maskMode === 'A' ? '#3B82F6' : 'var(--border-color)'}`,
+                borderRadius: '12px',
+                background: '#FFFFFF',
+                outline: 'none',
+                transition: 'all 0.3s'
+              }}
             />
           </div>
 
-          <button
-            type="button"
-            onClick={handleEditSubmit}
-            disabled={editing}
-            className="btn btn-coral btn-full"
-            style={{ padding: '14px', fontSize: '1rem', fontWeight: '700' }}
-          >
-            {editing ? "✨ 가구 수선 중... (잠시만 기다려주세요)" : "✨ 수정하기"}
-          </button>
-
-          <hr style={{ borderColor: '#334155', margin: '8px 0' }} />
-
-          <div>
-            <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#fff', marginBottom: '8px' }}>
-              🎉 최신 편집 완료 결과
-            </div>
-            {editedResultUrl ? (
-              <div>
-                <div className="success-banner" style={{ marginBottom: '12px' }}>
-                  <span>☑️</span>
-                  <span>부분 가구 교체가 완료되었습니다! 원본 구조는 100% 보존되었습니다.</span>
-                </div>
-                {/* 요구사항 7번 준수: Before / After 좌우 비교 뷰 */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div>
-                    <div style={{ fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '4px', fontWeight: '600', textAlign: 'center' }}>
-                      🖼️ Before (원본 사진)
-                    </div>
-                    <div className="preview-box" style={{ height: '220px', border: '1px solid #475569' }}>
-                      <img src={fullOrigUrl} alt="Before 원본" className="preview-img" />
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '0.85rem', color: '#f43f5e', marginBottom: '4px', fontWeight: '600', textAlign: 'center' }}>
-                      ✨ After (가구 교체 완료)
-                    </div>
-                    <div className="preview-box" style={{ height: '220px', border: '2px solid #f43f5e' }}>
-                      <img src={getFullUrl(editedResultUrl)} alt="After 부분 수정 결과" className="preview-img" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div style={{ padding: '24px', background: '#0f172a', borderRadius: '10px', textAlign: 'center', color: '#64748b' }}>
-                아직 수선된 결과가 없습니다. 좌측에 영역을 잡고 [✨ 수정하기] 버튼을 눌러주세요.
-              </div>
-            )}
+          {/* 인풋 영역 B - 이모지 제거 및 얇은 폰트 적용 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label style={{ 
+              fontSize: '0.88rem', 
+              fontWeight: '400', 
+              color: '#9D174D', 
+              fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
+              opacity: maskPixelsB ? 1 : 0.6,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}>
+              가구 B 교체 스타일 입력 (선택)
+              {maskPixelsB && (
+                <span style={{ fontSize: '0.72rem', background: '#EC4899', color: '#fff', padding: '1px 6px', borderRadius: '4px' }}>영역 등록됨</span>
+              )}
+            </label>
+            <input
+              type="text"
+              value={promptB}
+              onChange={(e) => setPromptB(e.target.value)}
+              placeholder="예: 아늑한 우드 사이드 테이블"
+              className="input-field"
+              disabled={!maskPixelsB}
+              style={{ 
+                padding: '14px 16px',
+                fontSize: '0.9rem',
+                opacity: maskPixelsB ? 1 : 0.6,
+                cursor: maskPixelsB ? 'text' : 'not-allowed',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
+                border: `1.5px solid ${maskMode === 'B' ? '#EC4899' : 'var(--border-color)'}`,
+                borderRadius: '12px',
+                background: maskPixelsB ? '#FFFFFF' : '#F8FAFC',
+                outline: 'none',
+                transition: 'all 0.3s'
+              }}
+            />
           </div>
+
+          {/* 주요 작업 실행 버튼들 - 이모지 및 사진 드래그 관련 문구/아이콘 삭제 및 얇은 폰트 변경 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
+            <button
+              type="button"
+              onClick={handleEditSubmit}
+              disabled={editing || !maskPixelsA}
+              className="btn btn-primary btn-full"
+              style={{ 
+                padding: '16px', 
+                fontSize: '0.95rem', 
+                fontWeight: '400', // 얇은 글씨체 적용
+                cursor: (!maskPixelsA || editing) ? 'not-allowed' : 'pointer',
+                background: (!maskPixelsA) ? '#E2E8F0' : 'var(--primary)',
+                color: (!maskPixelsA) ? '#94A3B8' : '#FCFAF7',
+                border: 'none',
+                borderRadius: '12px',
+                transition: 'all 0.25s ease',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
+                boxShadow: maskPixelsA ? '0 8px 24px rgba(43, 53, 48, 0.15)' : 'none'
+              }}
+              onMouseEnter={(e) => {
+                if (maskPixelsA && !editing) {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 12px 28px rgba(43, 53, 48, 0.25)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (maskPixelsA && !editing) {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(43, 53, 48, 0.15)';
+                }
+              }}
+            >
+              {editing ? "AI 부분 교체 적용 중..." : (editedResultUrl ? "🔄 다시 하기 (아래 결과 확인)" : "AI 가구 편집/수선 실행")}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSearchProducts}
+              disabled={searchingProducts || (!maskPixelsA && !maskPixelsB)}
+              className="btn btn-secondary btn-full"
+              style={{ 
+                padding: '14px', 
+                fontSize: '0.95rem', 
+                fontWeight: '400',
+                cursor: (((maskMode === 'A' ? !maskPixelsA : !maskPixelsB) || searchingProducts) ? 'not-allowed' : 'pointer'),
+                background: '#FFFFFF',
+                color: 'var(--primary)',
+                border: (maskMode === 'A' ? !maskPixelsA : !maskPixelsB) ? '1px solid rgba(0,0,0,0.06)' : '1.5px solid var(--primary)',
+                borderRadius: '12px',
+                transition: 'all 0.25s ease',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+              }}
+              onMouseEnter={(e) => {
+                if (!(maskMode === 'A' ? !maskPixelsA : !maskPixelsB) && !searchingProducts) {
+                  e.currentTarget.style.backgroundColor = '#FCFAF7';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!(maskMode === 'A' ? !maskPixelsA : !maskPixelsB) && !searchingProducts) {
+                  e.currentTarget.style.backgroundColor = '#FFFFFF';
+                }
+              }}
+            >
+              {searchingProducts ? "유사 가구 쇼핑 정보 찾는 중..." : `유사 가구 쇼핑 정보 검색`}
+            </button>
+          </div>
+
+          {/* 쇼핑 정보 카드 리스트 (A영역 & B영역 분리 렌더링 - 찌그러짐 없는 컴팩트 레이아웃 병합) */}
+          {(productsListA.length > 0 || productsListB.length > 0) && (
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ fontSize: '1.02rem', fontWeight: '700', color: 'var(--text-main)', marginBottom: '4px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                실시간 매칭 유사 상품 정보
+              </div>
+              
+              {/* A 영역 추천 리스트 */}
+              {productsListA.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: '500', color: '#8B7E74', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#8B7E74' }}></span>
+                    A 영역 매칭 상품
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+                    {productsListA.map((item, idx) => (
+                      <div 
+                        key={`A-${idx}`} 
+                        style={{ 
+                          display: 'flex', 
+                          background: '#FFFFFF', 
+                          borderRadius: '12px', 
+                          border: '1px solid var(--border-color)',
+                          padding: '12px 18px 12px 12px',
+                          gap: '12px',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                          minHeight: '100px',
+                          alignItems: 'center',
+                          fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
+                          boxSizing: 'border-box'
+                        }}
+                      >
+                        <img 
+                          src={item.image_url} 
+                          alt={item.product_name} 
+                          style={{ 
+                            width: '76px', 
+                            height: '76px', 
+                            objectFit: 'cover', 
+                            borderRadius: '8px',
+                            border: '1px solid var(--border-color)',
+                            flexShrink: 0,
+                            alignSelf: 'flex-start'
+                          }} 
+                        />
+                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1, minHeight: '76px', gap: '6px', paddingRight: '4px' }}>
+                          <div>
+                            <div style={{ fontSize: '0.82rem', fontWeight: '500', color: 'var(--text-main)', lineHeight: '1.3', marginBottom: '4px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                              {item.product_name}
+                            </div>
+                            <div style={{ fontSize: '0.9rem', fontWeight: '700', color: 'var(--accent)', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                              {item.price}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px', gap: '8px' }}>
+                            <span style={{ fontSize: '0.68rem', color: '#1E40AF', background: '#EFF6FF', padding: '3px 8px', borderRadius: '4px', fontWeight: '400', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', whiteSpace: 'nowrap' }}>
+                              유사도 {Math.round(item.similarity * 100)}%
+                            </span>
+                            <a 
+                              href={item.purchase_link} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              style={{ 
+                                fontSize: '0.72rem', 
+                                fontWeight: '400', 
+                                color: '#fff', 
+                                background: 'var(--primary)', 
+                                padding: '6px 14px', 
+                                borderRadius: '6px',
+                                textDecoration: 'none',
+                                whiteSpace: 'nowrap',
+                                textAlign: 'center',
+                                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+                              }}
+                            >
+                              구매 링크 ↗
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* B 영역 추천 리스트 */}
+              {productsListB.length > 0 && (
+                <div style={{ borderTop: productsListA.length > 0 ? '1px dashed var(--border-color)' : 'none', paddingTop: productsListA.length > 0 ? '12px' : '0' }}>
+                  <div style={{ fontSize: '0.82rem', fontWeight: '500', color: '#C7B7AE', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#C7B7AE' }}></span>
+                    B 영역 매칭 상품
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+                    {productsListB.map((item, idx) => (
+                      <div 
+                        key={`B-${idx}`} 
+                        style={{ 
+                          display: 'flex', 
+                        }}
+                      >
+                        <img 
+                          src={item.image_url} 
+                          alt={item.product_name} 
+                          style={{ 
+                            width: '64px', 
+                            height: '64px', 
+                            objectFit: 'cover', 
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-color)'
+                          }} 
+                        />
+                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1 }}>
+                          <div>
+                            <div style={{ fontSize: '0.78rem', fontWeight: '700', color: 'var(--text-main)', lineHeight: '1.25', marginBottom: '2px' }}>
+                              {item.product_name}
+                            </div>
+                            <div style={{ fontSize: '0.82rem', fontWeight: '800', color: 'var(--text-main)' }}>
+                              {item.price}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                            <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.05)', padding: '1px 5px', borderRadius: '4px' }}>
+                              유사도 {Math.round(item.similarity * 100)}%
+                            </span>
+                            <a 
+                              href={item.purchase_link} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              style={{ 
+                                fontSize: '0.68rem', 
+                                fontWeight: '700', 
+                                color: 'var(--primary)', 
+                                background: '#C7B7AE', 
+                                padding: '3px 8px', 
+                                borderRadius: '4px',
+                                textDecoration: 'none'
+                              }}
+                            >
+                              구매 링크 ↗
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

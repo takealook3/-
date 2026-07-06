@@ -1,0 +1,226 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 1116826609479470,
+      "steps": 25,
+      "cfg": 8.5,
+      "sampler_name": "dpmpp_sde",
+      "scheduler": "karras",
+      "denoise": 1,
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler (1단계 변환)"
+    }
+  },
+  "4": {
+    "inputs": {
+      "ckpt_name": "realisticVisionV60B1_v51HyperInpaintVAE.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "체크포인트 로드"
+    }
+  },
+  "5": {
+    "inputs": {
+      "image": "images.jpg"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "원본 이미지 로드"
+    }
+  },
+  "6": {
+    "inputs": {
+      "text": "A modern luxury leather sofa, photorealistic, 8k, highly detailed, interior magazine style",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "긍정 프롬프트 1 (첫 번째 사물 변경)"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "blurry, low quality, distorted, bad proportions, deformed, bad anatomy, ugly, worst quality",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "부정 프롬프트 (공통)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE 디코드 (1단계 완료)"
+    }
+  },
+  "9": {
+    "inputs": {
+      "filename_prefix": "Web_Redesign_Result",
+      "images": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "최종 결과물 저장"
+    }
+  },
+  "10": {
+    "inputs": {
+      "grow_mask_by": 8,
+      "pixels": [
+        "5",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ],
+      "mask": [
+        "17",
+        0
+      ]
+    },
+    "class_type": "VAEEncodeForInpaint",
+    "_meta": {
+      "title": "VAE 인코드 (마스크 1 적용)"
+    }
+  },
+  "11": {
+    "inputs": {
+      "text": "SECOND_PRODUCT_PROMPT_HERE, photorealistic, 8k, highly detailed, interior magazine style",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "긍정 프롬프트 2 (두 번째 사물 변경)"
+    }
+  },
+  "14": {
+    "inputs": {
+      "grow_mask_by": 8,
+      "pixels": [
+        "8",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ],
+      "mask": [
+        "18",
+        0
+      ]
+    },
+    "class_type": "VAEEncodeForInpaint",
+    "_meta": {
+      "title": "VAE 인코드 (마스크 2 적용)"
+    }
+  },
+  "15": {
+    "inputs": {
+      "seed": 611711229991393,
+      "steps": 25,
+      "cfg": 7.5,
+      "sampler_name": "dpmpp_sde",
+      "scheduler": "karras",
+      "denoise": 0.65,
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "11",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "14",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler (2단계 변환)"
+    }
+  },
+  "16": {
+    "inputs": {
+      "samples": [
+        "15",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "최종 이미지 디코드"
+    }
+  },
+  "17": {
+    "inputs": {
+      "image": "user_mask1.png",
+      "channel": "red"
+    },
+    "class_type": "LoadImageMask",
+    "_meta": {
+      "title": "웹 마스크 1 로드"
+    }
+  },
+  "18": {
+    "inputs": {
+      "image": "user_mask2.png",
+      "channel": "red"
+    },
+    "class_type": "LoadImageMask",
+    "_meta": {
+      "title": "웹 마스크 2 로드"
+    }
+  }
+}

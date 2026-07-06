@@ -539,6 +539,12 @@ class ChatMessageRequest(BaseModel):
     question: str = Field(..., description="궗슜옄 吏덈Ц 궡슜 (鍮꾩뼱엳쑝硫 뿉윭 泥섎━맖)")
 
 
+    image_id: Optional[str] = Field(None, description="인테리어 원본 이미지 ID (변환용)")
+
+
+    style: Optional[str] = Field(None, description="변환할 인테리어 스타일")
+
+
 
 
 
@@ -567,6 +573,24 @@ class ChatMessageResponse(BaseModel):
 
 
     references: List[str] = Field(default_factory=list, description="떟蹂 옉꽦뿉 李멸퀬븳 異쒖쿂 紐⑸줉 諛곗뿴")
+
+
+    image_url: Optional[str] = Field(None, description="스타일 참고 이미지 URL")
+
+
+    result_id: Optional[str] = Field(None, description="인테리어 변환 결과 이미지 ID")
+
+
+    original_image_url: Optional[str] = Field(None, description="원본 이미지 URL")
+
+
+    style: Optional[str] = Field(None, description="변환 스타일")
+
+
+    prompt: Optional[str] = Field(None, description="변환 프롬프트")
+
+
+    processing_time: Optional[float] = Field(None, description="변환 소요 시간")
 
 
 
@@ -605,13 +629,34 @@ class ImageEditRequest(BaseModel):
     session_id: str = Field(..., description="궗슜옄 옉뾽 꽭뀡 ID")
 
 
-    mask: Optional[List[int]] = Field(None, description="留덉뒪겕 궗媛곹삎 쁺뿭 醫뚰몴 [x1, y1, x2, y2]")
+    mask: Optional[Any] = Field(None, description="1차 마스크 영역 정보 (좌표 [x1,y1,x2,y2] 또는 Base64 PNG 이미지)")
+
+
+    mask_b: Optional[Any] = Field(None, description="2차 마스크 영역 정보 (좌표 [x1,y1,x2,y2] 또는 Base64 PNG 이미지)")
 
 
     selected_object: Optional[str] = Field(None, description="꽑깮맂 媛앹껜 紐낆묶 (삁: graffiti, sign)")
 
 
-    prompt: str = Field("Replace graffiti with clean brick texture", description="렪吏 吏떆臾")
+    prompt: str = Field("Replace graffiti with clean brick texture", description="1차 렪吏 吏떆臾")
+
+
+    prompt_b: Optional[str] = Field(None, description="2차 렪吏 吏떆臾")
+
+
+    steps: Optional[int] = Field(None, description="KSampler 연산 단계 수 (선택)")
+
+
+    cfg: Optional[float] = Field(None, description="프롬프트 유도 가중치 (선택)")
+
+
+    denoise: Optional[float] = Field(None, description="노이즈 제거 강도 (선택)")
+
+    # 버그② 수정: Base64 마스크와 별개로 픽셀 좌표 BBox를 직접 전달하는 필드
+    # mock 폴백 모드에서 Base64 문자열의 len()이 4가 아니어서 가구 교체가 스킵되던 버그 방지
+    mask_pixels_a: Optional[List[int]] = Field(None, description="1차 마스크 픽셀 좌표 [x1,y1,x2,y2] (mock 폴백용)")
+
+    mask_pixels_b: Optional[List[int]] = Field(None, description="2차 마스크 픽셀 좌표 [x1,y1,x2,y2] (mock 폴백용)")
 
 
 
