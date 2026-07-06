@@ -584,7 +584,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                 }
               }}
             >
-              {editing ? "AI 부분 교체 적용 중..." : "AI 가구 편집/수선 실행"}
+              {editing ? "AI 부분 교체 적용 중..." : (editedResultUrl ? "🔄 다시 하기 (아래 결과 확인)" : "AI 가구 편집/수선 실행")}
             </button>
 
             <button
@@ -761,7 +761,6 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                             </a>
                           </div>
                         </div>
->>>>>>> theirs
                       </div>
                     ))}
                   </div>
