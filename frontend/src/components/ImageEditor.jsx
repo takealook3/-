@@ -7,7 +7,7 @@
 import React, { useState, useRef } from 'react';
 import { editImage, searchProducts, API_BASE_URL } from '../services/api';
 
-export default function ImageEditor({ imageId, sessionId, originalImageUrl, onError }) {
+export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGenerateSuccess, onError }) {
   // 마스크 모드: 'A' (1차 가구 수선) 또는 'B' (2차 가구 수선)
   const [maskMode, setMaskMode] = useState('A');
 
@@ -39,7 +39,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
   const containerRef = useRef(null);
   const imgRef = useRef(null);
 
-  if (!imageId) return null;
+  if (!imageId || !originalImageUrl) return null;
 
   const getFullUrl = (url) => {
     if (!url) return "";
@@ -51,8 +51,8 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
 
   // 마우스 클릭 시작
   const handleMouseDown = (e) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
+    if (!imgRef.current) return;
+    const rect = imgRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     setIsDragging(true);
@@ -69,8 +69,8 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
 
   // 마우스 드래그 중
   const handleMouseMove = (e) => {
-    if (!isDragging || !containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
+    if (!isDragging || !imgRef.current) return;
+    const rect = imgRef.current.getBoundingClientRect();
     const currentX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
     const currentY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
 
@@ -95,9 +95,9 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
     if (!isDragging) return;
     setIsDragging(false);
 
-    if (!containerRef.current || !imgRef.current) return;
+    if (!imgRef.current) return;
 
-    const rect = containerRef.current.getBoundingClientRect();
+    const rect = imgRef.current.getBoundingClientRect();
     // React state 비동기 갱신 대신 ref에서 최신 좌표를 즉시 동기적으로 읽음
     const currentX = dragCurrentRef.current.x;
     const currentY = dragCurrentRef.current.y;
@@ -216,6 +216,17 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
         // 브라우저 캐시 방지를 위해 타임스탬프 쿼리 파라미터 추가
         const cacheBustedUrl = eUrl ? `${eUrl}?t=${Date.now()}` : eUrl;
         setEditedResultUrl(cacheBustedUrl);
+
+        if (onGenerateSuccess) {
+          onGenerateSuccess({
+            resultId: res.data?.result_id || imageId,
+            resultImageUrl: getFullUrl(cacheBustedUrl),
+            style: "repair",
+            prompt: promptA.trim(),
+            processingTime: res.data?.processing_time || 0.42,
+            status: "completed"
+          });
+        }
       } else {
         onError({ errorCode: res.errorCode || "PROCESSING_FAILED", message: res.message });
       }
@@ -246,7 +257,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
         imageId,
         sessionId,
         maskPixels: activeMaskPixels,
-        prompt: activePromptText.trim() // 한글 주석: 사용자가 입력한 가구 스타일 텍스트 전달 추가
+        prompt: activePromptText.trim()
       });
 
       if (res.success) {
@@ -263,66 +274,66 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
   };
 
   return (
-    <div className="card" style={{ border: '1px solid #334155' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-        <div className="card-title" style={{ fontSize: '1.25rem', fontWeight: '800' }}>
-          🛠️ 4. AI 가구 영역 부분 교체 (1단계 단독 / 2단계 동시 지원)
+    <div className="card" style={{ border: '1px solid var(--border-color)', fontFamily: 'Outfit, sans-serif' }}>
+      {/* 헤더 영역 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div className="card-title" style={{ fontSize: '1.35rem', fontWeight: '800', fontFamily: 'Outfit, sans-serif', color: 'var(--primary)', margin: 0, letterSpacing: '-0.02em' }}>
+          🛠️ AI 가구 부분 교체
         </div>
         <button 
           onClick={handleClearAll}
-          className="toolbar-btn" 
-          style={{ fontSize: '0.8rem', padding: '6px 12px', background: '#334155', color: '#cbd5e1', borderRadius: '6px' }}
+          className="btn btn-secondary" 
+          style={{ fontSize: '0.8rem', padding: '6px 14px', borderRadius: '20px', fontFamily: 'Outfit, sans-serif' }}
         >
           전체 리셋 🗑️
         </button>
       </div>
-      <div className="card-desc" style={{ marginBottom: '16px' }}>
-        마우스 드래그를 이용해 사진 속의 1차 수선 가구(A)와 2차 수선 가구(B) 영역을 각각 <strong>원형(Circle)</strong>으로 지정해 보세요. (2차 수선 영역은 생략 가능합니다.)
-      </div>
 
       {/* 수선 타겟 편집 탭 */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', fontFamily: 'Outfit, sans-serif' }}>
         <button
           type="button"
           onClick={() => setMaskMode('A')}
           style={{
             flex: 1,
-            padding: '10px',
+            padding: '12px',
             borderRadius: '8px',
             fontWeight: '700',
             fontSize: '0.9rem',
             cursor: 'pointer',
-            transition: 'all 0.2s',
-            background: maskMode === 'A' ? '#075985' : '#1e293b',
-            border: `2px solid ${maskMode === 'A' ? '#38bdf8' : '#334155'}`,
-            color: maskMode === 'A' ? '#e0f2fe' : '#94a3b8',
-            boxShadow: maskMode === 'A' ? '0 0 10px rgba(56, 189, 248, 0.25)' : 'none'
+            transition: 'all 0.25s ease',
+            background: maskMode === 'A' ? '#8B7E74' : 'var(--bg-card-inner)',
+            border: `1.5px solid ${maskMode === 'A' ? '#8B7E74' : 'var(--border-color)'}`,
+            color: maskMode === 'A' ? '#FCFAF7' : 'var(--text-muted)',
+            fontFamily: 'Outfit, sans-serif',
+            boxShadow: maskMode === 'A' ? '0 4px 15px rgba(139, 126, 116, 0.15)' : 'none'
           }}
         >
-          🔵 1차 가구 수선 (A 영역 설정)
+          🔵 A 영역
         </button>
         <button
           type="button"
           onClick={() => setMaskMode('B')}
           style={{
             flex: 1,
-            padding: '10px',
+            padding: '12px',
             borderRadius: '8px',
             fontWeight: '700',
             fontSize: '0.9rem',
             cursor: 'pointer',
-            transition: 'all 0.2s',
-            background: maskMode === 'B' ? '#831843' : '#1e293b',
-            border: `2px solid ${maskMode === 'B' ? '#f43f5e' : '#334155'}`,
-            color: maskMode === 'B' ? '#ffe4e6' : '#94a3b8',
-            boxShadow: maskMode === 'B' ? '0 0 10px rgba(244, 63, 94, 0.25)' : 'none'
+            transition: 'all 0.25s ease',
+            background: maskMode === 'B' ? '#C7B7AE' : 'var(--bg-card-inner)',
+            border: `1.5px solid ${maskMode === 'B' ? '#C7B7AE' : 'var(--border-color)'}`,
+            color: maskMode === 'B' ? 'var(--primary)' : 'var(--text-muted)',
+            fontFamily: 'Outfit, sans-serif',
+            boxShadow: maskMode === 'B' ? '0 4px 15px rgba(199, 183, 174, 0.15)' : 'none'
           }}
         >
-          🔴 2차 가구 수선 (B 영역 설정 - 선택)
+          🔴 B 영역 (선택)
         </button>
       </div>
 
-      <div className="grid-2">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '28px', alignItems: 'start' }}>
         {/* 좌측: 마스킹 캔버스 및 개별 초기화 */}
         <div>
           <div
@@ -334,9 +345,10 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
             style={{ 
               cursor: 'crosshair', 
               position: 'relative',
-              borderRadius: '8px',
-              border: `2px dashed ${maskMode === 'A' ? '#38bdf8' : '#f43f5e'}`,
-              overflow: 'hidden'
+              borderRadius: '12px',
+              border: `2px dashed ${maskMode === 'A' ? '#8B7E74' : '#C7B7AE'}`,
+              overflow: 'hidden',
+              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.08)'
             }}
           >
             <img
@@ -345,9 +357,9 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
               alt="부분 편집 원본"
               className="canvas-img"
               draggable={false}
-              style={{ width: '100%', height: 'auto', display: 'block', borderRadius: '6px' }}
+              style={{ width: '100%', height: 'auto', display: 'block' }}
             />
-            {/* 1차 마스크 영역 박스 (블루 원형) */}
+            {/* 1차 마스크 영역 박스 (토프 브라운 원형) */}
             {bboxNormA && (
               <div
                 style={{
@@ -356,19 +368,19 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
                   top: `${bboxNormA.y1 * 100}%`,
                   width: `${(bboxNormA.x2 - bboxNormA.x1) * 100}%`,
                   height: `${(bboxNormA.y2 - bboxNormA.y1) * 100}%`,
-                  border: '3px solid #38bdf8',
+                  border: '3px solid #8B7E74',
                   borderRadius: '50%',
-                  background: 'rgba(56, 189, 248, 0.25)',
-                  boxShadow: '0 0 8px #38bdf8',
+                  background: 'rgba(139, 126, 116, 0.2)',
+                  boxShadow: '0 0 12px #8B7E74',
                   pointerEvents: 'none'
                 }}
               >
-                <span style={{ position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', background: '#38bdf8', color: '#0f172a', fontSize: '0.7rem', fontWeight: '800', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap' }}>
-                  가구 A
+                <span style={{ position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', background: '#8B7E74', color: '#FCFAF7', fontSize: '0.7rem', fontWeight: '800', padding: '1px 6px', borderRadius: '3px', whiteSpace: 'nowrap', fontFamily: 'Outfit, sans-serif' }}>
+                  A 영역
                 </span>
               </div>
             )}
-            {/* 2차 마스크 영역 박스 (핑크 원형) */}
+            {/* 2차 마스크 영역 박스 (베이지 원형) */}
             {bboxNormB && (
               <div
                 style={{
@@ -377,57 +389,41 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
                   top: `${bboxNormB.y1 * 100}%`,
                   width: `${(bboxNormB.x2 - bboxNormB.x1) * 100}%`,
                   height: `${(bboxNormB.y2 - bboxNormB.y1) * 100}%`,
-                  border: '3px solid #f43f5e',
+                  border: '3px solid #C7B7AE',
                   borderRadius: '50%',
-                  background: 'rgba(244, 63, 94, 0.25)',
-                  boxShadow: '0 0 8px #f43f5e',
+                  background: 'rgba(199, 183, 174, 0.2)',
+                  boxShadow: '0 0 12px #C7B7AE',
                   pointerEvents: 'none'
                 }}
               >
-                <span style={{ position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', background: '#f43f5e', color: '#fff', fontSize: '0.7rem', fontWeight: '800', padding: '1px 5px', borderRadius: '3px', whiteSpace: 'nowrap' }}>
-                  가구 B
+                <span style={{ position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', background: '#C7B7AE', color: 'var(--primary)', fontSize: '0.7rem', fontWeight: '800', padding: '1px 6px', borderRadius: '3px', whiteSpace: 'nowrap', fontFamily: 'Outfit, sans-serif' }}>
+                  B 영역
                 </span>
               </div>
             )}
           </div>
 
           {/* 도구바 */}
-          <div className="toolbar" style={{ marginTop: '10px' }}>
-            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
-              현재 설정 모드: {maskMode === 'A' ? '🔵 1차 가구 (A)' : '🔴 2차 가구 (B)'}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600', fontFamily: 'Outfit, sans-serif' }}>
+              {maskMode === 'A' ? '🔵 A 영역 지정 모드' : '🔴 B 영역 지정 모드'}
             </span>
             <button
               type="button"
-              className="toolbar-btn"
+              className="btn btn-secondary"
               onClick={handleClearActiveMask}
-              style={{ fontSize: '0.8rem', padding: '4px 10px', background: '#475569', borderRadius: '4px' }}
+              style={{ fontSize: '0.78rem', padding: '6px 12px', borderRadius: '6px', fontFamily: 'Outfit, sans-serif' }}
             >
               선택 영역 지우기 🧹
             </button>
           </div>
-
-          {/* 감지 정보 배너 */}
-          <div className="success-banner" style={{ marginTop: '12px', background: '#1e293b', fontSize: '0.8rem', color: '#cbd5e1' }}>
-            <div>
-              {maskPixelsA ? (
-                <div>🔵 <strong>가구 A 원형 영역:</strong> [x: {maskPixelsA[0]}~{maskPixelsA[2]}, y: {maskPixelsA[1]}~{maskPixelsA[3]}] ({promptA})</div>
-              ) : (
-                <div>🔵 <strong>가구 A 영역:</strong> 캔버스에 마우스를 드래그해 주세요 (필수)</div>
-              )}
-              {maskPixelsB ? (
-                <div style={{ marginTop: '4px' }}>🔴 <strong>가구 B 원형 영역:</strong> [x: {maskPixelsB[0]}~{maskPixelsB[2]}, y: {maskPixelsB[1]}~{maskPixelsB[3]}] ({promptB})</div>
-              ) : (
-                <div style={{ marginTop: '4px', color: '#64748b' }}>🔴 <strong>가구 B 영역:</strong> 추가 변경 가구가 필요하면 모드 전환 후 영역 지정 (선택)</div>
-              )}
-            </div>
-          </div>
         </div>
 
         {/* 우측: 수선 지시 양식 및 결과 */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div>
-            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', color: '#38bdf8', marginBottom: '6px' }}>
-              🔵 1차 가구 수선 요청 (Prompt A):
+            <label style={{ display: 'block', fontSize: '0.88rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '8px', fontFamily: 'Outfit, sans-serif' }}>
+              🔵 A 영역 교체 스타일 입력:
             </label>
             <input
               type="text"
@@ -435,13 +431,13 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
               onChange={(e) => setPromptA(e.target.value)}
               placeholder="예: 현대적이고 고급스러운 가죽 소파"
               className="input-field"
-              style={{ borderColor: '#0284c7' }}
+              style={{ padding: '12px 16px', fontSize: '0.9rem', fontFamily: 'Outfit, sans-serif' }}
             />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', color: '#f43f5e', marginBottom: '6px', opacity: maskPixelsB ? 1 : 0.5 }}>
-              🔴 2차 가구 수선 요청 (Prompt B - 선택):
+            <label style={{ display: 'block', fontSize: '0.88rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '8px', opacity: maskPixelsB ? 1 : 0.6, fontFamily: 'Outfit, sans-serif' }}>
+              🔴 B 영역 교체 스타일 입력 (선택):
             </label>
             <input
               type="text"
@@ -451,120 +447,78 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
               className="input-field"
               disabled={!maskPixelsB}
               style={{ 
-                borderColor: maskPixelsB ? '#be123c' : '#334155',
-                opacity: maskPixelsB ? 1 : 0.5,
-                cursor: maskPixelsB ? 'text' : 'not-allowed'
+                padding: '12px 16px',
+                fontSize: '0.9rem',
+                opacity: maskPixelsB ? 1 : 0.6,
+                cursor: maskPixelsB ? 'text' : 'not-allowed',
+                fontFamily: 'Outfit, sans-serif'
               }}
             />
           </div>
 
-          <button
-            type="button"
-            onClick={handleEditSubmit}
-            disabled={editing || !maskPixelsA}
-            className="btn btn-coral btn-full"
-            style={{ 
-              padding: '14px', 
-              fontSize: '1rem', 
-              fontWeight: '700',
-              cursor: (!maskPixelsA || editing) ? 'not-allowed' : 'pointer',
-              background: (!maskPixelsA) ? '#334155' : 'linear-gradient(135deg, #f43f5e 0%, #be123c 100%)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              transition: 'all 0.3s'
-            }}
-          >
-            {editing ? "✨ AI 원형 인페인팅 적용 작업 중... (대기)" : "✨ AI 가구 편집/수선 실행"}
-          </button>
+          {/* 주요 작업 실행 버튼들 */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+            <button
+              type="button"
+              onClick={handleEditSubmit}
+              disabled={editing || !maskPixelsA}
+              className="btn btn-primary btn-full"
+              style={{ 
+                padding: '14px', 
+                fontSize: '0.95rem', 
+                fontWeight: '700',
+                cursor: (!maskPixelsA || editing) ? 'not-allowed' : 'pointer',
+                background: (!maskPixelsA) ? 'var(--bg-card-inner)' : 'var(--primary)',
+                color: (!maskPixelsA) ? 'var(--text-muted)' : '#FCFAF7',
+                border: 'none',
+                borderRadius: '8px',
+                transition: 'all 0.25s ease',
+                fontFamily: 'Outfit, sans-serif'
+              }}
+            >
+              {editing ? "✨ AI 부분 교체 적용 중..." : "✨ AI 가구 편집/수선 실행"}
+            </button>
 
-          <button
-            type="button"
-            onClick={handleSearchProducts}
-            disabled={searchingProducts || (maskMode === 'A' ? !maskPixelsA : !maskPixelsB)}
-            className="btn btn-full"
-            style={{ 
-              padding: '14px', 
-              fontSize: '1rem', 
-              fontWeight: '700',
-              cursor: (((maskMode === 'A' ? !maskPixelsA : !maskPixelsB) || searchingProducts) ? 'not-allowed' : 'pointer'),
-              background: (maskMode === 'A' ? !maskPixelsA : !maskPixelsB) ? '#334155' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '8px',
-              transition: 'all 0.3s',
-              boxShadow: (maskMode === 'A' ? maskPixelsA : maskPixelsB) ? '0 4px 12px rgba(16, 185, 129, 0.3)' : 'none',
-              marginTop: '4px'
-            }}
-          >
-            {searchingProducts ? "🛍️ AI 유사 가구 정보 수집 중..." : `🛍️ 유사 가구 쇼핑 정보 검색 (${maskMode === 'A' ? '가구 A' : '가구 B'})`}
-          </button>
-
-          <hr style={{ borderColor: '#334155', margin: '4px 0' }} />
-
-          <div>
-            <div style={{ fontSize: '1.05rem', fontWeight: '800', color: '#fff', marginBottom: '8px' }}>
-              🎉 최신 수선 완료 결과
-            </div>
-            {editedResultUrl ? (
-              <div>
-                <div className="success-banner" style={{ marginBottom: '12px', background: '#022c22', border: '1px solid #059669' }}>
-                  <span>☑️</span>
-                  <span>가구 교체 결과가 생성되었습니다! 아래에서 합성된 모습을 확인해 보세요.</span>
-                </div>
-                <div className="preview-box" style={{ height: '240px', border: '2px solid #10b981', position: 'relative', overflow: 'hidden', borderRadius: '8px' }}>
-                  <img src={getFullUrl(editedResultUrl)} alt="편집 완료 이미지" className="preview-img" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                </div>
-                <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
-                  <a 
-                    href={getFullUrl(editedResultUrl)} 
-                    download={`ZipPT_Upscaled_Result.jpg`}
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="btn"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '10px 16px',
-                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                      color: '#fff',
-                      borderRadius: '6px',
-                      textDecoration: 'none',
-                      fontSize: '0.85rem',
-                      fontWeight: '700',
-                      flex: 1,
-                      boxShadow: '0 4px 10px rgba(16, 185, 129, 0.25)',
-                      textAlign: 'center'
-                    }}
-                  >
-                    💾 1.5배 고화질 이미지 다운로드 (새 창)
-                  </a>
-                </div>
-              </div>
-            ) : (
-              <div style={{ padding: '30px 24px', background: '#0f172a', borderRadius: '10px', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
-                아직 수선된 결과가 없습니다. 좌측 캔버스에 영역을 선택하고 [AI 가구 편집/수선 실행] 버튼을 클릭해 주세요.
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={handleSearchProducts}
+              disabled={searchingProducts || (maskMode === 'A' ? !maskPixelsA : !maskPixelsB)}
+              className="btn btn-secondary btn-full"
+              style={{ 
+                padding: '14px', 
+                fontSize: '0.95rem', 
+                fontWeight: '700',
+                cursor: (((maskMode === 'A' ? !maskPixelsA : !maskPixelsB) || searchingProducts) ? 'not-allowed' : 'pointer'),
+                background: (maskMode === 'A' ? !maskPixelsA : !maskPixelsB) ? 'var(--bg-card-inner)' : 'var(--bg-card-inner)',
+                color: 'var(--text-main)',
+                border: (maskMode === 'A' ? !maskPixelsA : !maskPixelsB) ? '1px solid var(--border-color)' : '1px solid var(--primary)',
+                borderRadius: '8px',
+                transition: 'all 0.25s ease',
+                fontFamily: 'Outfit, sans-serif'
+              }}
+            >
+              {searchingProducts ? "🛍️ 유사 가구 쇼핑 정보 찾는 중..." : `🛍️ 유사 가구 쇼핑 정보 검색`}
+            </button>
           </div>
 
-          {/* 쇼핑 정보 카드 리스트 출력 영역 */}
+          <hr style={{ borderColor: 'var(--border-color)', margin: '4px 0' }} />
+
+          {/* 쇼핑 정보 카드 리스트 */}
           {productsList.length > 0 && (
-            <div style={{ marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '16px' }}>
-              <div style={{ fontSize: '1.05rem', fontWeight: '800', color: '#38bdf8', marginBottom: '12px' }}>
-                🛍️ 실시간 매칭 유사 상품 정보 (Gemini 검색)
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
+              <div style={{ fontSize: '1.02rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '12px', fontFamily: 'Outfit, sans-serif' }}>
+                🛍️ 실시간 매칭 유사 상품 정보
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto', paddingRight: '4px' }}>
                 {productsList.map((item, idx) => (
                   <div 
                     key={idx} 
                     style={{ 
                       display: 'flex', 
-                      background: '#1e293b', 
+                      background: 'var(--bg-card-inner)', 
                       borderRadius: '8px', 
                       overflow: 'hidden', 
-                      border: '1px solid #334155',
+                      border: '1px solid var(--border-color)',
                       padding: '8px',
                       gap: '12px'
                     }}
@@ -573,24 +527,24 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
                       src={item.image_url} 
                       alt={item.product_name} 
                       style={{ 
-                        width: '80px', 
-                        height: '80px', 
+                        width: '72px', 
+                        height: '72px', 
                         objectFit: 'cover', 
                         borderRadius: '6px',
-                        border: '1px solid #475569'
+                        border: '1px solid var(--border-color)'
                       }} 
                     />
                     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1 }}>
                       <div>
-                        <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#f8fafc', lineHeight: '1.2', marginBottom: '4px' }}>
+                        <div style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-main)', lineHeight: '1.25', marginBottom: '2px' }}>
                           {item.product_name}
                         </div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: '800', color: '#38bdf8' }}>
+                        <div style={{ fontSize: '0.88rem', fontWeight: '800', color: 'var(--text-main)' }}>
                           {item.price}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                        <span style={{ fontSize: '0.7rem', color: '#94a3b8', background: '#334155', padding: '2px 6px', borderRadius: '4px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.05)', padding: '2px 6px', borderRadius: '4px' }}>
                           유사도 {Math.round(item.similarity * 100)}%
                         </span>
                         <a 
@@ -598,16 +552,16 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onEr
                           target="_blank" 
                           rel="noreferrer"
                           style={{ 
-                            fontSize: '0.75rem', 
+                            fontSize: '0.72rem', 
                             fontWeight: '700', 
                             color: '#fff', 
-                            background: '#0284c7', 
+                            background: 'var(--primary)', 
                             padding: '4px 10px', 
                             borderRadius: '4px',
                             textDecoration: 'none'
                           }}
                         >
-                          구매하러 가기 ↗
+                          구매 링크 ↗
                         </a>
                       </div>
                     </div>

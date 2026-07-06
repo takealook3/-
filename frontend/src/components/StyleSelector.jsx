@@ -85,7 +85,7 @@ export default function StyleSelector({
           >
             {STYLES.map((st) => (
               <option key={st.id} value={st.id}>
-                {st.label} ({st.id})
+                {st.label}
               </option>
             ))}
           </select>
@@ -127,7 +127,7 @@ export default function StyleSelector({
           className="btn btn-primary btn-full"
           style={{ padding: '14px', fontSize: '1rem' }}
         >
-          {generating ? "✨ AI가 인테리어 리모델링 변환 중... (잠시만 기다려주세요)" : "✨ 이미지 변환 실행 (POST /api/image/generate)"}
+          {generating ? "✨ AI가 인테리어 리모델링 변환 중... (잠시만 기다려주세요)" : "✨ 이미지 변환 실행"}
         </button>
       </form>
     </div>

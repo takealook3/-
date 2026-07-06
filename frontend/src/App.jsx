@@ -9,8 +9,10 @@ import ImageUploader from './components/ImageUploader';
 import ImageEditor from './components/ImageEditor';
 import ComparisonGallery from './components/ComparisonGallery';
 import SessionModal from './components/SessionModal';
+import StyleTransformer from './components/StyleTransformer';
 import ChatWidget from './components/ChatWidget';
 import StyleEncyclopedia, { STYLE_DATABASE } from './components/StyleEncyclopedia';
+import StyleQuiz from './components/StyleQuiz';
 import { checkHealth } from './services/api';
 import { Sofa, Bed, Table, Monitor, Trees, Archive, Lamp, Palette, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -46,6 +48,12 @@ function TopNav({ activeTab, onTabClick, serverStatus, onRefreshHealth, sessionI
           onClick={() => onTabClick('home', 'home')}
         >
           Home
+        </span>
+        <span 
+          className={`top-nav-link ${activeTab === 'quiz' ? 'active' : ''}`} 
+          onClick={() => onTabClick('quiz-section', 'quiz')}
+        >
+          Style Quiz
         </span>
         <span 
           className={`top-nav-link ${activeTab === 'transform' ? 'active' : ''}`} 
@@ -89,6 +97,7 @@ export default function App() {
   const [sessionId, setSessionId] = useState(null);
   const [originalImageUrl, setOriginalImageUrl] = useState(null);
   const [resultData, setResultData] = useState(null);
+  const [studioTab, setStudioTab] = useState('upload'); // 'upload' | 'repair' (통합 탭 상태)
 
   const [currentError, setCurrentError] = useState(null);
   const [showSessionModal, setShowSessionModal] = useState(false);
@@ -98,6 +107,8 @@ export default function App() {
   const [activeStyleId, setActiveStyleId] = useState(1); // 도감 탭 연동을 위한 전역 활성 스타일 ID
   const [startIndex, setStartIndex] = useState(0); // Featured Collections 카루셀 시작 인덱스 (모던=0으로 고정 기동)
 
+  const [pendingPrompt, setPendingPrompt] = useState(''); // 취향 퀴즈 연동용 자동 프롬프트 상태
+
   // 5초 간격 최상단 히어로 배경 롤링 타이머
   useEffect(() => {
     const timer = setInterval(() => {
@@ -106,9 +117,25 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
+  const handleApplyQuizPrompt = (prompt) => {
+    if (!imageId) {
+      alert("취향 분석 결과를 적용하려면 먼저 '📸 1. 변환할 인테리어 사진 업로드' 섹션에서 공간 원본 이미지를 업로드해 주십시오!");
+      document.getElementById('uploader-card')?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    setPendingPrompt(prompt);
+    document.getElementById('uploader-card')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   // 클릭하여 해당 섹션으로 보정 오토 스크롤링 함수
   const handleScrollTo = (id, tabName) => {
     setActiveTab(tabName);
+    if (tabName === 'transform') {
+      setStudioTab('upload');
+    } else if (tabName === 'editor') {
+      setStudioTab('repair');
+    }
+
     if (tabName === 'home') {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
@@ -139,30 +166,30 @@ export default function App() {
         return;
       }
 
+      const quizEl = document.getElementById('quiz-section');
       const uploaderEl = document.getElementById('uploader-card');
-      const editorEl = document.getElementById('editor-card');
       const galleryEl = document.getElementById('style-encyclopedia');
 
       const offset = 220; // 스크롤 판정 문턱값 (탑 내비바 80px + 여유폭 140px)
 
       // 각 작업 카드의 화면 내 스크롤 경계선 도출
+      const quizTop = quizEl ? quizEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
       const uploaderTop = uploaderEl ? uploaderEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
-      const editorTop = editorEl ? editorEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
       const galleryTop = galleryEl ? galleryEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
 
       // 아래에서부터 순차적으로 경계선을 넘었는지 체크하여 활성 탭 스위칭
       if (scrollPos >= galleryTop) {
         setActiveTab('gallery');
-      } else if (scrollPos >= editorTop) {
-        setActiveTab('editor');
       } else if (scrollPos >= uploaderTop) {
-        setActiveTab('transform');
+        setActiveTab(studioTab === 'repair' ? 'editor' : 'transform');
+      } else if (scrollPos >= quizTop) {
+        setActiveTab('quiz');
       }
     };
 
     window.addEventListener('scroll', handleScrollSpy);
     return () => window.removeEventListener('scroll', handleScrollSpy);
-  }, []);
+  }, [studioTab]);
 
   const verifyServerHealth = useCallback(async () => {
     setServerStatus(prev => ({ ...prev, loading: true }));
@@ -338,6 +365,15 @@ export default function App() {
           </div>
         </section>
 
+        {/* 온보딩 취향 진단 퀴즈 섹션 */}
+        <section id="quiz-section" className="quiz-section-wrapper">
+          <div className="section-header-centered">
+            <span className="section-subtitle">Find Your Curation</span>
+            <h2 className="section-title text-glow">Style Quiz</h2>
+          </div>
+          <StyleQuiz onApplyPrompt={handleApplyQuizPrompt} />
+        </section>
+
         {/* 에러 안내판 */}
         <ErrorBanner
           error={currentError}
@@ -345,55 +381,110 @@ export default function App() {
           onRetry={currentError?.errorCode === "SERVER_CONNECTION_FAILED" ? verifyServerHealth : null}
         />
 
-        {/* 1단계: 인테리어 사진 업로더 */}
-        <div id="uploader-card">
-          <ImageUploader
-            imageId={imageId}
-            sessionId={sessionId}
-            originalImageUrl={originalImageUrl}
-            onUploadSuccess={handleUploadSuccess}
-            onError={setCurrentError}
-          />
-        </div>
-
-        {/* 2단계: 챗봇 연동 안내 가이드 (StyleSelector 통합 대체) */}
-        {imageId && (
-          <div id="transform-card" className="card" style={{ border: '1px solid #C7B7AE', background: '#FCFAF7', color: '#2A2825', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div className="card-title" style={{ color: '#2B3530', fontSize: '1.25rem', fontWeight: '800' }}>
-              🎨 3. 챗봇 연동형 AI 인테리어 리모델링
-            </div>
-            <div className="card-desc" style={{ color: '#7A6C62', lineHeight: '1.5' }}>
-              사진 업로드가 성공적으로 완료되었습니다! <br />
-              이제 **우측 하단의 [💬 AI 인테리어 취향 상담] 버튼**을 눌러 메신저 창을 열고, 원하는 리모델링 요구사항을 채팅으로 입력해 주세요. <br />
-              입력하는 즉시 AI가 이미지를 분석하고 인테리어를 변환하여 쇼룸에 갱신해 드립니다.
-            </div>
-            <div style={{ background: '#F3EBE5', padding: '12px 16px', borderRadius: '8px', borderLeft: '4px solid #2B3530', fontSize: '0.85rem', color: '#2A2825', marginTop: '6px' }}>
-              <strong>추천 명령 예시:</strong> <br />
-              • "화사한 북유럽 스타일로 변환해줘" <br />
-              • "따뜻한 우드 감성의 내추럴 룸으로 꾸며줄래?" <br />
-              • "도시적이고 시크한 그레이톤 미니멀 공간으로 바꿔줘"
-            </div>
+        {/* 통합 인테리어 편집 스튜디오 (탭 전환 구조) */}
+        <div id="uploader-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* 고급스러운 탭 컨트롤러 (가로 1:1 비율 균등 분배 및 정중앙 분할) */}
+          <div style={{ display: 'flex', background: 'var(--bg-card)', padding: '6px', borderRadius: '12px', border: '1px solid var(--border-color)', width: '100%', maxWidth: '600px', gap: '8px', alignSelf: 'center', marginBottom: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
+            <button
+              onClick={() => setStudioTab('upload')}
+              style={{
+                flex: 1,
+                textAlign: 'center',
+                padding: '12px 0',
+                borderRadius: '8px',
+                border: 'none',
+                fontWeight: '700',
+                fontSize: '0.95rem',
+                cursor: 'pointer',
+                transition: 'all 0.25s ease',
+                background: studioTab === 'upload' ? 'var(--primary)' : 'transparent',
+                color: studioTab === 'upload' ? '#FCFAF7' : 'var(--text-muted)',
+              }}
+            >
+              {imageId ? "🎨 스타일 변환" : "📸 공간 사진 업로드"}
+            </button>
+            <button
+              onClick={() => setStudioTab('repair')}
+              style={{
+                flex: 1,
+                textAlign: 'center',
+                padding: '12px 0',
+                borderRadius: '8px',
+                border: 'none',
+                fontWeight: '700',
+                fontSize: '0.95rem',
+                cursor: 'pointer',
+                transition: 'all 0.25s ease',
+                background: studioTab === 'repair' ? 'var(--primary)' : 'transparent',
+                color: studioTab === 'repair' ? '#FCFAF7' : 'var(--text-muted)',
+              }}
+            >
+              🛠️ 부분 가구 교체
+            </button>
           </div>
-        )}
 
-        {/* 3단계: 부분 가구 교체 및 수선 - Image Inpainting (사진 등록 후 노출) */}
-        <div id="editor-card">
-          <ImageEditor
-            imageId={imageId}
-            sessionId={sessionId}
-            originalImageUrl={originalImageUrl}
-            onError={setCurrentError}
-          />
+          {/* 탭 본문 렌더링 */}
+          {studioTab === 'upload' ? (
+            !imageId ? (
+              <ImageUploader
+                imageId={imageId}
+                sessionId={sessionId}
+                originalImageUrl={originalImageUrl}
+                onUploadSuccess={(data) => {
+                  handleUploadSuccess(data);
+                }}
+                onError={setCurrentError}
+              />
+            ) : (
+              <StyleTransformer
+                imageId={imageId}
+                sessionId={sessionId}
+                originalImageUrl={originalImageUrl}
+                onGenerateSuccess={handleGenerateSuccess}
+                onError={setCurrentError}
+                pendingPrompt={pendingPrompt}
+                setPendingPrompt={setPendingPrompt}
+                onResetImage={() => {
+                  setImageId(null);
+                  setOriginalImageUrl(null);
+                  setResultData(null);
+                }}
+              />
+            )
+          ) : (
+            <div id="editor-card">
+              {imageId && originalImageUrl ? (
+                <ImageEditor
+                  imageId={imageId}
+                  sessionId={sessionId}
+                  originalImageUrl={originalImageUrl}
+                  onGenerateSuccess={handleGenerateSuccess}
+                  onError={setCurrentError}
+                />
+              ) : (
+                <div className="card" style={{ textAlign: 'center', padding: '60px 40px', background: 'var(--bg-card)', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                  <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>📸</div>
+                  <div style={{ fontWeight: '700', color: 'var(--text-main)', fontSize: '1.25rem', marginBottom: '8px' }}>등록된 공간 사진이 없습니다.</div>
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>먼저 [공간 사진 업로드] 탭에서 원본 이미지를 업로드해 주세요.</p>
+                  <button onClick={() => setStudioTab('upload')} className="btn btn-primary" style={{ marginTop: '20px', padding: '10px 24px', fontSize: '0.9rem' }}>
+                    사진 업로드하러 가기
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 4단계: Before / After 비교 쇼룸 */}
-        <div id="gallery-card">
-          <ComparisonGallery
-            originalImageUrl={originalImageUrl}
-            resultData={resultData}
-            onError={setCurrentError}
-          />
-        </div>
+        {resultData && (
+          <div id="gallery-card">
+            <ComparisonGallery
+              originalImageUrl={originalImageUrl}
+              resultData={resultData}
+              onError={setCurrentError}
+            />
+          </div>
+        )}
 
         {/* 28대 인테리어 스타일 도감 전시장 (GNB 28 Styles 메뉴 매핑) */}
         <StyleEncyclopedia activeId={activeStyleId} setActiveId={setActiveStyleId} />
@@ -522,12 +613,12 @@ export default function App() {
         />
       )}
 
-      {/* 5단계: AI 인테리어 취향 & 추구미 1:1 상담 메신저 위젯 (이미지 변환 연동) */}
+      {/* 5단계: AI 인테리어 취향 & 추구미 1:1 상담 메신저 위젯 (순수 인테리어 RAG 상담 전용) */}
       <ChatWidget 
         sessionId={sessionId} 
-        imageId={imageId}
-        onGenerateSuccess={handleGenerateSuccess}
         onError={setCurrentError}
+        pendingPrompt={pendingPrompt}
+        setPendingPrompt={setPendingPrompt}
       />
     </div>
   );

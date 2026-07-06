@@ -13,7 +13,7 @@ const QUICK_QUESTIONS = [
   "🕶️ 차분하고 도시적인 모던 서재 공간 꾸미는 가이드"
 ];
 
-export default function ChatWidget({ sessionId, imageId, onGenerateSuccess, onError }) {
+export default function ChatWidget({ sessionId, onError, pendingPrompt, setPendingPrompt }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -26,6 +26,15 @@ export default function ChatWidget({ sessionId, imageId, onGenerateSuccess, onEr
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const [activeImageUrl, setActiveImageUrl] = useState(null);
+
+  // 취향 퀴즈 프롬프트 주입 시 자동 전송 및 채팅 위젯 활성화
+  useEffect(() => {
+    if (pendingPrompt) {
+      setIsOpen(true);
+      handleSend(pendingPrompt);
+      setPendingPrompt('');
+    }
+  }, [pendingPrompt]);
 
   // 채팅이 추가될 때마다 자동으로 스크롤을 맨 아래로 이동
   useEffect(() => {
@@ -53,36 +62,22 @@ export default function ChatWidget({ sessionId, imageId, onGenerateSuccess, onEr
     const res = await sendChatMessage({
       sessionId: sessionId || "session_default",
       question: q.trim(),
-      imageId: imageId || null
+      imageId: null // 챗봇 창에서는 이미지 변환 프로세스를 유발하지 않도록 명시적 차단
     });
 
     setLoading(false);
 
     if (res.success) {
       const respData = res.data || {};
-      const fullImgUrl = getFullUrl(respData.image_url);
       
       setMessages((prev) => [
         ...prev,
         {
           sender: 'ai',
           text: respData.answer || res.message || "답변이 도착했습니다.",
-          references: respData.references || [],
-          image_url: fullImgUrl
+          references: respData.references || []
         }
       ]);
-
-      // 만약 이미지 변환 결과 메타데이터가 응답 봉투에 들어있으면 ComparisonGallery 갱신 콜백 발동
-      if (respData.result_id && onGenerateSuccess) {
-        onGenerateSuccess({
-          resultId: respData.result_id,
-          resultImageUrl: fullImgUrl,
-          style: respData.style,
-          prompt: respData.prompt,
-          processingTime: respData.processing_time || 0.42,
-          status: "completed"
-        });
-      }
     } else {
       setMessages((prev) => [
         ...prev,
@@ -235,44 +230,12 @@ export default function ChatWidget({ sessionId, imageId, onGenerateSuccess, onEr
                 {msg.text}
               </div>
 
-              {msg.image_url && (
-                <div 
-                  style={{
-                    marginTop: '8px',
-                    maxWidth: '85%',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    boxShadow: '0 4px 15px rgba(43, 53, 48, 0.1)',
-                    border: '1px solid #CDBCB2',
-                    cursor: 'pointer'
-                  }}
-                  onClick={() => setActiveImageUrl(msg.image_url)}
-                  title="클릭하여 크게 보기"
-                >
-                  <img 
-                    src={msg.image_url} 
-                    alt="스타일 이미지" 
-                    style={{
-                      width: '100%',
-                      height: 'auto',
-                      display: 'block',
-                      objectFit: 'cover',
-                      transition: 'transform 0.25s ease'
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                </div>
-              )}
             </div>
           ))}
 
             {loading && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#7A6C62', fontSize: '0.85rem', paddingLeft: '8px' }}>
-                <span>{imageId ? "✨ AI가 인테리어를 분석하고 새 스타일로 변환하는 중입니다..." : "✨ AI 스타일리스트가 공간 정보를 분석하고 있습니다..."}</span>
+                <span>✨ AI 스타일리스트가 공간 정보를 분석하고 있습니다...</span>
               </div>
             )}
 

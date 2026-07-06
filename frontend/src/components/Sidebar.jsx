@@ -17,17 +17,21 @@ export default function Sidebar({ serverStatus, onRefreshHealth, sessionId, onOp
       {/* 1. 시스템 연결 상태 */}
       <div className="sidebar-section">
         <div style={{ fontWeight: '600', fontSize: '0.95rem', color: 'var(--text-main)' }}>🔌 시스템 연결 상태</div>
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>백엔드 API 서버 주소:</div>
-        <div className="code-box">{API_BASE_URL}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: serverStatus.online ? '#10b981' : '#ef4444' }}></div>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            {serverStatus.online ? "통신 가능" : "통신 불가"}
+          </span>
+        </div>
       </div>
 
       <hr style={{ borderColor: 'var(--border-color)' }} />
 
-      {/* 2. 백엔드 연결 확인 (GET /health) */}
+      {/* 2. 백엔드 연결 확인 */}
       <div className="sidebar-section">
-        <div style={{ fontWeight: '600', fontSize: '0.95rem', color: 'var(--text-main)' }}>🏥 백엔드 연결 확인 (GET /health)</div>
+        <div style={{ fontWeight: '600', fontSize: '0.95rem', color: 'var(--text-main)' }}>🏥 백엔드 연결 확인</div>
         
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
           {serverStatus.loading ? (
             <div className="badge" style={{ backgroundColor: 'var(--bg-card-inner)', color: 'var(--text-muted)' }}>⏳ 서버 확인 중...</div>
           ) : serverStatus.online ? (
@@ -47,7 +51,7 @@ export default function Sidebar({ serverStatus, onRefreshHealth, sessionId, onOp
         </div>
 
         {!serverStatus.online && serverStatus.error && (
-          <div style={{ fontSize: '0.75rem', color: 'var(--accent)', background: 'rgba(176, 91, 72, 0.1)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--accent)', background: 'rgba(176, 91, 72, 0.1)', padding: '8px', borderRadius: '6px', border: '1px solid var(--border-color)', marginTop: '8px' }}>
             원인: {serverStatus.error}
           </div>
         )}
@@ -60,7 +64,7 @@ export default function Sidebar({ serverStatus, onRefreshHealth, sessionId, onOp
         <div style={{ fontWeight: '600', fontSize: '0.95rem', color: 'var(--text-main)' }}>📋 세션 작업 관리</div>
         {sessionId ? (
           <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '8px' }}>현재 세션: <code>{sessionId}</code></div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '8px' }}>연결 완료</div>
             <button onClick={onOpenSessionModal} className="btn btn-primary btn-full" style={{ fontSize: '0.85rem' }}>
               📋 내 세션 작업 기록 조회
             </button>
