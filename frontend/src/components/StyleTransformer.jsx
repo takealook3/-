@@ -197,7 +197,7 @@ export default function StyleTransformer({
                 fontFamily: 'Outfit, sans-serif'
               }}
             >
-              {loading ? "✨ 스타일 리모델링 변환 중..." : "✨ AI 스타일 변환 실행"}
+              {loading ? "✨ 스타일 리모델링 변환 중..." : (resultImageUrl ? "🔄 다른 스타일로 다시 변환" : "✨ AI 스타일 변환 실행")}
             </button>
           </form>
         </div>
