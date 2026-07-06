@@ -213,7 +213,6 @@ export default function StyleQuiz({ onApplyPrompt }) {
 
   // 결과 연산 및 매핑
   const calculateResult = (finalScores) => {
-    // 1. 축 성향 판별
     let spaceLabel = 'Balanced';
     if (finalScores.space > 0) spaceLabel = 'Minimal';
     else if (finalScores.space < 0) spaceLabel = 'Maximal';
@@ -226,11 +225,9 @@ export default function StyleQuiz({ onApplyPrompt }) {
     if (finalScores.era > 0) eraLabel = 'Modern';
     else if (finalScores.era < 0) eraLabel = 'Classic';
 
-    // 2. 최종 스타일 매칭
     const matchedName = getBestStyleMatch(spaceLabel, toneLabel, eraLabel);
     const dbStyle = STYLE_DATABASE.find(item => item.name === matchedName) || STYLE_DATABASE[0];
 
-    // 3. 프롬프트 문자열 생성
     const promptKeywords = [
       KEYWORD_MAP.space[spaceLabel],
       KEYWORD_MAP.tone[toneLabel],
@@ -244,7 +241,6 @@ export default function StyleQuiz({ onApplyPrompt }) {
     setShowResult(true);
   };
 
-  // 초기화 및 다시 하기
   const handleRestart = () => {
     setCurrentStep(0);
     setScores({ space: 0, tone: 0, era: 0 });
@@ -254,7 +250,6 @@ export default function StyleQuiz({ onApplyPrompt }) {
     setCopied(false);
   };
 
-  // 프롬프트 복사 액션
   const handleCopyPrompt = () => {
     navigator.clipboard.writeText(generatedPrompt);
     setCopied(true);
@@ -364,43 +359,45 @@ export default function StyleQuiz({ onApplyPrompt }) {
   const progressPercent = ((currentStep) / QUIZ_QUESTIONS.length) * 100;
 
   return (
-    <div className="quiz-container flex-center">
-      <div className="quiz-card glassmorphism p-xl flex-column gap-lg animate-fade-in">
+    <div className="quiz-container flex-center" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
+      <div className="quiz-card glassmorphism p-xl flex-column gap-lg animate-fade-in" style={{ padding: '36px', borderRadius: '20px' }}>
         {/* 진행 헤더 */}
-        <div className="quiz-header flex-column gap-xs">
-          <div className="flex-between text-xs opacity-7 font-bold">
-            <span className="text-accent uppercase tracking-widest">Onboarding Quiz</span>
+        <div className="quiz-header flex-column gap-xs" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
+          <div className="flex-between text-xs opacity-7" style={{ fontSize: '0.74rem', fontWeight: '700', color: 'var(--text-main)', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
+            <span style={{ color: 'var(--primary)' }}>스타일 취향 진단 퀴즈</span>
             <span>{currentStep + 1} / {QUIZ_QUESTIONS.length} 문항</span>
           </div>
-          <div className="progress-bar-bg">
+          <div className="progress-bar-bg" style={{ height: '6px', borderRadius: '50px' }}>
             <div 
               className="progress-bar-fill" 
-              style={{ width: `${progressPercent}%` }}
+              style={{ width: `${progressPercent}%`, height: '100%', borderRadius: '50px', backgroundColor: 'var(--primary)' }}
             />
           </div>
         </div>
 
         {/* 질문 텍스트 */}
-        <h2 className="quiz-title text-center text-glow py-sm">
+        <h2 className="quiz-title text-center text-glow py-sm" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', fontSize: '1.2rem', fontWeight: '800', color: 'var(--text-main)', margin: '16px 0', letterSpacing: '-0.3px', lineHeight: '1.4' }}>
           {currentQuestion.title}
         </h2>
 
         {/* A/B 이미지 선택지 */}
-        <div className="quiz-options-layout">
+        <div className="quiz-options-layout" style={{ gap: '20px', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
           {/* 옵션 A */}
           <div 
             onClick={() => handleSelectOption(currentQuestion.axis, currentQuestion.optionA.score)}
             className="quiz-option-card flex-column"
+            style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)', transition: 'all 0.25s', cursor: 'pointer' }}
           >
-            <div className="quiz-option-image-wrapper">
+            <div className="quiz-option-image-wrapper" style={{ height: '170px' }}>
               <img 
                 src={currentQuestion.optionA.image} 
                 alt={currentQuestion.optionA.label} 
                 className="quiz-option-img"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
-              <div className="option-badge select-a">A</div>
+              <div className="option-badge select-a" style={{ backgroundColor: 'var(--primary)' }}>A</div>
             </div>
-            <div className="quiz-option-label text-center">
+            <div className="quiz-option-label text-center" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', fontSize: '0.82rem', fontWeight: '700', padding: '12px 16px', color: 'var(--text-main)' }}>
               {currentQuestion.optionA.label}
             </div>
           </div>
@@ -409,16 +406,18 @@ export default function StyleQuiz({ onApplyPrompt }) {
           <div 
             onClick={() => handleSelectOption(currentQuestion.axis, currentQuestion.optionB.score)}
             className="quiz-option-card flex-column"
+            style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-color)', transition: 'all 0.25s', cursor: 'pointer' }}
           >
-            <div className="quiz-option-image-wrapper">
+            <div className="quiz-option-image-wrapper" style={{ height: '170px' }}>
               <img 
                 src={currentQuestion.optionB.image} 
                 alt={currentQuestion.optionB.label} 
                 className="quiz-option-img"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
-              <div className="option-badge select-b">B</div>
+              <div className="option-badge select-b" style={{ backgroundColor: '#B05B48' }}>B</div>
             </div>
-            <div className="quiz-option-label text-center">
+            <div className="quiz-option-label text-center" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', fontSize: '0.82rem', fontWeight: '700', padding: '12px 16px', color: 'var(--text-main)' }}>
               {currentQuestion.optionB.label}
             </div>
           </div>
