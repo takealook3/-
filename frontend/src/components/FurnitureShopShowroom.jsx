@@ -257,14 +257,22 @@ export default function FurnitureShopShowroom({ onSelectStyle, selectedCategory,
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value)}
             style={{
-              padding: '10px 36px 10px 18px',
+              padding: '10px 40px 10px 20px',
               borderRadius: '30px',
               border: '1px solid var(--border-color)',
               fontSize: '0.85rem',
               outline: 'none',
               backgroundColor: '#FFFFFF',
               color: 'var(--text-main)',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              appearance: 'none',
+              WebkitAppearance: 'none',
+              MozAppearance: 'none',
+              backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232A2521' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'right 16px center',
+              backgroundSize: '14px',
+              fontFamily: 'Outfit, "Noto Sans KR", sans-serif'
             }}
           >
             <option value="style">스타일 고유 순</option>
