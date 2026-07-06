@@ -1383,7 +1383,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
                 contrast_val = 1.2
             elif style == "natural":
                 brightness_val = 0.1
-            process_mock_image(
+            result_url = process_mock_image(
                 image_id=image_id,
                 result_id=result_id,
                 style_name=style,

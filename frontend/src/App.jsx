@@ -565,7 +565,8 @@ export default function App() {
         <section id="quiz-section" className="quiz-section-wrapper">
           <div className="section-header-centered">
             <span className="section-subtitle">Find Your Curation</span>
-            <h2 className="section-title text-glow">Style Quiz</h2>
+            {/* 글씨 크기를 아래의 대제목들과 일치하는 2.2rem으로 확장하고 어두운 배경 대비 흰색 적용 */}
+            <h2 className="section-title text-glow" style={{ fontSize: '2.2rem', color: '#FCFAF7' }}>Style Quiz</h2>
           </div>
           <StyleQuiz onApplyPrompt={handleApplyQuizPrompt} />
         </section>
@@ -574,7 +575,8 @@ export default function App() {
         <section className="category-cards-section">
           <div className="featured-header" style={{ marginBottom: '8px' }}>
             <span className="featured-sub">Product Categories</span>
-            <h2 className="featured-title" style={{ color: '#FCFAF7' }}>Shop by Category</h2> {/* [어두운 배경 대비 글자색 흰색 변경] */}
+            {/* 밝은 흰색 배경에 맞추어 제목 글자색을 원래의 어두운 갈색(primary)으로 복구 */}
+            <h2 className="featured-title" style={{ color: 'var(--primary)' }}>Shop by Category</h2>
           </div>
           <div className="category-cards-grid">
             {/* 1. 소파 - [숍 새 창 연결] */}
@@ -637,22 +639,44 @@ export default function App() {
 
         {/* 통합 인테리어 편집 스튜디오 (탭 전환 구조) */}
         <div id="uploader-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* 고급스러운 탭 컨트롤러 (가로 1:1 비율 균등 분배 및 정중앙 분할) */}
-          <div style={{ display: 'flex', background: 'var(--bg-card)', padding: '6px', borderRadius: '12px', border: '1px solid var(--border-color)', width: '100%', maxWidth: '600px', gap: '8px', alignSelf: 'center', marginBottom: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
+          {/* 존재감 있는 AI 스튜디오 대형 헤더 타이틀 (Shop 카테고리 디자인과 일치시킴) */}
+          <div className="featured-header" style={{ marginBottom: '8px', marginTop: '32px' }}>
+            <span className="featured-sub">AI Space Curation</span>
+            <h2 className="featured-title" style={{ color: '#FCFAF7' }}>Transform Your Space</h2>
+          </div>
+
+          {/* 애플 세그먼트 스타일의 미니멀 탭 컨트롤러 */}
+          <div style={{ 
+            display: 'flex', 
+            background: 'rgba(0, 0, 0, 0.03)', // 은은하고 반투명한 애플식 배경
+            padding: '5px', 
+            borderRadius: '14px', 
+            border: '1px solid var(--border-color)', 
+            width: '100%', 
+            maxWidth: '600px', 
+            gap: '6px',
+            alignSelf: 'center', 
+            marginBottom: '12px', 
+            boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
+            fontFamily: 'Outfit, sans-serif'
+          }}>
             <button
               onClick={() => setStudioTab('upload')}
               style={{
                 flex: 1,
                 textAlign: 'center',
-                padding: '12px 0',
-                borderRadius: '8px',
+                padding: '10px 0',
+                borderRadius: '10px',
                 border: 'none',
                 fontWeight: '700',
-                fontSize: '0.95rem',
+                fontSize: '0.9rem',
                 cursor: 'pointer',
-                transition: 'all 0.25s ease',
-                background: studioTab === 'upload' ? 'var(--primary)' : 'transparent',
-                color: studioTab === 'upload' ? '#FCFAF7' : 'var(--text-muted)',
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                // 선택 시 입체감 있는 흰색 카드 효과 적용
+                background: studioTab === 'upload' ? 'var(--bg-card)' : 'transparent',
+                color: studioTab === 'upload' ? 'var(--primary)' : 'var(--text-muted)',
+                boxShadow: studioTab === 'upload' ? '0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)' : 'none',
+                transform: studioTab === 'upload' ? 'translateY(-0.5px)' : 'none',
               }}
             >
               {imageId ? "🎨 스타일 변환" : "📸 사진 업로드"}
@@ -662,15 +686,18 @@ export default function App() {
               style={{
                 flex: 1,
                 textAlign: 'center',
-                padding: '12px 0',
-                borderRadius: '8px',
+                padding: '10px 0',
+                borderRadius: '10px',
                 border: 'none',
                 fontWeight: '700',
-                fontSize: '0.95rem',
+                fontSize: '0.9rem',
                 cursor: 'pointer',
-                transition: 'all 0.25s ease',
-                background: studioTab === 'repair' ? 'var(--primary)' : 'transparent',
-                color: studioTab === 'repair' ? '#FCFAF7' : 'var(--text-muted)',
+                transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                // 선택 시 입체감 있는 흰색 카드 효과 적용
+                background: studioTab === 'repair' ? 'var(--bg-card)' : 'transparent',
+                color: studioTab === 'repair' ? 'var(--primary)' : 'var(--text-muted)',
+                boxShadow: studioTab === 'repair' ? '0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)' : 'none',
+                transform: studioTab === 'repair' ? 'translateY(-0.5px)' : 'none',
               }}
             >
               🛠️ 부분 가구 교체
