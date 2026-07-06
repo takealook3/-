@@ -411,213 +411,139 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
           padding: '24px',
           boxShadow: '0 8px 32px rgba(46, 40, 36, 0.03)'
         }}>
-          
-          {/* 수선 영역 탭 스위처 - 파스텔 색상 배경 & 이모지 및 가이드 문구 삭제, 탭 대제목 굵기 복구 (두껍게) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: '700', color: '#7A6C62', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              지정할 가구 선택
-            </span>
-            <div style={{ display: 'flex', gap: '10px' }}>
+          {editedResultUrl ? (
+            /* 가구 수선 완료 성공 피드백 */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', textAlign: 'center', padding: '10px 0' }}>
+              <div style={{ fontSize: '2.5rem', margin: '0 auto' }}>🎉</div>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--primary)', margin: '4px 0', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                가구 부분 교체 완료!
+              </h3>
+              <p style={{ fontSize: '0.82rem', color: 'var(--text-main)', lineHeight: '1.5', margin: '0 0 8px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                선택한 가구 영역이 성공적으로 교체되었습니다.<br />
+                <strong>아래 Before / After 비교 쇼룸</strong>에서 결과를 확인하세요!
+              </p>
               <button
                 type="button"
-                onClick={() => setMaskMode('A')}
+                onClick={handleClearAll}
                 style={{
-                  flex: 1,
-                  padding: '14px 8px', // 패딩을 8px로 조절하여 여백 확보
-                  borderRadius: '12px',
-                  fontWeight: '500', // 얇은 폰트 두께 적용
-                  fontSize: '0.82rem', // 줄바꿈 방지를 위해 폰트 크기 미세 감소
-                  whiteSpace: 'nowrap', // 텍스트 한 줄 정렬 강제
-                  cursor: 'pointer',
-                  transition: 'all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1)',
-                  // 파스텔 파란색 배경을 깔고 활성화 테두리 지정
-                  background: '#e0f2fe',
-                  border: `2px solid ${maskMode === 'A' ? '#3B82F6' : 'transparent'}`,
-                  color: '#0369a1',
+                  padding: '14px', fontSize: '0.9rem', fontWeight: '600', borderRadius: '12px',
+                  border: '1px solid var(--border-color)', transition: 'all 0.2s', width: '100%',
                   fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
-                  boxShadow: maskMode === 'A' ? '0 4px 12px rgba(59, 130, 246, 0.15)' : 'none'
+                  cursor: 'pointer', background: '#fff', color: 'var(--primary)'
                 }}
               >
-                1순위: 가구 A 지정
-              </button>
-              <button
-                type="button"
-                onClick={() => setMaskMode('B')}
-                style={{
-                  flex: 1,
-                  padding: '14px 8px', // 패딩을 8px로 조절하여 여백 확보
-                  borderRadius: '12px',
-                  fontWeight: '500', // 얇은 폰트 두께 적용
-                  fontSize: '0.82rem', // 줄바꿈 방지를 위해 폰트 크기 미세 감소
-                  whiteSpace: 'nowrap', // 텍스트 한 줄 정렬 강제
-                  cursor: 'pointer',
-                  transition: 'all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1)',
-                  // 파스텔 빨간색 배경을 깔고 활성화 테두리 지정
-                  background: '#ffe4e6',
-                  border: `2px solid ${maskMode === 'B' ? '#EC4899' : 'transparent'}`,
-                  color: '#be185d',
-                  fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
-                  boxShadow: maskMode === 'B' ? '0 4px 12px rgba(236, 72, 153, 0.15)' : 'none'
-                }}
-              >
-                2순위: 가구 B 지정 (선택)
+                영역 다시 지정하여 편집하기
               </button>
             </div>
-            {/* 띠 박스 제거 대신 여백을 거의 먹지 않는 초경량 텍스트 정렬로 지우기 기능 유지 */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2px' }}>
-              <button
-                type="button"
-                onClick={handleClearActiveMask}
-                style={{ 
-                  fontSize: '0.72rem', 
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#EF4444',
-                  textDecoration: 'underline',
-                  fontWeight: '400',
-                  cursor: 'pointer',
-                  padding: 0,
-                  fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
-                }}
-              >
-                현재 선택 지우기
-              </button>
-            </div>
-          </div>
+          ) : (
+            <>
+              {/* 수선 영역 탭 스위처 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ display: 'block', fontSize: '0.95rem', fontWeight: '700', color: '#7A6C62', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  지정할 가구 선택
+                </span>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setMaskMode('A')}
+                    style={{
+                      flex: 1, padding: '14px 8px', borderRadius: '12px', fontWeight: '500',
+                      fontSize: '0.82rem', whiteSpace: 'nowrap', cursor: 'pointer',
+                      transition: 'all 0.25s', background: '#e0f2fe',
+                      border: `2px solid ${maskMode === 'A' ? '#3B82F6' : 'transparent'}`,
+                      color: '#0369a1', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
+                      boxShadow: maskMode === 'A' ? '0 4px 12px rgba(59,130,246,0.15)' : 'none'
+                    }}
+                  >
+                    1순위: 가구 A 지정
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMaskMode('B')}
+                    style={{
+                      flex: 1, padding: '14px 8px', borderRadius: '12px', fontWeight: '500',
+                      fontSize: '0.82rem', whiteSpace: 'nowrap', cursor: 'pointer',
+                      transition: 'all 0.25s', background: '#ffe4e6',
+                      border: `2px solid ${maskMode === 'B' ? '#EC4899' : 'transparent'}`,
+                      color: '#be185d', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
+                      boxShadow: maskMode === 'B' ? '0 4px 12px rgba(236,72,153,0.15)' : 'none'
+                    }}
+                  >
+                    2순위: 가구 B 지정 (선택)
+                  </button>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '2px' }}>
+                  <button
+                    type="button"
+                    onClick={handleClearActiveMask}
+                    style={{ fontSize: '0.72rem', background: 'transparent', border: 'none', color: '#EF4444', textDecoration: 'underline', fontWeight: '400', cursor: 'pointer', padding: 0 }}
+                  >
+                    현재 선택 지우기
+                  </button>
+                </div>
+              </div>
 
-          {/* 인풋 영역 A - 이모지 및 사진 드래그 필요 문구 삭제, 얇은 폰트 적용 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ fontSize: '0.88rem', fontWeight: '400', color: '#1E40AF', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              가구 A 교체 스타일 입력 (필수)
-              {maskPixelsA && (
-                <span style={{ fontSize: '0.72rem', background: '#3B82F6', color: '#fff', padding: '1px 6px', borderRadius: '4px' }}>영역 등록됨</span>
-              )}
-            </label>
-            <input
-              type="text"
-              value={promptA}
-              onChange={(e) => setPromptA(e.target.value)}
-              placeholder="예: 현대적이고 고급스러운 가죽 소파"
-              className="input-field"
-              style={{ 
-                padding: '14px 16px', 
-                fontSize: '0.9rem', 
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
-                border: `1.5px solid ${maskMode === 'A' ? '#3B82F6' : 'var(--border-color)'}`,
-                borderRadius: '12px',
-                background: '#FFFFFF',
-                outline: 'none',
-                transition: 'all 0.3s'
-              }}
-            />
-          </div>
+              {/* 인풋 영역 A */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '0.88rem', fontWeight: '400', color: '#1E40AF', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  가구 A 교체 스타일 입력 (필수)
+                  {maskPixelsA && <span style={{ fontSize: '0.72rem', background: '#3B82F6', color: '#fff', padding: '1px 6px', borderRadius: '4px' }}>영역 등록됨</span>}
+                </label>
+                <input
+                  type="text"
+                  value={promptA}
+                  onChange={(e) => setPromptA(e.target.value)}
+                  placeholder="예: 현대적이고 고급스러운 가죽 소파"
+                  className="input-field"
+                  style={{ padding: '14px 16px', fontSize: '0.9rem', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', border: `1.5px solid ${maskMode === 'A' ? '#3B82F6' : 'var(--border-color)'}`, borderRadius: '12px', background: '#FFFFFF', outline: 'none', transition: 'all 0.3s' }}
+                />
+              </div>
 
-          {/* 인풋 영역 B - 이모지 제거 및 얇은 폰트 적용 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={{ 
-              fontSize: '0.88rem', 
-              fontWeight: '400', 
-              color: '#9D174D', 
-              fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
-              opacity: maskPixelsB ? 1 : 0.6,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}>
-              가구 B 교체 스타일 입력 (선택)
-              {maskPixelsB && (
-                <span style={{ fontSize: '0.72rem', background: '#EC4899', color: '#fff', padding: '1px 6px', borderRadius: '4px' }}>영역 등록됨</span>
-              )}
-            </label>
-            <input
-              type="text"
-              value={promptB}
-              onChange={(e) => setPromptB(e.target.value)}
-              placeholder="예: 아늑한 우드 사이드 테이블"
-              className="input-field"
-              disabled={!maskPixelsB}
-              style={{ 
-                padding: '14px 16px',
-                fontSize: '0.9rem',
-                opacity: maskPixelsB ? 1 : 0.6,
-                cursor: maskPixelsB ? 'text' : 'not-allowed',
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
-                border: `1.5px solid ${maskMode === 'B' ? '#EC4899' : 'var(--border-color)'}`,
-                borderRadius: '12px',
-                background: maskPixelsB ? '#FFFFFF' : '#F8FAFC',
-                outline: 'none',
-                transition: 'all 0.3s'
-              }}
-            />
-          </div>
+              {/* 인풋 영역 B */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '0.88rem', fontWeight: '400', color: '#9D174D', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', opacity: maskPixelsB ? 1 : 0.6, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  가구 B 교체 스타일 입력 (선택)
+                  {maskPixelsB && <span style={{ fontSize: '0.72rem', background: '#EC4899', color: '#fff', padding: '1px 6px', borderRadius: '4px' }}>영역 등록됨</span>}
+                </label>
+                <input
+                  type="text"
+                  value={promptB}
+                  onChange={(e) => setPromptB(e.target.value)}
+                  placeholder="예: 아늑한 우드 사이드 테이블"
+                  className="input-field"
+                  disabled={!maskPixelsB}
+                  style={{ padding: '14px 16px', fontSize: '0.9rem', opacity: maskPixelsB ? 1 : 0.6, cursor: maskPixelsB ? 'text' : 'not-allowed', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', border: `1.5px solid ${maskMode === 'B' ? '#EC4899' : 'var(--border-color)'}`, borderRadius: '12px', background: maskPixelsB ? '#FFFFFF' : '#F8FAFC', outline: 'none', transition: 'all 0.3s' }}
+                />
+              </div>
 
-          {/* 주요 작업 실행 버튼들 - 이모지 및 사진 드래그 관련 문구/아이콘 삭제 및 얇은 폰트 변경 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
-            <button
-              type="button"
-              onClick={handleEditSubmit}
-              disabled={editing || !maskPixelsA}
-              className="btn btn-primary btn-full"
-              style={{ 
-                padding: '16px', 
-                fontSize: '0.95rem', 
-                fontWeight: '400', // 얇은 글씨체 적용
-                cursor: (!maskPixelsA || editing) ? 'not-allowed' : 'pointer',
-                background: (!maskPixelsA) ? '#E2E8F0' : 'var(--primary)',
-                color: (!maskPixelsA) ? '#94A3B8' : '#FCFAF7',
-                border: 'none',
-                borderRadius: '12px',
-                transition: 'all 0.25s ease',
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
-                boxShadow: maskPixelsA ? '0 8px 24px rgba(43, 53, 48, 0.15)' : 'none'
-              }}
-              onMouseEnter={(e) => {
-                if (maskPixelsA && !editing) {
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                  e.currentTarget.style.boxShadow = '0 12px 28px rgba(43, 53, 48, 0.25)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (maskPixelsA && !editing) {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(43, 53, 48, 0.15)';
-                }
-              }}
-            >
-              {editing ? "AI 부분 교체 적용 중..." : (editedResultUrl ? "🔄 다시 하기 (아래 결과 확인)" : "AI 가구 편집/수선 실행")}
-            </button>
+              {/* 실행 버튼 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={handleEditSubmit}
+                  disabled={editing || !maskPixelsA}
+                  className="btn btn-primary btn-full"
+                  style={{ padding: '16px', fontSize: '0.95rem', fontWeight: '400', cursor: (!maskPixelsA || editing) ? 'not-allowed' : 'pointer', background: (!maskPixelsA) ? '#E2E8F0' : 'var(--primary)', color: (!maskPixelsA) ? '#94A3B8' : '#FCFAF7', border: 'none', borderRadius: '12px', transition: 'all 0.25s ease', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', boxShadow: maskPixelsA ? '0 8px 24px rgba(43,53,48,0.15)' : 'none' }}
+                  onMouseEnter={(e) => { if (maskPixelsA && !editing) { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 28px rgba(43,53,48,0.25)'; }}}
+                  onMouseLeave={(e) => { if (maskPixelsA && !editing) { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(43,53,48,0.15)'; }}}
+                >
+                  {editing ? "AI 부분 교체 적용 중..." : "AI 가구 편집/수선 실행"}
+                </button>
 
-            <button
-              type="button"
-              onClick={handleSearchProducts}
-              disabled={searchingProducts || (!maskPixelsA && !maskPixelsB)}
-              className="btn btn-secondary btn-full"
-              style={{ 
-                padding: '14px', 
-                fontSize: '0.95rem', 
-                fontWeight: '400',
-                cursor: (((maskMode === 'A' ? !maskPixelsA : !maskPixelsB) || searchingProducts) ? 'not-allowed' : 'pointer'),
-                background: '#FFFFFF',
-                color: 'var(--primary)',
-                border: (maskMode === 'A' ? !maskPixelsA : !maskPixelsB) ? '1px solid rgba(0,0,0,0.06)' : '1.5px solid var(--primary)',
-                borderRadius: '12px',
-                transition: 'all 0.25s ease',
-                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
-              }}
-              onMouseEnter={(e) => {
-                if (!(maskMode === 'A' ? !maskPixelsA : !maskPixelsB) && !searchingProducts) {
-                  e.currentTarget.style.backgroundColor = '#FCFAF7';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!(maskMode === 'A' ? !maskPixelsA : !maskPixelsB) && !searchingProducts) {
-                  e.currentTarget.style.backgroundColor = '#FFFFFF';
-                }
-              }}
-            >
-              {searchingProducts ? "유사 가구 쇼핑 정보 찾는 중..." : `유사 가구 쇼핑 정보 검색`}
-            </button>
-          </div>
+                <button
+                  type="button"
+                  onClick={handleSearchProducts}
+                  disabled={searchingProducts || (!maskPixelsA && !maskPixelsB)}
+                  className="btn btn-secondary btn-full"
+                  style={{ padding: '14px', fontSize: '0.95rem', fontWeight: '400', cursor: (((maskMode === 'A' ? !maskPixelsA : !maskPixelsB) || searchingProducts) ? 'not-allowed' : 'pointer'), background: '#FFFFFF', color: 'var(--primary)', border: (maskMode === 'A' ? !maskPixelsA : !maskPixelsB) ? '1px solid rgba(0,0,0,0.06)' : '1.5px solid var(--primary)', borderRadius: '12px', transition: 'all 0.25s ease', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}
+                  onMouseEnter={(e) => { if (!(maskMode === 'A' ? !maskPixelsA : !maskPixelsB) && !searchingProducts) { e.currentTarget.style.backgroundColor = '#FCFAF7'; }}}
+                  onMouseLeave={(e) => { if (!(maskMode === 'A' ? !maskPixelsA : !maskPixelsB) && !searchingProducts) { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}}
+                >
+                  {searchingProducts ? "유사 가구 쇼핑 정보 찾는 중..." : "유사 가구 쇼핑 정보 검색"}
+                </button>
+              </div>
+            </>
+          )}
 
           {/* 쇼핑 정보 카드 리스트 (A영역 & B영역 분리 렌더링 - 찌그러짐 없는 컴팩트 레이아웃 병합) */}
           {(productsListA.length > 0 || productsListB.length > 0) && (

@@ -10,7 +10,7 @@ import ComparisonGallery from './components/ComparisonGallery';
 import SessionModal from './components/SessionModal';
 import StyleTransformer from './components/StyleTransformer';
 import ChatWidget from './components/ChatWidget';
-import StyleEncyclopedia, { STYLE_DATABASE } from './components/StyleEncyclopedia';
+import { STYLE_DATABASE } from './components/StyleEncyclopedia';
 import StyleQuiz from './components/StyleQuiz';
 import FurnitureShopShowroom from './components/FurnitureShopShowroom';
 import { checkHealth, sendChatMessage, API_BASE_URL } from './services/api';
@@ -67,12 +67,7 @@ function TopNav({ activeTab, onTabClick, serverStatus, onRefreshHealth, sessionI
         >
           Repair Studio
         </span>
-        <span 
-          className={`top-nav-link ${activeTab === 'gallery' ? 'active' : ''}`} 
-          onClick={() => onTabClick('style-encyclopedia', 'gallery')}
-        >
-          28 Styles
-        </span>
+
       </nav>
       <div className="top-nav-actions">
         {/* [신설] 상단 오른쪽 Shop 새 창 열기 버튼 */}
@@ -131,8 +126,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('home'); // GNB active 탭 상태 부모 통합
   const [heroImageIndex, setHeroImageIndex] = useState(0);
 
-  const [activeStyleId, setActiveStyleId] = useState(1); // 도감 탭 연동을 위한 전역 활성 스타일 ID
-  const [isStyleModalOpen, setIsStyleModalOpen] = useState(false); // [스타일 도감 모달 오픈 상태 추가]
+
   const [startIndex, setStartIndex] = useState(0); // Featured Collections 카루셀 시작 인덱스 (모던=0으로 고정 기동)
 
   const [pendingPrompt, setPendingPrompt] = useState(''); // 취향 퀴즈 연동용 자동 프롬프트 상태
@@ -212,19 +206,15 @@ export default function App() {
 
       const quizEl = document.getElementById('quiz-section');
       const uploaderEl = document.getElementById('uploader-card');
-      const galleryEl = document.getElementById('style-encyclopedia');
 
       const offset = 220; // 스크롤 판정 문턱값 (탑 내비바 80px + 여유폭 140px)
 
       // 각 작업 카드의 화면 내 스크롤 경계선 도출
       const quizTop = quizEl ? quizEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
       const uploaderTop = uploaderEl ? uploaderEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
-      const galleryTop = galleryEl ? galleryEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
 
       // 아래에서부터 순차적으로 경계선을 넘었는지 체크하여 활성 탭 스위칭
-      if (scrollPos >= galleryTop) {
-        setActiveTab('gallery');
-      } else if (scrollPos >= uploaderTop) {
+      if (scrollPos >= uploaderTop) {
         setActiveTab(studioTab === 'repair' ? 'editor' : 'transform');
       } else if (scrollPos >= quizTop) {
         setActiveTab('quiz');
@@ -528,11 +518,7 @@ export default function App() {
                   <div 
                     key={style.id} 
                     className="featured-card"
-                    onClick={() => {
-                      // 카드 클릭 시 도감 모달을 활성화하고 클릭한 스타일을 세팅 [캐러셀 클릭시 스타일 상세 모달 오픈]
-                      setActiveStyleId(style.id);
-                      setIsStyleModalOpen(true);
-                    }}
+                    style={{ cursor: 'default' }}
                   >
                     <div className="featured-card-img-wrapper">
                       {style.imageUrl ? (
@@ -735,6 +721,12 @@ export default function App() {
                     setTransformRawAnswer('');
                     setTransformSummary(null);
                   }}
+                  onResetResult={() => {
+                    setResultData(null);
+                    setTransformResultUrl(null);
+                    setTransformRawAnswer('');
+                    setTransformSummary(null);
+                  }}
                   globalLoading={transformLoading}
                   globalResultImageUrl={transformResultUrl}
                   globalRawAnswer={transformRawAnswer}
@@ -812,7 +804,6 @@ export default function App() {
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem' }}>
                 <li><a href="#uploader-card" style={{ color: 'var(--text-light)', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => e.target.style.color = 'var(--primary)'} onMouseLeave={(e) => e.target.style.color = 'var(--text-light)'}>AI Transform</a></li>
                 <li><a href="#editor-card" style={{ color: 'var(--text-light)', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => e.target.style.color = 'var(--primary)'} onMouseLeave={(e) => e.target.style.color = 'var(--text-light)'}>Repair Studio</a></li>
-                <li><a href="#style-encyclopedia" style={{ color: 'var(--text-light)', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => e.target.style.color = 'var(--primary)'} onMouseLeave={(e) => e.target.style.color = 'var(--text-light)'}>28 Styles Guide</a></li>
               </ul>
             </div>
 

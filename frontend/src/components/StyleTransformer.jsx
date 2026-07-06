@@ -11,6 +11,7 @@ export default function StyleTransformer({
   onGenerateSuccess, 
   onError,
   onResetImage,
+  onResetResult,
   pendingPrompt,
   setPendingPrompt,
   globalLoading,
@@ -235,6 +236,30 @@ export default function StyleTransformer({
               >
                 스타일 리모델링 변환 중...
               </button>
+            </div>
+          ) : resultImageUrl ? (
+            /* 변환 완료 피드백 화면 */
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'center', alignItems: 'stretch', gap: '20px', textAlign: 'center' }}>
+              <div style={{ fontSize: '3rem', margin: '0 auto' }}>🎉</div>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--primary)', margin: '10px 0 4px', fontFamily: 'Outfit, sans-serif' }}>스타일 변환 완료!</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.6', margin: '0 0 10px', fontFamily: 'Outfit, sans-serif' }}>
+                성공적으로 인테리어 스타일 변환이 완료되었습니다.<br />
+                <strong>아래 Before / After 쇼룸</strong>에서 결과를 확인하고 맞춤 제안을 받아보세요!
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: 'auto' }}>
+                <button
+                  type="button"
+                  onClick={onResetResult}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '14px', fontSize: '0.9rem', fontWeight: '700', borderRadius: '12px',
+                    border: '1px solid var(--border-color)', transition: 'all 0.2s', width: '100%',
+                    fontFamily: 'Outfit, sans-serif', cursor: 'pointer'
+                  }}
+                >
+                  다른 스타일로 다시 하기
+                </button>
+              </div>
             </div>
           ) : (
             /* 기존 폼 & 칩 뷰 */
