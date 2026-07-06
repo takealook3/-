@@ -298,28 +298,20 @@ export default function StyleQuiz({ onApplyPrompt }) {
 
             {/* 우측: 감성 설명 및 프롬프트 연동 섹션 */}
             <div className="quiz-result-info flex-column" style={{ gap: '16px' }}>
-              <div className="style-description-box p-md bg-glass-dark" style={{ borderRadius: '10px', padding: '20px', background: '#FCFAF7', border: '1px solid var(--border-color)' }}>
-                <h3 style={{ fontSize: '0.9rem', fontWeight: '800', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
-                  <Sparkles size={16} />
-                  시각적 정체성 & 큐레이션 가이드
-                </h3>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-main)', lineHeight: '1.6', marginTop: '10px', opacity: 0.9 }}>
-                  {resultStyle.description || '이 공간은 사용자가 선택한 정돈된 비례감과 마감 요소들의 장점들을 아름답게 극대화한 독창적인 큐레이션 스타일입니다.'}
-                </p>
-                <div className="style-tips-list" style={{ marginTop: '16px' }}>
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: '800' }}>💡 공간 스타일링 연출 팁:</strong>
-                  <ul style={{ paddingLeft: '16px', margin: '6px 0 0 0', fontSize: '0.78rem', color: 'var(--text-main)', display: 'flex', flexDirection: 'column', gap: '4px', lineHeight: '1.5', opacity: 0.85 }}>
-                    <li>선택하신 질감과 톤이 가장 돋보일 수 있는 베이직 가구를 중심으로 공간의 무게중심을 잡아주세요.</li>
-                    <li>빛의 방향과 색감(웜/쿨)에 반응하여 전체적인 마감재가 조화롭게 어우러지도록 메인 패브릭 컬러를 세팅하세요.</li>
-                  </ul>
+              <div className="style-description-box p-md bg-glass-dark" style={{ borderRadius: '10px', padding: '16px', background: '#FCFAF7', border: '1px solid var(--border-color)' }}>
+                <div className="style-tips-list">
+                  <strong style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: '800' }}>💡 공간 스타일링 연출 팁: </strong>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-main)', opacity: 0.9, marginLeft: '4px' }}>
+                    선택하신 질감과 톤이 가장 돋보일 수 있는 베이직 가구를 중심으로 공간의 분위기를 극대화해 보세요.
+                  </span>
                 </div>
               </div>
 
               {/* 영문 프롬프트 제공 박스 */}
               <div className="prompt-output-box" style={{ background: '#FCFAF7', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '14px 16px' }}>
                 <label style={{ fontSize: '0.74rem', fontWeight: '800', color: 'var(--primary)', display: 'block', marginBottom: '8px' }}>생성된 AI 리모델링 키워드</label>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card-inner)', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-main)', fontWeight: '600' }}>{generatedPrompt}</span>
+                <div className="prompt-text-field">
+                  <span className="prompt-text-content">{generatedPrompt}</span>
                   <button 
                     onClick={handleCopyPrompt} 
                     style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }}
