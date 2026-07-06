@@ -81,6 +81,14 @@ models_to_download = [
         "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/checkpoints/v1-5-pruned-emaonly.safetensors")
     },
     {
+        "url": "https://huggingface.co/SicariusSicariiStuff/Stable-Diffusion_1.5_Collection/resolve/main/realisticVisionV60B1_v51HyperInpaintVAE.safetensors",
+        "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/checkpoints/realisticVisionV60B1_v51HyperInpaintVAE.safetensors")
+    },
+    {
+        "url": "https://huggingface.co/SicariusSicariiStuff/Stable-Diffusion_1.5_Collection/resolve/main/realisticVisionV60B1_v51HyperVAE.safetensors",
+        "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/checkpoints/realisticVisionV60B1_v51HyperVAE.safetensors")
+    },
+    {
         "url": "https://huggingface.co/lllyasviel/control_v11p_sd15_inpaint/resolve/main/diffusion_pytorch_model.safetensors",
         "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/controlnet/control_v11p_sd15_inpaint.safetensors")
     },
@@ -91,6 +99,14 @@ models_to_download = [
     {
         "url": "https://github.com/ultralytics/assets/releases/download/v8.2.0/yolov8x-oiv7.pt",
         "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/ultralytics/bbox/yolov8x-oiv7.pt")
+    },
+    {
+        "url": "https://huggingface.co/lokCX/4x-UltraSharp/resolve/main/4x-UltraSharp.pth",
+        "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/upscale_models/4x-UltraSharp.pth")
+    },
+    {
+        "url": "https://huggingface.co/ai-forever/Real-ESRGAN/resolve/main/RealESRGAN_x4plus.pth",
+        "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/upscale_models/RealESRGAN_x4plus.pth")
     }
 ]
 
