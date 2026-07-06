@@ -761,7 +761,6 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                             </a>
                           </div>
                         </div>
->>>>>>> theirs
                       </div>
                     ))}
                   </div>
