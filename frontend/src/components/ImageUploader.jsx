@@ -78,15 +78,14 @@ export default function ImageUploader({
   };
 
   return (
-  return (
-    /* 아이폰6 시스템 폰트(Helvetica Neue)를 최상단 카드 컨테이너에 적용 */
-    <div className="card" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-      <div className="card-title" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>변환할 인테리어 사진 업로드</div>
-      <div className="card-desc">거실, 방, 주방 등 스타일을 바꾸고 싶은 공간의 원본 사진을 선택해 주세요. 이미지를 등록하면 자동으로 서버에 업로드됩니다. (지원 형식: JPG, JPEG, PNG)</div>
+    <div className="card" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
+      <div className="card-title" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', fontSize: '1.35rem', fontWeight: '800', color: 'var(--primary)', letterSpacing: '-0.02em' }}>📸 사진 업로드</div>
+      <div className="card-desc" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', lineHeight: '1.6', opacity: 0.9 }}>거실, 방, 주방 등 스타일을 바꾸고 싶은 공간의 원본 사진을 선택해 주세요. 이미지를 등록하면 자동으로 서버에 업로드됩니다. (지원 형식: JPG, JPEG, PNG)</div>
 
-      {/* Streamlit 동기화: 등록 완료 초록색 알림 띠 - 이모지 제거 */}
+      {/* Streamlit 동기화: 등록 완료 초록색 알림 띠 */}
       {imageId && (
-        <div className="success-banner" style={{ marginBottom: '20px' }}>
+        <div className="success-banner" style={{ marginBottom: '20px', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
+          <span>🎉</span>
           <span><strong>인테리어 사진 등록 완료!</strong> 아래 단계에서 스타일 변환이나 부분 가구 교체를 진행하실 수 있습니다.</span>
         </div>
       )}
