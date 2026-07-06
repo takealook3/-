@@ -11,6 +11,7 @@ import ComparisonGallery from './components/ComparisonGallery';
 import SessionModal from './components/SessionModal';
 import ChatWidget from './components/ChatWidget';
 import StyleEncyclopedia, { STYLE_DATABASE } from './components/StyleEncyclopedia';
+import StyleQuiz from './components/StyleQuiz';
 import { checkHealth } from './services/api';
 import { Sofa, Bed, Table, Monitor, Trees, Archive, Lamp, Palette, ChevronLeft, ChevronRight } from 'lucide-react';
 
@@ -46,6 +47,12 @@ function TopNav({ activeTab, onTabClick, serverStatus, onRefreshHealth, sessionI
           onClick={() => onTabClick('home', 'home')}
         >
           Home
+        </span>
+        <span 
+          className={`top-nav-link ${activeTab === 'quiz' ? 'active' : ''}`} 
+          onClick={() => onTabClick('quiz-section', 'quiz')}
+        >
+          Style Quiz
         </span>
         <span 
           className={`top-nav-link ${activeTab === 'transform' ? 'active' : ''}`} 
@@ -98,6 +105,8 @@ export default function App() {
   const [activeStyleId, setActiveStyleId] = useState(1); // 도감 탭 연동을 위한 전역 활성 스타일 ID
   const [startIndex, setStartIndex] = useState(0); // Featured Collections 카루셀 시작 인덱스 (모던=0으로 고정 기동)
 
+  const [pendingPrompt, setPendingPrompt] = useState(''); // 취향 퀴즈 연동용 자동 프롬프트 상태
+
   // 5초 간격 최상단 히어로 배경 롤링 타이머
   useEffect(() => {
     const timer = setInterval(() => {
@@ -105,6 +114,16 @@ export default function App() {
     }, 5000);
     return () => clearInterval(timer);
   }, []);
+
+  const handleApplyQuizPrompt = (prompt) => {
+    if (!imageId) {
+      alert("취향 분석 결과를 적용하려면 먼저 '📸 1. 변환할 인테리어 사진 업로드' 섹션에서 공간 원본 이미지를 업로드해 주십시오!");
+      document.getElementById('uploader-card')?.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    setPendingPrompt(prompt);
+    document.getElementById('uploader-card')?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   // 클릭하여 해당 섹션으로 보정 오토 스크롤링 함수
   const handleScrollTo = (id, tabName) => {
@@ -139,6 +158,7 @@ export default function App() {
         return;
       }
 
+      const quizEl = document.getElementById('quiz-section');
       const uploaderEl = document.getElementById('uploader-card');
       const editorEl = document.getElementById('editor-card');
       const galleryEl = document.getElementById('style-encyclopedia');
@@ -146,6 +166,7 @@ export default function App() {
       const offset = 220; // 스크롤 판정 문턱값 (탑 내비바 80px + 여유폭 140px)
 
       // 각 작업 카드의 화면 내 스크롤 경계선 도출
+      const quizTop = quizEl ? quizEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
       const uploaderTop = uploaderEl ? uploaderEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
       const editorTop = editorEl ? editorEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
       const galleryTop = galleryEl ? galleryEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
@@ -157,6 +178,8 @@ export default function App() {
         setActiveTab('editor');
       } else if (scrollPos >= uploaderTop) {
         setActiveTab('transform');
+      } else if (scrollPos >= quizTop) {
+        setActiveTab('quiz');
       }
     };
 
@@ -336,6 +359,15 @@ export default function App() {
               <ChevronRight size={24} />
             </button>
           </div>
+        </section>
+
+        {/* 온보딩 취향 진단 퀴즈 섹션 */}
+        <section id="quiz-section" className="quiz-section-wrapper">
+          <div className="section-header-centered">
+            <span className="section-subtitle">Find Your Curation</span>
+            <h2 className="section-title text-glow">Style Quiz</h2>
+          </div>
+          <StyleQuiz onApplyPrompt={handleApplyQuizPrompt} />
         </section>
 
         {/* 에러 안내판 */}
@@ -528,6 +560,8 @@ export default function App() {
         imageId={imageId}
         onGenerateSuccess={handleGenerateSuccess}
         onError={setCurrentError}
+        pendingPrompt={pendingPrompt}
+        setPendingPrompt={setPendingPrompt}
       />
     </div>
   );

@@ -822,3 +822,312 @@ body {
 .quick-chips-container::-webkit-scrollbar {
   display: none; /* Chrome, Safari, Opera: 스크롤바 제거 */
 }
+
+/* =====================================================================
+ * [AI 인테리어 취향 진단 퀴즈 (Style Quiz) 스타일링]
+ * ===================================================================== */
+.quiz-section-wrapper {
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  background-color: #F8F5F0; /* 클래식하고 따뜻한 크림 베이지 톤 */
+  padding: 80px 10%;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 48px;
+  color: var(--text-main) !important; /* 바디 상속 화이트 방지 및 가독성 확보 */
+}
+
+.section-header-centered {
+  text-align: center;
+}
+
+.section-subtitle {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.quiz-container {
+  width: 100%;
+  max-width: 1000px;
+  min-height: 520px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.quiz-card {
+  width: 100%;
+  max-width: 840px;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 24px;
+  box-shadow: 0 30px 60px rgba(46, 40, 36, 0.05);
+  transition: all 0.4s ease;
+  color: var(--text-main) !important;
+}
+
+.quiz-result-card {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 28px;
+  box-shadow: 0 40px 80px rgba(46, 40, 36, 0.07);
+  color: var(--text-main) !important;
+}
+
+.quiz-header {
+  width: 100%;
+}
+
+.progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background-color: rgba(43, 53, 48, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.quiz-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1.4;
+}
+
+.quiz-options-layout {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 32px;
+  margin-top: 16px;
+}
+
+.quiz-option-card {
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 24px rgba(46, 40, 36, 0.02);
+}
+
+.quiz-option-card:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 24px 48px rgba(46, 40, 36, 0.08);
+  border-color: var(--accent);
+}
+
+.quiz-option-image-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 11;
+  overflow: hidden;
+  background-color: #F5EFEB;
+}
+
+.quiz-option-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s ease;
+}
+
+.quiz-option-card:hover .quiz-option-img {
+  transform: scale(1.06);
+}
+
+.option-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: #FFFFFF;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  font-family: 'Outfit', sans-serif;
+}
+
+.option-badge.select-a {
+  background-color: var(--accent);
+}
+
+.option-badge.select-b {
+  background-color: var(--primary);
+}
+
+.quiz-option-label {
+  padding: 18px 20px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+  background-color: #FFFFFF;
+  border-top: 1px solid var(--border-color);
+}
+
+/* 결과 화면 레이아웃 */
+.quiz-result-layout {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 40px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.quiz-result-image-box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 16px 36px rgba(46, 40, 36, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.quiz-result-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.quiz-result-img-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(28, 23, 20, 0.8));
+  padding: 24px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.quiz-style-badge {
+  background-color: var(--accent);
+  color: #FFFFFF;
+  padding: 8px 16px;
+  border-radius: 30px;
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  box-shadow: 0 4px 10px rgba(195, 159, 125, 0.3);
+}
+
+.quiz-result-info {
+  justify-content: center;
+}
+
+.style-description-box {
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.bg-glass-dark {
+  background-color: rgba(43, 53, 48, 0.03);
+}
+
+.style-info-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.style-desc-text {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-main);
+}
+
+.prompt-output-box {
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-color);
+  padding: 16px;
+  border-radius: 12px;
+  position: relative;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.01);
+}
+
+.prompt-text-field {
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.prompt-text-content {
+  font-family: 'Consolas', monospace;
+  font-size: 0.82rem;
+  color: var(--text-main);
+  background-color: var(--bg-card-inner);
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  flex-grow: 1;
+  overflow-x: auto;
+  white-space: nowrap;
+  max-width: calc(100% - 44px);
+}
+
+/* Spinner */
+.spinner-wrapper {
+  padding: 20px;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .quiz-options-layout {
+    gap: 20px;
+  }
+  .quiz-result-layout {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .quiz-title {
+    font-size: 1.4rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .quiz-options-layout {
+    grid-template-columns: 1fr;
+  }
+  .quiz-section-wrapper {
+    padding: 60px 5%;
+  }
+  .quiz-option-card {
+    max-width: 100%;
+  }
+}

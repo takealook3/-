@@ -72,6 +72,14 @@ models_to_download = [
         "dest": "ComfyUI/models/checkpoints/v1-5-pruned-emaonly.safetensors"
     },
     {
+        "url": "https://huggingface.co/SicariusSicariiStuff/Stable-Diffusion_1.5_Collection/resolve/main/realisticVisionV60B1_v51HyperInpaintVAE.safetensors",
+        "dest": "ComfyUI/models/checkpoints/realisticVisionV60B1_v51HyperInpaintVAE.safetensors"
+    },
+    {
+        "url": "https://huggingface.co/SicariusSicariiStuff/Stable-Diffusion_1.5_Collection/resolve/main/realisticVisionV60B1_v51HyperVAE.safetensors",
+        "dest": "ComfyUI/models/checkpoints/realisticVisionV60B1_v51HyperVAE.safetensors"
+    },
+    {
         "url": "https://huggingface.co/lllyasviel/control_v11p_sd15_inpaint/resolve/main/diffusion_pytorch_model.safetensors",
         "dest": "ComfyUI/models/controlnet/control_v11p_sd15_inpaint.safetensors"
     },

@@ -13,7 +13,7 @@ const QUICK_QUESTIONS = [
   "🕶️ 차분하고 도시적인 모던 서재 공간 꾸미는 가이드"
 ];
 
-export default function ChatWidget({ sessionId, imageId, onGenerateSuccess, onError }) {
+export default function ChatWidget({ sessionId, imageId, onGenerateSuccess, onError, pendingPrompt, setPendingPrompt }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     {
@@ -26,6 +26,15 @@ export default function ChatWidget({ sessionId, imageId, onGenerateSuccess, onEr
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const [activeImageUrl, setActiveImageUrl] = useState(null);
+
+  // 취향 퀴즈 프롬프트 주입 시 자동 전송 및 채팅 위젯 활성화
+  useEffect(() => {
+    if (pendingPrompt) {
+      setIsOpen(true);
+      handleSend(pendingPrompt);
+      setPendingPrompt('');
+    }
+  }, [pendingPrompt]);
 
   // 채팅이 추가될 때마다 자동으로 스크롤을 맨 아래로 이동
   useEffect(() => {

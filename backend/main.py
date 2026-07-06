@@ -230,9 +230,10 @@ if RAG_AVAILABLE:
             rag_enabled = True
             print("✅ RAG 시스템 초기화 성공!")
         else:
-            print("⚠️ [RAG Warning] GOOGLE_API_KEY 환경 변수가 제공되지 않아 챗봇이 오프라인 모킹 모드로 작동합니다.")
+            raise ValueError("GOOGLE_API_KEY 환경 변수가 설정되지 않았습니다. .env 파일을 작성해 주십시오.")
     except Exception as e:
-        print(f"⚠️ [RAG Warning] RAG 시스템 초기화 실패 (Mock 대체): {e}")
+        print(f"❌ [RAG Critical Error] RAG 시스템 초기화 필수 조건 불충족: {e}")
+        raise e
 
 # =====================================================================
 # [ComfyUI 워크플로우 시뮬레이션 및 이미지 가공 모킹 엔진]
@@ -629,7 +630,6 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                 mask_full_path = os.path.join(PROJECT_ROOT, "uploads", mask_filename)
                 if os.path.exists(mask_full_path):
                     try:
-                        from PIL import Image
                         import shutil
                         with Image.open(mask_full_path) as mask_img:
                             # L 채널(흑백)을 추출하여 RGB의 R 채널로 병합 (G, B 채널은 0으로 채움)
@@ -692,7 +692,6 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
         # 고해상도 입력 이미지 리사이징 헬퍼 함수 정의
         def copy_and_resize_image(src_path: str, dest_path: str) -> None:
             try:
-                from PIL import Image
                 with Image.open(src_path) as img:
                     w, h = img.size
                     max_dim = 1024
@@ -776,7 +775,6 @@ def download_and_cache_image(url: str, cache_name: str) -> Optional[Any]:
     """네트워크로부터 고품질 Mock 리소스를 다운로드하여 로컬에 캐싱합니다. (안정적인 오프라인 기능 제공)"""
     import os
     import requests
-    from PIL import Image
     from io import BytesIO
 
     cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads", "templates")
