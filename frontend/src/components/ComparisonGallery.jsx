@@ -45,30 +45,7 @@ export default function ComparisonGallery({
         <span><strong>맞춤형 인테리어 이미지 변환 완료!</strong> 아래에서 시공 전후 모습을 비교해 보세요.</span>
       </div>
 
-      {/* 4대 메트릭 성적표 4단 그리드 */}
-      <div className="grid-4" style={{ marginBottom: '12px' }}>
-        <div className="metric-card">
-          <div className="metric-label">결과 ID</div>
-          <div className="metric-value" style={{ color: 'var(--primary)', fontSize: '0.95rem' }}>{resultData.resultId}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">스타일</div>
-          <div className="metric-value" style={{ color: 'var(--accent)', textTransform: 'uppercase' }}>{resultData.style}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">상태</div>
-          <div className="metric-value" style={{ color: 'var(--primary)' }}>{resultData.status}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">소요 시간</div>
-          <div className="metric-value" style={{ color: 'var(--accent)' }}>{resultData.processingTime}초</div>
-        </div>
-      </div>
-
-      {/* Streamlit 동기화: 하단 프롬프트 및 결과 파일 서버 경로 표시 */}
-      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', background: 'var(--bg-card-inner)', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '24px', fontFamily: 'monospace' }}>
-        프롬프트: <strong>'{resultData.prompt}'</strong> | 결과 경로: <code>{resultData.resultImageUrl}</code>
-      </div>
+      {/* 불필요한 메트릭(결과 ID, 스타일, 상태) 및 지저분한 파일 경로 정보를 완전히 제거하여 심플하고 정돈된 프리미엄 스타일로 구성합니다. */}
 
       {/* 좌우 나란히 비교 (Before & After) */}
       <div className="grid-2">
@@ -88,8 +65,11 @@ export default function ComparisonGallery({
 
         {/* 우측 After */}
         <div>
-          <div style={{ fontSize: '1rem', fontWeight: '600', color: 'var(--primary)', marginBottom: '10px', fontFamily: 'Outfit, sans-serif' }}>
-            🏠 After ({resultData.style?.toUpperCase()} 스타일 리모델링)
+          <div style={{ fontSize: '1rem', fontWeight: '600', color: 'var(--primary)', marginBottom: '10px', fontFamily: 'Outfit, sans-serif', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>🏠 After (AI 리모델링 변환 완료)</span>
+            <span style={{ fontSize: '0.8rem', fontWeight: '500', color: 'var(--text-muted)', background: 'var(--bg-card-inner)', padding: '4px 10px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+              ⏱️ {resultData.processingTime}초 소요
+            </span>
           </div>
           <div className="preview-box" style={{ height: '340px', border: '2px solid var(--primary)' }}>
             <img 

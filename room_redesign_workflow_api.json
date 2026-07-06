@@ -190,7 +190,7 @@
   },
   "20": {
     "inputs": {
-      "upscale_method": "nearest-exact",
+      "upscale_method": "lanczos",
       "width": 1620,
       "height": 1080,
       "crop": "disabled",

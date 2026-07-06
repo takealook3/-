@@ -394,7 +394,19 @@ def translate_prompt_to_english(prompt: str) -> str:
             print(f"🌐 [Translate] 번역 완료: '{translated}'")
             return translated
         except Exception as e:
-            print(f"⚠️ [Translate] 번역 오류 또는 시간 초과 (8초 제한 룰 기반 Fallback 작동): {e}")
+            print(f"⚠️ [Translate] 기본 모델 번역 실패 ({e}). 백업 모델(gemini-1.5-flash)로 재시도합니다.")
+            try:
+                # [한글 주석] 주력 번역 모델 쿼터 한도 도달 시 gemini-1.5-flash 모델을 통해 우회 번역을 재시도합니다.
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                backup_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.2)
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(backup_llm.invoke, [HumanMessage(content=system_prompt)])
+                    response = future.result(timeout=8.0)
+                translated = response.content.strip().replace('"', '').replace("'", "")
+                print(f"🌐 [Translate] 백업 모델 번역 성공: '{translated}'")
+                return translated
+            except Exception as e2:
+                print(f"⚠️ [Translate] 백업 모델 번역도 실패 (비상 사전 Fallback 작동): {e2}")
 
     # =====================================================================
     # [정밀 룰 기반 Fallback 파서]
@@ -417,6 +429,18 @@ def translate_prompt_to_english(prompt: str) -> str:
         "아늑한": "(warm cozy mood:1.15)",
         "어두운": "(moody dark tone theme:1.20)",
         "밝은": "(bright well-lit interior:1.15)",
+        "보라색": "(purple neon theme style:1.35)",
+        "보라": "(purple neon theme style:1.35)",
+        "퍼플": "(purple neon theme style:1.35)",
+        "사이버펑크": "(cyberpunk neon futuristic style:1.45)",
+        "네온": "(neon glowing ambient lighting:1.30)",
+        "핑크": "(pink cozy dream style:1.30)",
+        "분홍색": "(pink cozy dream style:1.30)",
+        "블루": "(cool blue tone interior:1.30)",
+        "파란색": "(cool blue tone interior:1.30)",
+        "노란색": "(warm yellow lighting style:1.25)",
+        "초록색": "(fresh green botanic style:1.25)",
+        "그린": "(fresh green botanic style:1.25)",
     }
     
     room_keywords = {
@@ -528,19 +552,23 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
             prompt_api_data["8"]["inputs"]["filename_prefix"] = f"ComfyUI_room_redesign_{int(time.time())}"
             
             # [한글 주석] AI 1080p 업스케일 가로비 동적 계산 주입 (Node 20)
+            # 로컬 임포트 충돌(UnboundLocalError)을 방지하기 위해 PILImage 별칭을 통해 접근합니다.
             if "image_filename" in parameters:
                 orig_img_path = os.path.join(PROJECT_ROOT, "uploads", parameters["image_filename"])
                 if not os.path.exists(orig_img_path):
                     orig_img_path = os.path.join(PROJECT_ROOT, "results", parameters["image_filename"])
                 if os.path.exists(orig_img_path):
                     try:
-                        with Image.open(orig_img_path) as o_img:
+                        from PIL import Image as PILImage
+                        with PILImage.open(orig_img_path) as o_img:
                             ow, oh = o_img.size
                             ratio = ow / oh
                             target_w = int(1080 * ratio)
                             prompt_api_data["20"]["inputs"]["width"] = target_w
                             prompt_api_data["20"]["inputs"]["height"] = 1080
-                            print(f"📐 [room_redesign_API] ImageScale (Node 20) 해상도 주입: {target_w}x1080")
+                            # [한글 주석] 축소 시 화질 자글거림(Aliasing)을 없애고 선명함을 유지하기 위해 lanczos 알고리즘으로 덮어씁니다.
+                            prompt_api_data["20"]["inputs"]["upscale_method"] = "lanczos"
+                            print(f"📐 [room_redesign_API] ImageScale (Node 20) 해상도 주입: {target_w}x1080 (Method: lanczos)")
                     except Exception as e:
                         print(f"⚠️ [room_redesign_API] 해상도 주입 중 에러: {e}")
 
@@ -945,50 +973,10 @@ def process_mock_image(
         w, h = img.size
         combined_text = f"{style_name or ''} {prompt_text or ''}".lower()
 
-        # 3. 🎨 공간 구조를 100% 보존하면서 스타일 필터링 적용
-        selected_style_key = None
-        if any(x in combined_text for x in ["우드", "wood", "나무", "따뜻한", "scandinavian", "북유럽", "cozy", "brown", "natural", "내추럴"]):
-            selected_style_key = "wood"
-        elif any(x in combined_text for x in ["화이트", "white", "밝은", "gallery", "깔끔한", "bright", "light", "clean", "화사"]):
-            selected_style_key = "white"
-        elif any(x in combined_text for x in ["미니멀", "minimal", "모던", "modern", "urban", "그레이", "gray", "sleek"]):
-            selected_style_key = "minimal"
-        elif any(x in combined_text for x in ["어두운", "dark", "밤", "moody", "블랙", "black"]):
-            selected_style_key = "dark"
-
-        if selected_style_key == "wood":
-            r, g, b = img.split()
-            r = ImageEnhance.Contrast(r).enhance(1.15)
-            g = ImageEnhance.Contrast(g).enhance(1.05)
-            b = ImageEnhance.Contrast(b).enhance(0.9)
-            img = Image.merge("RGB", (r, g, b))
-            img = ImageEnhance.Contrast(img).enhance(1.1)
-            glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-            glow_draw = ImageDraw.Draw(glow)
-            for radius in range(max(w, h), 0, -10):
-                alpha = int((1.0 - (radius / max(w, h))) * 45)
-                glow_draw.ellipse([w//2 - radius, -radius, w//2 + radius, radius], fill=(255, 190, 100, alpha))
-            img = Image.alpha_composite(img.convert("RGBA"), glow).convert("RGB")
-        elif selected_style_key == "white":
-            img = ImageEnhance.Brightness(img).enhance(1.30)
-            img = ImageEnhance.Contrast(img).enhance(0.98)
-            img = ImageEnhance.Color(img).enhance(0.85)
-        elif selected_style_key == "minimal":
-            img = ImageEnhance.Color(img).enhance(0.20)
-            img = ImageEnhance.Contrast(img).enhance(1.35)
-            img = ImageEnhance.Brightness(img).enhance(0.95)
-        elif selected_style_key == "dark":
-            img = ImageEnhance.Brightness(img).enhance(0.55)
-            img = ImageEnhance.Contrast(img).enhance(1.2)
-            glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-            glow_draw = ImageDraw.Draw(glow)
-            for radius in range(int(h * 0.8), 0, -8):
-                alpha = int((1.0 - (radius / (h * 0.8))) * 60)
-                glow_draw.ellipse([-radius, h//2 - radius, radius, h//2 + radius], fill=(255, 160, 60, alpha))
-            img = Image.alpha_composite(img.convert("RGBA"), glow).convert("RGB")
-        else:
-            img = ImageEnhance.Brightness(img).enhance(1.05)
-            img = ImageEnhance.Contrast(img).enhance(1.05)
+        # [한글 주석] 강제 스타일 카테고리 필터링 기계를 제거하고, 오직 사용자의 요구사항(프롬프트)에 의존합니다.
+        # 가상 시뮬레이션(Mock Fallback) 모드에서도 강제 색조 왜곡 대신, 원본 분위기를 유지하는 기본적인 보정만 적용합니다.
+        img = ImageEnhance.Brightness(img).enhance(1.05)
+        img = ImageEnhance.Contrast(img).enhance(1.05)
 
         # 4. 가구 인페인팅 정밀 합성 (BBox & 마스크 하이브리드 제어)
         if bbox and len(bbox) == 4:
@@ -1189,6 +1177,10 @@ async def upload_image(
         f.write(await image.read())
 
     final_session_id = session_id or f"session_{uuid.uuid4().hex[:6]}"
+
+    # [한글 주석] 세션 장부에 업로드된 최신 이미지 ID를 보존하여, 챗봇 대화 시 이미지 ID 유실에 대비합니다.
+    session_data = get_or_create_session(final_session_id)
+    session_data["last_uploaded_image_id"] = image_id
 
     return SuccessResponse(
         success=True,
@@ -1630,28 +1622,25 @@ def chat_message(req: ChatMessageRequest):
         ]
     )
     
-    if req.image_id and is_generation_intent:
-        print(f"🏠 [챗봇 연동 이미지 변환] 원본이미지: {req.image_id} | 사용자 요구사항: '{req.question}'")
+    # [한글 주석] 요청에 image_id가 유실되었으나 이미지 생성 의도가 확인된 경우, 세션 장부의 최신 업로드 이미지 ID를 조회하여 사용합니다.
+    image_id = req.image_id
+    if not image_id and is_generation_intent:
+        image_id = session_data.get("last_uploaded_image_id")
+        if image_id:
+            print(f"🎯 [챗봇 이미지 복원] 세션에서 유실된 이미지 ID를 복원했습니다: {image_id}")
+
+    if image_id and is_generation_intent:
+        print(f"🏠 [챗봇 연동 이미지 변환] 원본이미지: {image_id} | 사용자 요구사항: '{req.question}'")
         
-        # 1. 사용자 질문 텍스트에서 스타일 유추
+        # [한글 주석] 사용자 입력 텍스트에서 하드코딩된 특정 5대 카테고리로 강제 분류하는 룰을 걷어냅니다.
+        # 사용자가 스타일을 별도로 지정하지 않았다면 고정 템플릿에 매핑하지 않고 커스텀 스타일 상태로 둡니다.
         style = req.style
         if not style:
-            style = "modern"  # Default
-            q_lower = req.question.lower()
-            if any(kw in q_lower for kw in ["우드", "나무", "내추럴", "네추럴", "natural", "wood"]):
-                style = "natural"
-            elif any(kw in q_lower for kw in ["북유럽", "스칸디", "scandinavian"]):
-                style = "scandinavian"
-            elif any(kw in q_lower for kw in ["미니멀", "minimal", "깔끔한", "정돈"]):
-                style = "minimal"
-            elif any(kw in q_lower for kw in ["빈티지", "vintage", "레트로", "retro"]):
-                style = "vintage"
-            elif any(kw in q_lower for kw in ["모던", "modern", "도시", "세련"]):
-                style = "modern"
+            style = "custom"
         
-        # 2. 공통 이미지 변환 파이프라인 수행
+        # 2. 공통 이미지 변환 파이프라인 수행 (복원된 image_id 사용)
         res_data = internal_generate_interior_image(
-            image_id=req.image_id,
+            image_id=image_id,
             session_id=req.session_id,
             style=style,
             prompt=req.question
@@ -1662,7 +1651,8 @@ def chat_message(req: ChatMessageRequest):
         references = []
         if rag_enabled and rag_llm and rag_retriever:
             try:
-                rag_query = f"{style} 스타일 인테리어 데코 스타일링 가이드 팁"
+                # [한글 주석] 하드코딩 스타일명 대신 사용자가 요청한 전체 요구사항 문구를 RAG 쿼리로 날려서 훨씬 풍부하고 정확한 팁을 찾아오도록 개선합니다.
+                rag_query = f"{req.question} 스타일 인테리어 데코 스타일링 가이드 팁"
                 rag_answer, docs = query.answer_question(rag_query, chat_history, rag_retriever, rag_llm)
                 
                 # 출처 추출
@@ -1690,24 +1680,15 @@ def chat_message(req: ChatMessageRequest):
             rag_answer = rag_answer.replace(phrase, "")
         rag_answer = rag_answer.strip()
         
-        # 한국어 스타일 명칭 매핑
-        style_ko_map = {
-            "modern": "모던",
-            "minimal": "미니멀",
-            "natural": "내추럴 우드",
-            "vintage": "빈티지 레트로",
-            "scandinavian": "북유럽 스칸디나비안"
-        }
-        style_ko = style_ko_map.get(style, "모던")
-        
+        # [한글 주석] 하드코딩된 스타일 카테고리 맵을 걷어내고 사용자의 요구사항을 직접 인용하여 응답을 조립합니다.
         mode_label = "로컬 AI 모형" if res_data.get("workflow", {}).get("execution_mode") == "local_sd_tutorial" else ("로컬 가상 시뮬레이션" if res_data.get("workflow", {}).get("execution_mode") == "mock_fallback" else "ComfyUI API")
         
-        main_msg = f"🎨 요청하신 요구사항 **'{req.question}'**에 맞춰 **{style_ko}** 테마로 이미지 변환을 완료했습니다! (구동 모드: {mode_label})"
+        main_msg = f"🎨 요청하신 요구사항 **'{req.question}'**에 맞춰 이미지 분위기 변환을 완료했습니다! (구동 모드: {mode_label})"
         
         if rag_answer:
-            answer = f"{main_msg}\n\n💡 **{style_ko} 인테리어 공간 스타일링 팁:**\n{rag_answer}"
+            answer = f"{main_msg}\n\n💡 **요청하신 공간 인테리어 스타일링 팁:**\n{rag_answer}"
         else:
-            answer = f"{main_msg}\n\n선택하신 '{style_ko}' 스타일에 맞춰 가구 톤과 전반적인 데코 질감을 조화롭게 배치하였습니다. 변환된 모습은 아래 이미지 및 Before/After 갤러리에서 실시간으로 비교 확인해 보실 수 있습니다."
+            answer = f"{main_msg}\n\n입력하신 요구사항 스타일에 맞춰 공간 분위기, 가구 톤과 전반적인 데코 질감을 조화롭게 배치하였습니다. 변환된 모습은 아래 이미지 및 Before/After 갤러리에서 실시간으로 비교 확인해 보실 수 있습니다."
             references = ["ZipPT 인테리어 스타일링 기본 가이드북"]
             
         image_url = res_data.get("result_image_url")
