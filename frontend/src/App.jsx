@@ -137,6 +137,7 @@ export default function App() {
   const [startIndex, setStartIndex] = useState(0); // Featured Collections 카루셀 시작 인덱스 (모던=0으로 고정 기동)
 
   const [pendingPrompt, setPendingPrompt] = useState(''); // 취향 퀴즈 연동용 자동 프롬프트 상태
+  const [quizPendingPrompt, setQuizPendingPrompt] = useState(''); // 퀴즈 결과 주입 전용 독립 프롬프트 상태
   // [수정] 숍 카테고리 초기값은 URL 파라미터에서 가져옴
   const [selectedShopCategory, setSelectedShopCategory] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -152,13 +153,17 @@ export default function App() {
   }, []);
 
   const handleApplyQuizPrompt = (prompt) => {
-    if (!imageId) {
-      alert("취향 분석 결과를 적용하려면 먼저 '📸 1. 변환할 인테리어 사진 업로드' 섹션에서 공간 원본 이미지를 업로드해 주십시오!");
-      document.getElementById('uploader-card')?.scrollIntoView({ behavior: 'smooth' });
-      return;
-    }
-    setPendingPrompt(prompt);
-    document.getElementById('uploader-card')?.scrollIntoView({ behavior: 'smooth' });
+    // 이미지 업로드 여부와 상관없이 추천 프롬프트를 세팅하고 변환 스튜디오로 이동합니다.
+    setQuizPendingPrompt(prompt); // 퀴즈 결과는 챗봇이 아닌 스타일 변환 텍스트 입력창으로 독립 주입
+    setActiveTab('transform');
+    setStudioTab('upload');
+    
+    setTimeout(() => {
+      const targetEl = document.getElementById('studio-section') || document.getElementById('uploader-card');
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 150);
   };
 
   // 클릭하여 해당 섹션으로 보정 오토 스크롤링 함수
@@ -583,8 +588,8 @@ export default function App() {
                 originalImageUrl={originalImageUrl}
                 onGenerateSuccess={handleGenerateSuccess}
                 onError={setCurrentError}
-                pendingPrompt={pendingPrompt}
-                setPendingPrompt={setPendingPrompt}
+                pendingPrompt={quizPendingPrompt}
+                setPendingPrompt={setQuizPendingPrompt}
                 onResetImage={() => {
                   setImageId(null);
                   setOriginalImageUrl(null);

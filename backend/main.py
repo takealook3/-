@@ -1712,12 +1712,34 @@ def chat_message(req: ChatMessageRequest):
         ]
     )
     
-    # [한글 주석] 요청에 image_id가 유실되었으나 이미지 생성 의도가 확인된 경우, 세션 장부의 최신 업로드 이미지 ID를 조회하여 사용합니다.
+    # 챗봇 창(ChatWidget)에서 이미지 생성/변환/수선을 요구한 경우, 이미지 연산을 유발하지 않고 스타일 변환 탭 사용을 안내합니다.
+    if is_generation_intent and not req.image_id:
+        answer = (
+            "💡 **공간 이미지 스타일 변환 및 가구 교체 안내**\n\n"
+            "이미지 스타일 변환이나 부분 가구 교체는 메인 화면 상단의 **[🎨 스타일 변환]** 또는 **[🛠️ AI 가구 부분 교체]** 탭을 이용해 주세요!\n\n"
+            "해당 탭에서 사진을 업로드한 후 변환을 실행하시면 시공 전후 모습을 실시간 갤러리로 더 쉽고 멋지게 비교 감상하실 수 있습니다. \n"
+            "챗봇 창에서는 인테리어 컨셉 추천, 자재 매칭 등 텍스트 기반의 디자인 팁 상담을 도와드릴게요! 😊"
+        )
+        session_data["chats"].append({
+            "question": req.question,
+            "answer": answer,
+            "references": ["ZipPT 챗봇 가이드라인"],
+            "image_url": None,
+            "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        })
+        session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        return SuccessResponse(
+            success=True,
+            data=ChatMessageResponse(
+                session_id=req.session_id,
+                answer=answer,
+                references=["ZipPT 챗봇 가이드라인"],
+                image_url=None
+            ),
+            message="인증된 가이드 안내가 출력되었습니다."
+        )
+
     image_id = req.image_id
-    if not image_id and is_generation_intent:
-        image_id = session_data.get("last_uploaded_image_id")
-        if image_id:
-            print(f"🎯 [챗봇 이미지 복원] 세션에서 유실된 이미지 ID를 복원했습니다: {image_id}")
 
     if image_id and is_generation_intent:
         print(f"🏠 [챗봇 연동 이미지 변환] 원본이미지: {image_id} | 사용자 요구사항: '{req.question}'")
@@ -1770,15 +1792,12 @@ def chat_message(req: ChatMessageRequest):
             rag_answer = rag_answer.replace(phrase, "")
         rag_answer = rag_answer.strip()
         
-        # [한글 주석] 하드코딩된 스타일 카테고리 맵을 걷어내고 사용자의 요구사항을 직접 인용하여 응답을 조립합니다.
-        mode_label = "로컬 AI 모형" if res_data.get("workflow", {}).get("execution_mode") == "local_sd_tutorial" else ("로컬 가상 시뮬레이션" if res_data.get("workflow", {}).get("execution_mode") == "mock_fallback" else "ComfyUI API")
-        
-        main_msg = f"🎨 요청하신 요구사항 **'{req.question}'**에 맞춰 이미지 분위기 변환을 완료했습니다! (구동 모드: {mode_label})"
+        main_msg = f"🎨 요청하신 요구사항 **'{req.question}'**에 맞춰 맞춤형 이미지 스타일링 변환을 완료했습니다! ✨"
         
         if rag_answer:
             answer = f"{main_msg}\n\n💡 **요청하신 공간 인테리어 스타일링 팁:**\n{rag_answer}"
         else:
-            answer = f"{main_msg}\n\n입력하신 요구사항 스타일에 맞춰 공간 분위기, 가구 톤과 전반적인 데코 질감을 조화롭게 배치하였습니다. 변환된 모습은 아래 이미지 및 Before/After 갤러리에서 실시간으로 비교 확인해 보실 수 있습니다."
+            answer = f"{main_msg}\n\n입력하신 요구사항 스타일에 맞춰 공간 분위기, 가구 톤과 전반적인 데코 질감을 조화롭게 배치하였습니다. 변환된 모습은 아래 Before/After 비교 갤러리에서 실시간으로 확인해 보실 수 있습니다."
             references = ["ZipPT 인테리어 스타일링 기본 가이드북"]
             
         image_url = res_data.get("result_image_url")
@@ -1891,7 +1910,6 @@ def chat_message(req: ChatMessageRequest):
                 print("📑 [RAG API] 법률/시공/체크리스트 유형 판별됨.")
                 answer, docs = query.answer_question(req.question, chat_history, rag_retriever, rag_llm)
                 
-                # 일반 시공/법률 질문의 경우 image_url을 강제로 None 처리하여 이미지를 첨부하지 않음
                 references = []
                 seen = set()
                 for doc in docs:
@@ -1903,6 +1921,9 @@ def chat_message(req: ChatMessageRequest):
                     if key not in seen:
                         seen.add(key)
                         references.append(key)
+                    # [한글 주석] 일반 질문일지라도 문서 메타데이터에 추천 이미지(image_url)가 존재하면 적극 바인딩하여 챗봇에 공급합니다.
+                    if not image_url and meta.get("image_url"):
+                        image_url = meta.get("image_url")
                         
             # 2. "제공된 문서에 따르면" 등 출처 상투구 제거 필터 적용
             forbidden_phrases = [

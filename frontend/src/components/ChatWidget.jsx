@@ -75,7 +75,8 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
         {
           sender: 'ai',
           text: respData.answer || res.message || "답변이 도착했습니다.",
-          references: respData.references || []
+          references: respData.references || [],
+          imageUrl: respData.image_url
         }
       ]);
     } else {
@@ -269,6 +270,30 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
                 {msg.text}
               </div>
 
+              {msg.imageUrl && (
+                <div 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveImageUrl(getFullUrl(msg.imageUrl));
+                  }}
+                  style={{
+                    marginTop: '8px',
+                    maxWidth: '85%',
+                    borderRadius: '12px',
+                    border: '1px solid #CDBCB2',
+                    overflow: 'hidden',
+                    cursor: 'zoom-in',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                    backgroundColor: '#FCFAF7'
+                  }}
+                >
+                  <img 
+                    src={getFullUrl(msg.imageUrl)} 
+                    alt="인테리어 추천 스타일 예시" 
+                    style={{ width: '100%', maxHeight: '180px', objectFit: 'cover', display: 'block' }}
+                  />
+                </div>
+              )}
             </div>
           ))}
 
