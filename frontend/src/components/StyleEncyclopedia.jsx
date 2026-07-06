@@ -219,7 +219,7 @@ export default function StyleEncyclopedia({ activeId, setActiveId, isModalOpen, 
             <h3 style={{ fontSize: '2.1rem', fontWeight: '800', color: 'var(--primary)', marginTop: '6px', marginBottom: '0', fontFamily: 'Outfit, sans-serif' }}>
               {activeStyle.name}
             </h3>
-            <span style={{ fontSize: '1.05rem', color: 'var(--text-light)', fontWeight: '400', fontFamily: 'Outfit, sans-serif', display: 'block', marginTop: '2px' }}>
+            <span style={{ fontSize: '1.05rem', color: '#8C776A', fontWeight: '500', fontFamily: 'Outfit, sans-serif', display: 'block', marginTop: '2px' }}>
               {activeStyle.engName}
             </span>
           </div>
@@ -238,7 +238,7 @@ export default function StyleEncyclopedia({ activeId, setActiveId, isModalOpen, 
           </p>
 
           <div style={{ borderTop: '1px solid #CDBCB2', paddingTop: '12px', width: '100%', marginTop: '4px' }}>
-            <span style={{ fontSize: '0.72rem', color: '#4E4844', fontWeight: '600', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
+            <span style={{ fontSize: '0.85rem', color: '#4E4844', fontWeight: '800', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>
               선호 타겟층
             </span>
             <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--primary)', letterSpacing: '-0.025em' }}> {/* [가독성을 위해 폰트 축소 및 자간 축소] */}
@@ -255,9 +255,9 @@ export default function StyleEncyclopedia({ activeId, setActiveId, isModalOpen, 
             width: '100%'
           }}>
             <span style={{
-              fontSize: '0.7rem',
-              fontWeight: '700',
-              color: '#9A8B84',
+              fontSize: '0.85rem',
+              fontWeight: '800',
+              color: '#4E4844',
               letterSpacing: '0.15em',
               textTransform: 'uppercase',
               marginBottom: '2px'
@@ -328,22 +328,6 @@ export default function StyleEncyclopedia({ activeId, setActiveId, isModalOpen, 
                 );
               })}
             </div>
-            {/* 선택 시 해당 카테고리 보유 여부 안내 (거실 제외) */}
-            {selectedCategory && selectedCategory !== '거실' && (
-              <span style={{
-                fontSize: '0.72rem',
-                color: (activeStyle.categories || []).includes(selectedCategory)
-                  ? 'var(--accent)'
-                  : '#BEB0AA',
-                fontWeight: '600',
-                marginTop: '2px'
-              }}>
-                {(activeStyle.categories || []).includes(selectedCategory)
-                  ? `✔ ${activeStyle.name}에 어울리는 ${selectedCategory} 카테고리`
-                  : `✗ 이 스타일의 주요 카테고리가 아닙니다`
-                }
-              </span>
-            )}
           </div>
         </div>
 
