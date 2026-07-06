@@ -8,8 +8,10 @@ from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool # [이유: 동기 함수를 스레드풀에서 실행하여 FastAPI의 이벤트 루프 블로킹 현상을 해결하기 위해 사용합니다.]
 from typing import Optional, Dict, Any
 import uuid, os, time, datetime, sys, json, shutil
+import websocket # [이유: ComfyUI 서버와 실시간 양방향 이벤트를 주고받기 위해 websocket-client 패키지를 임포트합니다.]
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
@@ -355,20 +357,29 @@ def convert_webui_to_api_format(webui_data: dict) -> dict:
         }
     return api_format
 
+# 전역 번역 캐시 딕셔너리 구축 (속도 향상용) [이유: 반복적인 외부 API 호출을 억제하여 이미지 생성 성능을 높입니다.]
+translation_cache = {}
+
 def translate_prompt_to_english(prompt: str) -> str:
     """사용자가 작성한 프롬프트를 Gemini를 통해 AI 이미지 생성용 영문으로 번역 및 인테리어 전용으로 보강합니다."""
     import re
     if not prompt or not prompt.strip():
         return "modern interior styling"
 
+    # [이유: 동일 프롬프트에 대한 번역 요청이 들어오면 LLM API 호출을 거치지 않고 즉시 캐시본을 반환합니다.]
+    global translation_cache
+    if prompt in translation_cache:
+        print(f"🌐 [Translate] 캐싱된 번역 결과 반환: '{translation_cache[prompt]}'")
+        return translation_cache[prompt]
+
     # 한글 문자 존재 여부 검사 (한영 혼용 포함)
     has_korean = bool(re.search("[ㄱ-ㅎㅏ-ㅣ가-힣]", prompt))
     
     # 한글이 전혀 없는 순수 영문인 경우, 가중치 래핑만 적용해 반환
     if not has_korean:
-        if prompt.startswith("(") and prompt.endswith(")"):
-            return prompt
-        return f"({prompt}:1.35)"
+        result = prompt if (prompt.startswith("(") and prompt.endswith(")")) else f"({prompt}:1.35)"
+        translation_cache[prompt] = result
+        return result
 
     global rag_llm, rag_enabled
     if rag_enabled and rag_llm:
@@ -387,12 +398,13 @@ def translate_prompt_to_english(prompt: str) -> str:
                 f"Korean: {prompt}\n"
                 "English Prompt:"
             )
-            # 타임아웃(8.0초)이 적용된 동적 스레드 풀 실행 (네트워크 블로킹 방지)
+            # 타임아웃(4.0초)이 적용된 동적 스레드 풀 실행 (네트워크 블로킹 방지) [이유: 8초에서 4초로 지연 최소화]
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(rag_llm.invoke, [HumanMessage(content=system_prompt)])
-                response = future.result(timeout=8.0)
+                response = future.result(timeout=4.0)
             translated = response.content.strip().replace('"', '').replace("'", "")
             print(f"🌐 [Translate] 번역 완료: '{translated}'")
+            translation_cache[prompt] = translated
             return translated
         except Exception as e:
             print(f"⚠️ [Translate] 기본 모델 번역 실패 ({e}). 백업 모델(gemini-1.5-flash)로 재시도합니다.")
@@ -402,9 +414,10 @@ def translate_prompt_to_english(prompt: str) -> str:
                 backup_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.2)
                 with ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(backup_llm.invoke, [HumanMessage(content=system_prompt)])
-                    response = future.result(timeout=8.0)
+                    response = future.result(timeout=4.0) # [이유: 대기 최소화를 위해 4초로 단축]
                 translated = response.content.strip().replace('"', '').replace("'", "")
                 print(f"🌐 [Translate] 백업 모델 번역 성공: '{translated}'")
+                translation_cache[prompt] = translated
                 return translated
             except Exception as e2:
                 print(f"⚠️ [Translate] 백업 모델 번역도 실패 (비상 사전 Fallback 작동): {e2}")
@@ -507,6 +520,7 @@ def translate_prompt_to_english(prompt: str) -> str:
     parts.extend(["no people", "empty room", "realistic", "architectural photography", "highly detailed", "photorealistic", "4k"])
     fallback_prompt = ", ".join(parts)
     print(f"⚙️ [Translate Fallback] 조합 완료: '{fallback_prompt}'")
+    translation_cache[prompt] = fallback_prompt
     return fallback_prompt
 
 def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
@@ -777,9 +791,46 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
         if not prompt_id:
             return None
         print(f"🚀 [ComfyUI API] 작업 제출완료. Prompt ID: {prompt_id}")
+        # [이유: 매번 /history 전체를 GET하는 대신 웹소켓을 연결해 완료 이벤트를 구독하여 성능을 최적화합니다.]
+        ws_url = COMFYUI_API_URL.replace("http://", "ws://").replace("https://", "wss://") + "/ws?clientId=zippt_backend_client"
+        ws = None
+        ws_success = False
+        try:
+            ws = websocket.create_connection(ws_url, timeout=120)
+            ws_success = True
+            print(f"🔌 [ComfyUI API (WS)] 웹소켓 채널 연결 수립 완료: {ws_url}")
+        except Exception as ws_err:
+            print(f"⚠️ [ComfyUI API (WS)] 웹소켓 연결 오류 ({ws_err}). 기존 폴링 모드로 폴백 대기합니다.")
+
+        if ws_success and ws:
+            try:
+                # KSampler가 완료 이벤트를 쏠 때까지 웹소켓 recv 대기
+                while True:
+                    msg = ws.recv()
+                    if isinstance(msg, str):
+                        event = json.loads(msg)
+                        if event.get("type") == "executing":
+                            data = event.get("data", {})
+                            # node가 None이고 prompt_id가 일치할 때 완료
+                            if data.get("node") is None and data.get("prompt_id") == prompt_id:
+                                print(f"🟢 [ComfyUI API (WS)] 작업 완료 이벤트를 수신했습니다. Prompt ID: {prompt_id}")
+                                break
+                    else:
+                        continue
+            except Exception as ws_recv_err:
+                print(f"⚠️ [ComfyUI API (WS)] 웹소켓 데이터 수신 중 오류 ({ws_recv_err}). 폴링 전환 진행.")
+                ws_success = False
+            finally:
+                try:
+                    ws.close()
+                except:
+                    pass
+
+        # 웹소켓이 성공적으로 완료되었든, 실패하여 Fallback 하든 최종 결과 수집은 /history 에서 수행
         history_url = f"{COMFYUI_API_URL}/history/{prompt_id}"
-        # 최대 120초 대기 (0.3초 단위 폴링하므로 약 400회 루프)
-        for _ in range(400):
+        
+        if ws_success:
+            # 웹소켓으로 이미 완료를 확인했으므로 바로 1회 즉시 GET 호출하여 파일명 획득
             h_res = requests.get(history_url, timeout=5)
             h_data = h_res.json()
             if prompt_id in h_data:
@@ -792,9 +843,26 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                         if os.path.exists(comfy_out_path):
                             dest_path = os.path.join(PROJECT_ROOT, "results", filename)
                             shutil.copy(comfy_out_path, dest_path)
-                            print(f"🟢 [ComfyUI API] 완료본 복사완료: {dest_path}")
+                            print(f"🟢 [ComfyUI API (WS)] 완료본 복사완료: {dest_path}")
                         return filename
-            time.sleep(0.3)
+        else:
+            # Fallback: 기존의 0.3초 주기 폴링 방식 수행 [이유: 웹소켓 오류에 대한 복원력 확보]
+            for _ in range(400):
+                h_res = requests.get(history_url, timeout=5)
+                h_data = h_res.json()
+                if prompt_id in h_data:
+                    outputs = h_data[prompt_id].get("outputs", {})
+                    for node_id, out_data in outputs.items():
+                        if "images" in out_data:
+                            filename = out_data["images"][0].get("filename")
+                            comfy_out_path = os.path.join(COMFYUI_OUTPUT_DIR, filename)
+                            os.makedirs(os.path.join(PROJECT_ROOT, "results"), exist_ok=True)
+                            if os.path.exists(comfy_out_path):
+                                dest_path = os.path.join(PROJECT_ROOT, "results", filename)
+                                shutil.copy(comfy_out_path, dest_path)
+                                print(f"🟢 [ComfyUI API (Fallback)] 완료본 복사완료: {dest_path}")
+                            return filename
+                time.sleep(0.3)
     except Exception as e:
         print(f"⚠️ [ComfyUI API Error] Fallback 작동: {e}")
     return None
@@ -1239,8 +1307,12 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
     input_filename = f"{image_id}{ext_found}"
     original_url = f"/static/uploads/{input_filename}"
     
-    # 영어 번역 프롬프트
+    # [1단계 - 시간 측정 로그 추가]
+    # 번역 함수 호출 전후의 소요 시간을 정밀하게 측정하여 콘솔에 로깅합니다. (가독성 한글 주석)
+    t_translate_start = time.time()
     translated_prompt = translate_prompt_to_english(prompt)
+    t_translate_end = time.time()
+    print(f"⏱️ [성능측정 - 번역] '{prompt}' 번역 소요시간: {t_translate_end - t_translate_start:.4f}초")
     
     # ComfyUI 온라인 여부 체크
     comfy_online = check_comfyui_online()
@@ -1257,7 +1329,13 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
         "denoise": 0.6,
         "seed": int(time.time()) % 1000000
     }
+    
+    # [1단계 - 시간 측정 로그 추가]
+    # 실제 ComfyUI를 호출하고 연산이 완료되기까지의 소요 시간을 측정합니다. (가독성 한글 주석)
+    t_comfy_start = time.time()
     real_filename = execute_real_comfyui("room_redesign_workflow_api.json", parameters)
+    t_comfy_end = time.time()
+    print(f"⏱️ [성능측정 - ComfyUI] 워크플로우 실행 및 완료 소요시간: {t_comfy_end - t_comfy_start:.4f}초")
         
     if real_filename:
         result_filename = real_filename
@@ -1370,7 +1448,9 @@ async def generate_interior_image(request: Request):
             status_code=400
         )
         
-    res_data = internal_generate_interior_image(
+    # [이유: 동기 함수인 internal_generate_interior_image의 연산을 별도 스레드풀에서 실행하여, 작업 중에도 FastAPI 이벤트 루프가 동시 요청을 받아들일 수 있도록 만듭니다.]
+    res_data = await run_in_threadpool(
+        internal_generate_interior_image,
         image_id=image_id,
         session_id=session_id,
         style=style,
@@ -1457,7 +1537,8 @@ def get_image(image_id: str):
 # [5번 창구] 일반 이미지 생성 API (POST /api/image/generate)
 # 비유: 글자(프롬프트)를 주면 AI 화가가 그림을 그려서 반환해 주는 창구입니다.
 # =====================================================================
-@app.post("/api/image/generate", response_model=SuccessResponse[ImageGenerateResponse])
+# [이유: 3번 창구의 인테리어 이미지 변환 API와 경로 중복(Route Shadowing)으로 인해 실행되지 않던 버그를 해결하기 위해 경로를 /api/image/generate_general 로 분리합니다.]
+@app.post("/api/image/generate_general", response_model=SuccessResponse[ImageGenerateResponse])
 def generate_image(req: ImageGenerateRequest):
     """
     [일반 이미지 생성 요청 창구]
