@@ -2617,23 +2617,40 @@ def search_similar_products(payload: Dict[str, Any]):
                     "lighting": "플로어 스탠드 조명",
                     "plant": "인테리어 화분 식물"
                 }
-                search_query = query_map.get(detected_cat, None)
+            # 1순위: 사용자가 수선 입력창(Prompt)에 명시한 텍스트 키워드를 분석하여 검색어 추출을 최우선으로 시도합니다.
+            # (YOLOv8 모델의 형태 오인(예: 1인용 소파를 침대로 인식 등)으로 인한 오검색을 완벽 차단하기 위함)
+            prompt_lower = (payload.get("prompt") or "").lower()
+            
+            # 사용자가 입력한 프롬프트 텍스트 기반 쿼리 빌드
+            if any(x in prompt_lower for x in ["테이블", "식탁", "책상", "desk", "table", "식사"]):
+                search_query = "원목 식탁 테이블"
+            elif any(x in prompt_lower for x in ["소파", "쇼파", "sofa", "의자", "체어", "chair", "빈백", "스툴"]):
+                search_query = "인테리어 소파"
+            elif any(x in prompt_lower for x in ["침대", "bed", "sleep", "이불", "매트리스"]):
+                search_query = "모던 침대"
+            elif any(x in prompt_lower for x in ["조명", "스탠드", "light", "lamp", "네온"]):
+                search_query = "인테리어 플로어 스탠드 조명"
+            elif any(x in prompt_lower for x in ["화분", "식물", "plant", "tree"]):
+                search_query = "인테리어 화분 식물"
+            
+            if search_query:
+                print(f"🎯 [Product Search] 1순위 프롬프트 텍스트 분석 매칭 성공: '{search_query}'")
                 
-                # [한글 주석] 제미나이 429 한도 초과 및 YOLOv8 미감지 시, 사용자가 수선 칸에 직접 입력한 텍스트 프롬프트를 2차 파싱하여 올바른 가구를 분류합니다.
-                if not search_query:
-                    prompt_lower = (payload.get("prompt") or "").lower()
-                    if any(x in prompt_lower for x in ["테이블", "식탁", "책상", "desk", "table", "식사"]):
-                        search_query = "원목 식탁 테이블"
-                    elif any(x in prompt_lower for x in ["침대", "bed", "sleep", "이불", "매트리스"]):
-                        search_query = "모던 침대"
-                    elif any(x in prompt_lower for x in ["의자", "체어", "chair", "스툴"]):
-                        search_query = "디자인 의자"
-                    elif any(x in prompt_lower for x in ["조명", "스탠드", "light", "lamp", "네온"]):
-                        search_query = "인테리어 플로어 스탠드 조명"
-                    elif any(x in prompt_lower for x in ["화분", "식물", "plant", "tree"]):
-                        search_query = "인테리어 화분 식물"
-                    else:
-                        search_query = "인테리어 가구"
+            # 2순위: 프롬프트에 명확한 가구명이 없는 경우에 한해, 로컬 YOLOv8 기반 이미지 객체 분석을 실행합니다.
+            if not search_query:
+                print("🔍 [Product Search] 2순위 로컬 YOLOv8 객체 탐지 및 이미지 분석 기동...")
+                detected_cat = detect_furniture_class(cropped_img_path)
+                
+                query_map = {
+                    "sofa": "인테리어 소파",
+                    "bed": "모던 침대",
+                    "table": "원목 식탁",
+                    "chair": "디자인 의자",
+                    "lighting": "플로어 스탠드 조명",
+                    "plant": "인테리어 화분 식물"
+                }
+                search_query = query_map.get(detected_cat, "인테리어 가구")
+                print(f"🎯 [Product Search] 2순위 YOLOv8 감지 매칭 완료: '{search_query}'")
             
             print(f"🛍️ [Product Search] 실시간 네이버 공식 OpenAPI 호출 (검색어: '{search_query}')")
             api_items = search_naver_shopping_api(search_query)
