@@ -307,6 +307,15 @@ export default function App() {
             }}
           />
         </main>
+        
+        {/* Shop 가도 챗봇은 항상 사용할 수 있도록 추가 마운트 */}
+        <ChatWidget 
+          sessionId={sessionId} 
+          imageId={imageId}
+          onError={setCurrentError}
+          pendingPrompt={pendingPrompt}
+          setPendingPrompt={setPendingPrompt}
+        />
       </div>
     );
   }
