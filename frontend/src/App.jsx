@@ -511,7 +511,7 @@ export default function App() {
               <div 
                 className="featured-carousel-track"
                 style={{
-                  '--start-index': startIndex
+                  transform: `translateX(calc(-1 * ${startIndex} * (var(--card-width) + var(--gap-width))))`
                 }}
               >
                 {STYLE_DATABASE.map((style) => (
@@ -762,6 +762,14 @@ export default function App() {
 
         {/* [메인에서 가구 카탈로그 제거 - Shop 버튼을 통해 새 창으로 제공됨] */}
 
+        {/* 28가지 인테리어 취향 스타일 도감 섹션 */}
+        <StyleEncyclopedia
+          activeId={activeStyleId}
+          setActiveId={setActiveStyleId}
+          isModalOpen={isStyleModalOpen}
+          setIsModalOpen={setIsStyleModalOpen}
+        />
+
 
 
         {/* 하단 럭셔리 브랜드 푸터 (NÜMA 시안 감성 완벽 재현) */}
@@ -886,6 +894,7 @@ export default function App() {
           onClose={() => setShowSessionModal(false)}
         />
       )}
+
 
       {/* 5단계: AI 인테리어 취향 & 추구미 1:1 상담 메신저 위젯 (순수 인테리어 RAG 상담 전용) */}
       <ChatWidget 
