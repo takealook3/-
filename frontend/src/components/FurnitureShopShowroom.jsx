@@ -257,7 +257,7 @@ export default function FurnitureShopShowroom({ onSelectStyle, selectedCategory,
             value={sortOrder}
             onChange={(e) => setSortOrder(e.target.value)}
             style={{
-              padding: '10px 18px',
+              padding: '10px 36px 10px 18px',
               borderRadius: '30px',
               border: '1px solid var(--border-color)',
               fontSize: '0.85rem',
@@ -422,36 +422,7 @@ export default function FurnitureShopShowroom({ onSelectStyle, selectedCategory,
                     )}
                   </div>
 
-                  {/* 스타일 도감 연동 버튼 */}
-                  <button
-                    onClick={() => onSelectStyle(prod.styleId)}
-                    style={{
-                      width: '100%',
-                      padding: '10px 0',
-                      borderRadius: '10px',
-                      backgroundColor: '#F1EAE4',
-                      color: 'var(--primary)',
-                      border: 'none',
-                      fontSize: '0.75rem',
-                      fontWeight: '800',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.backgroundColor = 'var(--primary)';
-                      e.currentTarget.style.color = '#FFFFFF';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.backgroundColor = '#F1EAE4';
-                      e.currentTarget.style.color = 'var(--primary)';
-                    }}
-                  >
-                    전체 {prod.styleName} 스타일 도감 보기 &rarr;
-                  </button>
+
                 </div>
               </div>
             );
