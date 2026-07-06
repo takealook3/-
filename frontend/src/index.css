@@ -829,14 +829,14 @@ body {
   width: 100vw;
   margin-left: calc(-50vw + 50%);
   margin-right: calc(-50vw + 50%);
-  background-color: #F8F5F0; /* 클래식하고 따뜻한 크림 베이지 톤 */
+  background-color: var(--bg-main); /* 클래식하고 따뜻한 크림 베이지 톤에서 어두운 갈색 배경으로 변경 */
   padding: 80px 10%;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 48px;
-  color: var(--text-main) !important; /* 바디 상속 화이트 방지 및 가독성 확보 */
+  color: #FCFAF7 !important; /* 바디 상속 화이트 방지 및 가독성 확보 -> 갈색 배경 위에서 흰색으로 변경 */
 }
 
 .section-header-centered {
@@ -1140,10 +1140,12 @@ body {
  * [럭셔리 3단 카테고리 퀵 카드 섹션 및 쇼룸 모션 추가]
  * ===================================================================== */
 .category-cards-section {
-  max-width: 1200px;
-  margin: 40px auto 20px;
-  width: 100%;
-  padding: 0;
+  width: 100vw; /* 화면 전체 가로 폭 꽉 채우기 */
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  background-color: #F8F5F0; /* 흰색(클래식 베이지) 배경 적용 */
+  padding: 64px 10% 80px 10%; /* 위아래 패딩 넉넉하게 확장 */
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -1237,5 +1239,28 @@ body {
   }
   .category-card-img-wrapper {
     height: 240px;
+  }
+}
+
+/* =====================================================================
+ * [스타일 변환용 프리미엄 스켈레톤 로딩 & 펄스 애니메이션]
+ * ===================================================================== */
+@keyframes skeleton-glow {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.15);
   }
 }

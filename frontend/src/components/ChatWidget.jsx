@@ -6,12 +6,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { sendChatMessage, API_BASE_URL } from '../services/api';
 
-const QUICK_QUESTIONS = [
-  "✨ 화사하고 밝은 미니멀 거실에 어울리는 소파 컬러는?",
-  "🌿 따뜻한 내추럴 우드 침실을 위한 아늑한 스타일링 팁",
-  "🛋️ 북유럽 스타일 공간에 어울리는 조명과 러그 조합 추천",
-  "🕶️ 차분하고 도시적인 모던 서재 공간 꾸미는 가이드"
-];
 
 export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt, setPendingPrompt }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -330,37 +324,6 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
           <div ref={messagesEndRef} />
         </div>
 
-        {/* 추천 질문 칩 (Quick Chips) 영역 */}
-        <div className="quick-chips-container">
-          {QUICK_QUESTIONS.map((qText, qIdx) => (
-            <button
-              key={qIdx}
-              type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleSend(qText);
-              }}
-              disabled={loading}
-              style={{
-                background: '#F3EBE5',
-                border: '1px solid #CDBCB2',
-                color: '#2A2825',
-                padding: '6px 12px',
-                borderRadius: '12px',
-                fontSize: '0.75rem',
-                cursor: 'pointer',
-                flexShrink: 0,
-                transition: 'all 0.2s ease',
-                fontWeight: '500'
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E2D7CF'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#F3EBE5'; }}
-            >
-              {qText}
-            </button>
-          ))}
-        </div>
 
         {/* 하단 입력 영역 */}
         <form

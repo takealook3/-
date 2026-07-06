@@ -99,27 +99,28 @@ export default function ImageUploader({
         id="file-upload-input"
       />
 
-      <div style={{ position: 'relative', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
+      <div style={{ position: 'relative' }}>
         {!previewUrl ? (
-          <label htmlFor="file-upload-input" className="dropzone" style={{ width: '100%', minHeight: '180px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
-            <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📂</div>
-            <div style={{ fontWeight: '700', color: '#fff', marginBottom: '6px', fontFamily: 'Outfit, "Noto Sans KR", sans-serif', fontSize: '0.95rem' }}>클릭하여 공간 사진 업로드</div>
-            <div style={{ fontSize: '0.8rem', color: '#94a3b8', fontFamily: 'Outfit, sans-serif' }}>JPG, JPEG, PNG 이미지 선택</div>
+          <label htmlFor="file-upload-input" className="dropzone" style={{ width: '100%', minHeight: '180px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+            {/* 📂 폴더 이모지 제거 */}
+            <div style={{ fontWeight: '600', color: '#fff', marginBottom: '6px' }}>클릭하여 공간 사진 업로드</div>
+            <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>JPG, JPEG, PNG 이미지 선택</div>
           </label>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
             <div className="preview-box" style={{ height: 'auto', marginBottom: '15px', position: 'relative', width: '100%', maxHeight: '400px', display: 'flex', justifyContent: 'center', background: '#0f172a', borderRadius: '10px' }}>
               <img src={previewUrl} alt="원본 미리보기" style={{ width: '100%', height: 'auto', maxHeight: '400px', objectFit: 'contain', borderRadius: '10px' }} />
               {uploading && (
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.75)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', borderRadius: '10px', color: '#fff', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
-                  <div style={{ fontSize: '1.5rem', marginBottom: '8px' }}>🚀</div>
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.75)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', borderRadius: '10px', color: '#fff' }}>
+                  {/* 🚀 로켓 이모지 제거 */}
                   <div style={{ fontWeight: '600' }}>서버 등록 중...</div>
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0 10px', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
-              <span style={{ fontSize: '0.85rem', color: '#cbd5e1', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>📦 {selectedFile?.name} ({roundSize(selectedFile?.size)})</span>
-              <label htmlFor="file-upload-input" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: '0 10px' }}>
+              {/* 📦 박스 이모지 제거 */}
+              <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>{selectedFile?.name} ({roundSize(selectedFile?.size)})</span>
+              <label htmlFor="file-upload-input" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
                 사진 변경
               </label>
             </div>
