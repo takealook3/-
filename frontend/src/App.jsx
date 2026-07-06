@@ -144,100 +144,6 @@ export default function App() {
   const [transformResultUrl, setTransformResultUrl] = useState(null);
   const [transformRawAnswer, setTransformRawAnswer] = useState('');
   const [transformSummary, setTransformSummary] = useState(null);
-
-  // AI 응답 텍스트를 분석하여 벽지, 자재, 스타일링으로 요약 분류하는 파서 헬퍼
-  const parseInteriorRecommendation = (text) => {
-    if (!text) return null;
-    const lines = text.split('\n');
-    
-    const recs = {
-      wallpaper: [],  // 벽지 추천
-      materials: [],  // 자재 추천
-      furniture: [],  // 가구/소품 추천
-      general: []     // 종합 조언
-    };
-
-    lines.forEach(line => {
-      const cleanLine = line.replace(/^[-*•\s\d.]+\s*/, '').trim();
-      if (!cleanLine || cleanLine.length < 4) return;
-
-      const lowerLine = cleanLine.toLowerCase();
-      
-      if (lowerLine.includes('벽지') || lowerLine.includes('도배') || lowerLine.includes('실크 벽지') || lowerLine.includes('페인트') || lowerLine.includes('벽면')) {
-        recs.wallpaper.push(cleanLine);
-      }
-      else if (lowerLine.includes('자재') || lowerLine.includes('바닥') || lowerLine.includes('마루') || lowerLine.includes('원목') || lowerLine.includes('타일') || lowerLine.includes('대리석') || lowerLine.includes('석재')) {
-        recs.materials.push(cleanLine);
-      }
-      else if (lowerLine.includes('가구') || lowerLine.includes('소파') || lowerLine.includes('테이블') || lowerLine.includes('의자') || lowerLine.includes('조명') || lowerLine.includes('카펫') || lowerLine.includes('러그') || lowerLine.includes('식물') || lowerLine.includes('화분')) {
-        recs.furniture.push(cleanLine);
-      }
-      else {
-        recs.general.push(cleanLine);
-      }
-    });
-
-    return recs;
-  };
-
-  const handleTransformSubmitGlobal = async (promptText) => {
-    if (!promptText || !promptText.trim() || transformLoading) return;
-
-    setTransformLoading(true);
-    setTransformResultUrl(null);
-    setTransformRawAnswer('');
-    setTransformSummary(null);
-    setCurrentError(null);
-
-    const getFullUrl = (url) => {
-      if (!url) return "";
-      if (url.startsWith("http://") || url.startsWith("https://")) return url;
-      return `${API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
-    };
-
-    try {
-      const res = await sendChatMessage({
-        sessionId: sessionId || "session_default",
-        question: promptText.trim(),
-        imageId: imageId
-      });
-
-      if (res.success) {
-        const respData = res.data || {};
-        const fullImg = getFullUrl(respData.image_url);
-        setTransformResultUrl(fullImg);
-        setTransformRawAnswer(respData.answer || "");
-        
-        const parsed = parseInteriorRecommendation(respData.answer);
-        setTransformSummary(parsed);
-
-        if (respData.result_id && handleGenerateSuccess) {
-          handleGenerateSuccess({
-            resultId: respData.result_id,
-            resultImageUrl: fullImg,
-            style: respData.style || "modern",
-            prompt: promptText.trim(),
-            processingTime: respData.processing_time || 0,
-            status: "completed",
-            recommendations: parsed
-          });
-        }
-      } else {
-        setCurrentError({
-          errorCode: res.errorCode || "PROCESSING_FAILED",
-          message: res.message || "스타일 변환 작업에 실패했습니다."
-        });
-      }
-    } catch (err) {
-      console.error(err);
-      setCurrentError({
-        errorCode: "SERVER_ERROR",
-        message: `스타일 변환 통신 오류: ${err.message}`
-      });
-    } finally {
-      setTransformLoading(false);
-    }
-  };
   // [수정] 숍 카테고리 초기값은 URL 파라미터에서 가져옴
   const [selectedShopCategory, setSelectedShopCategory] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -361,6 +267,100 @@ export default function App() {
   const handleGenerateSuccess = (data) => {
     setResultData(data);
     setCurrentError(null);
+  };
+
+  // AI 응답 텍스트를 분석하여 벽지, 자재, 스타일링으로 요약 분류하는 파서 헬퍼
+  const parseInteriorRecommendation = (text) => {
+    if (!text) return null;
+    const lines = text.split('\n');
+    
+    const recs = {
+      wallpaper: [],  // 벽지 추천
+      materials: [],  // 자재 추천
+      furniture: [],  // 가구/소품 추천
+      general: []     // 종합 조언
+    };
+
+    lines.forEach(line => {
+      const cleanLine = line.replace(/^[-*•\s\d.]+\s*/, '').trim();
+      if (!cleanLine || cleanLine.length < 4) return;
+
+      const lowerLine = cleanLine.toLowerCase();
+      
+      if (lowerLine.includes('벽지') || lowerLine.includes('도배') || lowerLine.includes('실크 벽지') || lowerLine.includes('페인트') || lowerLine.includes('벽면')) {
+        recs.wallpaper.push(cleanLine);
+      }
+      else if (lowerLine.includes('자재') || lowerLine.includes('바닥') || lowerLine.includes('마루') || lowerLine.includes('원목') || lowerLine.includes('타일') || lowerLine.includes('대리석') || lowerLine.includes('석재')) {
+        recs.materials.push(cleanLine);
+      }
+      else if (lowerLine.includes('가구') || lowerLine.includes('소파') || lowerLine.includes('테이블') || lowerLine.includes('의자') || lowerLine.includes('조명') || lowerLine.includes('카펫') || lowerLine.includes('러그') || lowerLine.includes('식물') || lowerLine.includes('화분')) {
+        recs.furniture.push(cleanLine);
+      }
+      else {
+        recs.general.push(cleanLine);
+      }
+    });
+
+    return recs;
+  };
+
+  const handleTransformSubmitGlobal = async (promptText) => {
+    if (!promptText || !promptText.trim() || transformLoading) return;
+
+    setTransformLoading(true);
+    setTransformResultUrl(null);
+    setTransformRawAnswer('');
+    setTransformSummary(null);
+    setCurrentError(null);
+
+    const getFullUrl = (url) => {
+      if (!url) return "";
+      if (url.startsWith("http://") || url.startsWith("https://")) return url;
+      return `${API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+    };
+
+    try {
+      const res = await sendChatMessage({
+        sessionId: sessionId || "session_default",
+        question: promptText.trim(),
+        imageId: imageId
+      });
+
+      if (res.success) {
+        const respData = res.data || {};
+        const fullImg = getFullUrl(respData.image_url);
+        setTransformResultUrl(fullImg);
+        setTransformRawAnswer(respData.answer || "");
+        
+        const parsed = parseInteriorRecommendation(respData.answer);
+        setTransformSummary(parsed);
+
+        if (respData.result_id && handleGenerateSuccess) {
+          handleGenerateSuccess({
+            resultId: respData.result_id,
+            resultImageUrl: fullImg,
+            style: respData.style || "modern",
+            prompt: promptText.trim(),
+            processingTime: respData.processing_time || 0,
+            status: "completed",
+            recommendations: parsed
+          });
+        }
+      } else {
+        setCurrentError({
+          errorCode: res.errorCode || "PROCESSING_FAILED",
+          message: res.message || "스타일 변환 작업에 실패했습니다."
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      setCurrentError({
+        errorCode: "SERVER_ERROR",
+        message: `스타일 변환 통신 오류: ${err.message}`
+      });
+    } finally {
+      setTransformLoading(false);
+    }
   };
 
   // =====================================================================
