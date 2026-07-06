@@ -656,7 +656,7 @@ export default function App() {
                 color: studioTab === 'upload' ? '#FCFAF7' : 'var(--text-muted)',
               }}
             >
-              {imageId ? "🎨 스타일 변환" : "📸 공간 사진 업로드"}
+              {imageId ? "🎨 스타일 변환" : "📸 사진 업로드"}
             </button>
             <button
               onClick={() => setStudioTab('repair')}

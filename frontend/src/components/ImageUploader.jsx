@@ -79,7 +79,7 @@ export default function ImageUploader({
 
   return (
     <div className="card" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
-      <div className="card-title" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', fontSize: '1.35rem', fontWeight: '800', color: 'var(--primary)', letterSpacing: '-0.02em' }}>📸 변환할 인테리어 사진 업로드</div>
+      <div className="card-title" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', fontSize: '1.35rem', fontWeight: '800', color: 'var(--primary)', letterSpacing: '-0.02em' }}>📸 사진 업로드</div>
       <div className="card-desc" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', lineHeight: '1.6', opacity: 0.9 }}>거실, 방, 주방 등 스타일을 바꾸고 싶은 공간의 원본 사진을 선택해 주세요. 이미지를 등록하면 자동으로 서버에 업로드됩니다. (지원 형식: JPG, JPEG, PNG)</div>
 
       {/* Streamlit 동기화: 등록 완료 초록색 알림 띠 */}
