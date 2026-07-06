@@ -34,7 +34,8 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
 
   // 유사 가구 검색 상태 변수
   const [searchingProducts, setSearchingProducts] = useState(false);
-  const [productsList, setProductsList] = useState([]);
+  const [productsListA, setProductsListA] = useState([]);
+  const [productsListB, setProductsListB] = useState([]);
 
   const containerRef = useRef(null);
   const imgRef = useRef(null);
@@ -129,9 +130,11 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
     if (maskMode === 'A') {
       setBboxNormA(null);
       setMaskPixelsA(null);
+      setProductsListA([]);
     } else {
       setBboxNormB(null);
       setMaskPixelsB(null);
+      setProductsListB([]);
     }
   };
 
@@ -142,7 +145,8 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
     setBboxNormB(null);
     setMaskPixelsB(null);
     setEditedResultUrl(null);
-    setProductsList([]);
+    setProductsListA([]);
+    setProductsListB([]);
     onError(null);
   };
 
@@ -238,33 +242,54 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
     }
   };
 
-  // 유사 가구 쇼핑 정보 검색
+  // 유사 가구 쇼핑 정보 검색 (A와 B 다중 영역 병렬 검색)
   const handleSearchProducts = async () => {
-    const activeMaskPixels = maskMode === 'A' ? maskPixelsA : maskPixelsB;
-    const activePromptText = maskMode === 'A' ? promptA : promptB;
-
-    if (!activeMaskPixels) {
-      onError({ errorCode: "MASK_REQUIRED", message: `캔버스에 검색할 가구 영역(${maskMode === 'A' ? '가구 A' : '가구 B'})을 드래그하여 원형으로 지정해 주세요.` });
+    if (!maskPixelsA && !maskPixelsB) {
+      onError({ errorCode: "MASK_REQUIRED", message: "유사 가구를 검색할 영역(A영역 또는 B영역)을 최소 한 개 이상 드래그하여 원형으로 지정해 주세요." });
       return;
     }
     
     onError(null);
     setSearchingProducts(true);
-    setProductsList([]);
+    setProductsListA([]);
+    setProductsListB([]);
 
     try {
-      const res = await searchProducts({
-        imageId,
-        sessionId,
-        maskPixels: activeMaskPixels,
-        prompt: activePromptText.trim()
-      });
+      const promises = [];
 
-      if (res.success) {
-        setProductsList(res.data?.products || []);
-      } else {
-        onError({ errorCode: res.errorCode || "SEARCH_FAILED", message: res.message });
+      if (maskPixelsA) {
+        promises.push((async () => {
+          const res = await searchProducts({
+            imageId,
+            sessionId,
+            maskPixels: maskPixelsA,
+            prompt: promptA.trim()
+          });
+          if (res.success) {
+            setProductsListA(res.data?.products || []);
+          } else {
+            console.warn("A 영역 상품 검색 실패:", res.message);
+          }
+        })());
       }
+
+      if (maskPixelsB) {
+        promises.push((async () => {
+          const res = await searchProducts({
+            imageId,
+            sessionId,
+            maskPixels: maskPixelsB,
+            prompt: promptB.trim()
+          });
+          if (res.success) {
+            setProductsListB(res.data?.products || []);
+          } else {
+            console.warn("B 영역 상품 검색 실패:", res.message);
+          }
+        })());
+      }
+
+      await Promise.all(promises);
     } catch (err) {
       console.error(err);
       onError({ errorCode: "SEARCH_ERROR", message: `상품 검색 중 장애가 발생했습니다: ${err.message}` });
@@ -482,16 +507,16 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
             <button
               type="button"
               onClick={handleSearchProducts}
-              disabled={searchingProducts || (maskMode === 'A' ? !maskPixelsA : !maskPixelsB)}
+              disabled={searchingProducts || (!maskPixelsA && !maskPixelsB)}
               className="btn btn-secondary btn-full"
               style={{ 
                 padding: '14px', 
                 fontSize: '0.95rem', 
                 fontWeight: '700',
-                cursor: (((maskMode === 'A' ? !maskPixelsA : !maskPixelsB) || searchingProducts) ? 'not-allowed' : 'pointer'),
-                background: (maskMode === 'A' ? !maskPixelsA : !maskPixelsB) ? 'var(--bg-card-inner)' : 'var(--bg-card-inner)',
+                cursor: (((!maskPixelsA && !maskPixelsB) || searchingProducts) ? 'not-allowed' : 'pointer'),
+                background: (!maskPixelsA && !maskPixelsB) ? 'var(--bg-card-inner)' : 'var(--bg-card-inner)',
                 color: 'var(--text-main)',
-                border: (maskMode === 'A' ? !maskPixelsA : !maskPixelsB) ? '1px solid var(--border-color)' : '1px solid var(--primary)',
+                border: (!maskPixelsA && !maskPixelsB) ? '1px solid var(--border-color)' : '1px solid var(--primary)',
                 borderRadius: '8px',
                 transition: 'all 0.25s ease',
                 fontFamily: 'Outfit, sans-serif'
@@ -503,71 +528,150 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
 
           <hr style={{ borderColor: 'var(--border-color)', margin: '4px 0' }} />
 
-          {/* 쇼핑 정보 카드 리스트 */}
-          {productsList.length > 0 && (
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
-              <div style={{ fontSize: '1.02rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '12px', fontFamily: 'Outfit, sans-serif' }}>
+          {/* 쇼핑 정보 카드 리스트 (A영역 & B영역 분리 렌더링) */}
+          {(productsListA.length > 0 || productsListB.length > 0) && (
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ fontSize: '1.02rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '4px', fontFamily: 'Outfit, sans-serif' }}>
                 🛍️ 실시간 매칭 유사 상품 정보
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto', paddingRight: '4px' }}>
-                {productsList.map((item, idx) => (
-                  <div 
-                    key={idx} 
-                    style={{ 
-                      display: 'flex', 
-                      background: 'var(--bg-card-inner)', 
-                      borderRadius: '8px', 
-                      overflow: 'hidden', 
-                      border: '1px solid var(--border-color)',
-                      padding: '8px',
-                      gap: '12px'
-                    }}
-                  >
-                    <img 
-                      src={item.image_url} 
-                      alt={item.product_name} 
-                      style={{ 
-                        width: '72px', 
-                        height: '72px', 
-                        objectFit: 'cover', 
-                        borderRadius: '6px',
-                        border: '1px solid var(--border-color)'
-                      }} 
-                    />
-                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1 }}>
-                      <div>
-                        <div style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-main)', lineHeight: '1.25', marginBottom: '2px' }}>
-                          {item.product_name}
-                        </div>
-                        <div style={{ fontSize: '0.88rem', fontWeight: '800', color: 'var(--text-main)' }}>
-                          {item.price}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
-                        <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.05)', padding: '2px 6px', borderRadius: '4px' }}>
-                          유사도 {Math.round(item.similarity * 100)}%
-                        </span>
-                        <a 
-                          href={item.purchase_link} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          style={{ 
-                            fontSize: '0.72rem', 
-                            fontWeight: '700', 
-                            color: '#fff', 
-                            background: 'var(--primary)', 
-                            padding: '4px 10px', 
-                            borderRadius: '4px',
-                            textDecoration: 'none'
-                          }}
-                        >
-                          구매 링크 ↗
-                        </a>
-                      </div>
-                    </div>
+              
+              {/* A 영역 추천 리스트 */}
+              {productsListA.length > 0 && (
+                <div>
+                  <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#8B7E74', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#8B7E74' }}></span>
+                    🔵 A 영역 매칭 상품
                   </div>
-                ))}
-              </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
+                    {productsListA.map((item, idx) => (
+                      <div 
+                        key={`A-${idx}`} 
+                        style={{ 
+                          display: 'flex', 
+                          background: 'var(--bg-card-inner)', 
+                          borderRadius: '8px', 
+                          overflow: 'hidden', 
+                          border: '1px solid var(--border-color)',
+                          padding: '8px',
+                          gap: '12px'
+                        }}
+                      >
+                        <img 
+                          src={item.image_url} 
+                          alt={item.product_name} 
+                          style={{ 
+                            width: '64px', 
+                            height: '64px', 
+                            objectFit: 'cover', 
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-color)'
+                          }} 
+                        />
+                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1 }}>
+                          <div>
+                            <div style={{ fontSize: '0.78rem', fontWeight: '700', color: 'var(--text-main)', lineHeight: '1.25', marginBottom: '2px' }}>
+                              {item.product_name}
+                            </div>
+                            <div style={{ fontSize: '0.82rem', fontWeight: '800', color: 'var(--text-main)' }}>
+                              {item.price}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                            <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.05)', padding: '1px 5px', borderRadius: '4px' }}>
+                              유사도 {Math.round(item.similarity * 100)}%
+                            </span>
+                            <a 
+                              href={item.purchase_link} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              style={{ 
+                                fontSize: '0.68rem', 
+                                fontWeight: '700', 
+                                color: '#fff', 
+                                background: '#8B7E74', 
+                                padding: '3px 8px', 
+                                borderRadius: '4px',
+                                textDecoration: 'none'
+                              }}
+                            >
+                              구매 링크 ↗
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* B 영역 추천 리스트 */}
+              {productsListB.length > 0 && (
+                <div style={{ borderTop: productsListA.length > 0 ? '1px dashed var(--border-color)' : 'none', paddingTop: productsListA.length > 0 ? '12px' : '0' }}>
+                  <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#C7B7AE', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#C7B7AE' }}></span>
+                    🔴 B 영역 매칭 상품
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
+                    {productsListB.map((item, idx) => (
+                      <div 
+                        key={`B-${idx}`} 
+                        style={{ 
+                          display: 'flex', 
+                          background: 'var(--bg-card-inner)', 
+                          borderRadius: '8px', 
+                          overflow: 'hidden', 
+                          border: '1px solid var(--border-color)',
+                          padding: '8px',
+                          gap: '12px'
+                        }}
+                      >
+                        <img 
+                          src={item.image_url} 
+                          alt={item.product_name} 
+                          style={{ 
+                            width: '64px', 
+                            height: '64px', 
+                            objectFit: 'cover', 
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-color)'
+                          }} 
+                        />
+                        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1 }}>
+                          <div>
+                            <div style={{ fontSize: '0.78rem', fontWeight: '700', color: 'var(--text-main)', lineHeight: '1.25', marginBottom: '2px' }}>
+                              {item.product_name}
+                            </div>
+                            <div style={{ fontSize: '0.82rem', fontWeight: '800', color: 'var(--text-main)' }}>
+                              {item.price}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px' }}>
+                            <span style={{ fontSize: '0.64rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.05)', padding: '1px 5px', borderRadius: '4px' }}>
+                              유사도 {Math.round(item.similarity * 100)}%
+                            </span>
+                            <a 
+                              href={item.purchase_link} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              style={{ 
+                                fontSize: '0.68rem', 
+                                fontWeight: '700', 
+                                color: 'var(--primary)', 
+                                background: '#C7B7AE', 
+                                padding: '3px 8px', 
+                                borderRadius: '4px',
+                                textDecoration: 'none'
+                              }}
+                            >
+                              구매 링크 ↗
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
