@@ -2509,87 +2509,24 @@ def search_similar_products(payload: Dict[str, Any]):
         except Exception as e:
             print(f"⚠️ [Product Search] 이미지 오려내기 중 에러: {e}")
 
-    # 3. 제미나이 구글 쇼핑 연동 검색 (Search Grounding) 시도
+    # 3. 실시간 네이버 쇼핑 공식 OpenAPI 연동 최우선 실행 (구글 제미나이 그라운딩 검색 우회)
     products = []
     success_search = False
     
     if cropped_img_path and os.path.exists(cropped_img_path):
         try:
-            import google.generativeai as genai
-            api_key = os.getenv("GOOGLE_API_KEY")
-            if api_key:
-                genai.configure(api_key=api_key)
-                
-                # 크롭된 이미지 PIL로 로드
-                from PIL import Image as PILImage
-                c_img = PILImage.open(cropped_img_path)
-                
-                # 제미나이 2.0 및 구글 실시간 검색 툴(Search Grounding) 활성화
-                model = genai.GenerativeModel(
-                    model_name="gemini-2.0-flash",
-                    tools=[{"google_search_retrieval": {}}]
-                )
-                
-                prompt_text = (
-                    "이 이미지 속의 가구와 외관(형태, 색상, 소재, 스타일)이 매우 유사한 실제 한국 쇼핑몰(네이버 쇼핑, 쿠팡, 이케아, 한샘 등)에서 판매 중인 대표적인 가구 상품 3가지를 구글 실시간 쇼핑 검색을 사용해서 찾아줘.\n"
-                    "그리고 반드시 다음 JSON 포맷에 완벽하게 일치하는 형식으로만 텍스트로 대답해줘. 추가적인 해설이나 마크다운 코드 블록 기호(```json 등)는 전혀 넣지 마.\n"
-                    "{\n"
-                    "  \"products\": [\n"
-                    "    {\n"
-                    "      \"product_name\": \"실제 판매 중인 상품명\",\n"
-                    "      \"price\": \"가격 정보 (예: 250,000원)\",\n"
-                    "      \"image_url\": \"구글 검색에서 찾은 실제 상품 이미지 URL (아주 길거나 깨지지 않는 작동하는 절대경로 링크여야 함)\",\n"
-                    "      \"purchase_link\": \"실제 상품을 살 수 있는 한국 쇼핑몰 상세 구매 페이지 주소(URL)\",\n"
-                    "      \"similarity\": 0.95\n"
-                    "    }\n"
-                    "  ]\n"
-                    "}"
-                )
-                
-                response = model.generate_content([c_img, prompt_text])
-                text_res = response.text.strip()
-                
-                # 마크다운 코드 블록이 감싸져 있는 경우 정화
-                if text_res.startswith("```"):
-                    lines = text_res.split("\n")
-                    if lines[0].startswith("```"):
-                        lines = lines[1:]
-                    if lines[-1].startswith("```"):
-                        lines = lines[:-1]
-                    text_res = "\n".join(lines).strip()
-                
-                parsed = json.loads(text_res)
-                if "products" in parsed and isinstance(parsed["products"], list):
-                    for p in parsed["products"][:3]:
-                        products.append(
-                            ProductItem(
-                                product_name=p.get("product_name") or "유사 매칭 가구 상품",
-                                price=p.get("price") or "가격 정보 없음",
-                                image_url=p.get("image_url") or "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
-                                purchase_link=p.get("purchase_link") or "https://www.google.com",
-                                similarity=float(p.get("similarity") or 0.85)
-                            )
-                        )
-                    success_search = True
-                    print(f"🛍️ [Product Search] 제미나이 구글 쇼핑 연동 검색 성공! 수집 개수: {len(products)}개")
-        except Exception as search_err:
-            print(f"⚠️ [Product Search] 제미나이 구글 쇼핑 연동 중 에러 (Fallback Mock 전환): {search_err}")
-
-    # 4. [Fallback 2단계] 제미나이 구글 쇼핑 연동 실패 시 로컬 YOLOv8 객체 탐지 및 실시간 네이버 쇼핑 공식 OpenAPI 연동 시도
-    if not success_search and cropped_img_path and os.path.exists(cropped_img_path):
-        try:
             search_query = None
             
-            # 1순위: Gemini Vision 기반 동적 묘사 쿼리 추출 시도 (카테고리 제약 탈피)
+            # 1순위: Gemini Vision 기반 동적 묘사 쿼리 추출 시도 (가장 묘사적이고 정확한 네이버용 검색어 추출)
             try:
-                print("🔍 [Product Search Fallback] 1순위 Gemini Vision 기반 시각적 검색어 추출 시작...")
+                print("🔍 [Product Search] 1순위 Gemini Vision 기반 시각적 검색어 추출 시작...")
                 search_query = extract_visual_search_query_with_gemini(cropped_img_path)
             except Exception as vision_err:
-                print(f"⚠️ [Product Search Fallback] Gemini Vision 검색어 추출 에러: {vision_err}")
+                print(f"⚠️ [Product Search] Gemini Vision 검색어 추출 에러: {vision_err}")
                 
             # 2순위: Gemini Vision 실패 시, 로컬 YOLOv8 기반 기본 카테고리 매핑 작동
             if not search_query:
-                print("🔍 [Product Search Fallback] 2순위 로컬 YOLOv8 객체 탐지 및 기본 키워드 매칭 기동...")
+                print("🔍 [Product Search] 2순위 로컬 YOLOv8 객체 탐지 및 기본 키워드 매칭 기동...")
                 detected_cat = detect_furniture_class(cropped_img_path)
                 
                 # 탐지된 영문 가구 클래스에 따라 네이버 쇼핑용 한글 검색 쿼리 매핑
@@ -2601,9 +2538,25 @@ def search_similar_products(payload: Dict[str, Any]):
                     "lighting": "플로어 스탠드 조명",
                     "plant": "인테리어 화분 식물"
                 }
-                search_query = query_map.get(detected_cat, "인테리어 가구")
+                search_query = query_map.get(detected_cat, None)
+                
+                # [한글 주석] 제미나이 429 한도 초과 및 YOLOv8 미감지 시, 사용자가 수선 칸에 직접 입력한 텍스트 프롬프트를 2차 파싱하여 올바른 가구를 분류합니다.
+                if not search_query:
+                    prompt_lower = (payload.get("prompt") or "").lower()
+                    if any(x in prompt_lower for x in ["테이블", "식탁", "책상", "desk", "table", "식사"]):
+                        search_query = "원목 식탁 테이블"
+                    elif any(x in prompt_lower for x in ["침대", "bed", "sleep", "이불", "매트리스"]):
+                        search_query = "모던 침대"
+                    elif any(x in prompt_lower for x in ["의자", "체어", "chair", "스툴"]):
+                        search_query = "디자인 의자"
+                    elif any(x in prompt_lower for x in ["조명", "스탠드", "light", "lamp", "네온"]):
+                        search_query = "인테리어 플로어 스탠드 조명"
+                    elif any(x in prompt_lower for x in ["화분", "식물", "plant", "tree"]):
+                        search_query = "인테리어 화분 식물"
+                    else:
+                        search_query = "인테리어 가구"
             
-            print(f"🛍️ [Product Search Fallback] 2단계 실시간 네이버 공식 OpenAPI 호출 (검색어: '{search_query}')")
+            print(f"🛍️ [Product Search] 실시간 네이버 공식 OpenAPI 호출 (검색어: '{search_query}')")
             api_items = search_naver_shopping_api(search_query)
             
             if api_items and len(api_items) > 0:
@@ -2618,11 +2571,11 @@ def search_similar_products(payload: Dict[str, Any]):
                         )
                     )
                 success_search = True
-                print(f"🛍️ [Product Search Fallback] 2단계 실시간 OpenAPI 연동 성공! 수집 개수: {len(products)}개")
+                print(f"🛍️ [Product Search] 실시간 네이버 OpenAPI 연동 성공! 수집 개수: {len(products)}개")
             else:
-                print("⚠️ [Product Search Fallback] 네이버 API 조회 결과가 없거나 API 키가 설정되지 않아 최종 3단계 Mock DB로 전환합니다.")
+                print("⚠️ [Product Search] 네이버 API 조회 결과가 없거나 API 키가 설정되지 않아 최종 3단계 Mock DB로 전환합니다.")
         except Exception as fallback_err:
-            print(f"⚠️ [Product Search Fallback] 2단계 YOLO & OpenAPI 연동 중 에러: {fallback_err}")
+            print(f"⚠️ [Product Search] 네이버 OpenAPI 연동 중 에러: {fallback_err}")
 
     # 5. [Fallback 3단계] 모든 실시간 검색 실패 시 최종 고품질 모킹 데이터베이스 적용
     if not success_search:
@@ -2679,16 +2632,16 @@ def search_similar_products(payload: Dict[str, Any]):
                 user_typed_category = "plant"
                 
         # 계층형 카테고리 매칭 적용:
-        # 1순위: 사용자가 명확히 타이핑한 카테고리 (디폴트가 아닌 경우)
-        # 2순위: 이미지 분석(YOLOv8 또는 종횡비 필터)에 의해 탐지된 결과 (sofa, bed, table, chair, lighting, plant)
-        # 3순위: 디폴트 프롬프트 분석 및 기타 텍스트 기반 매칭
-        # 4순위: 최종 Fallback "sofa"
-        if user_typed_category:
-            target_category = user_typed_category
-            print(f"🎯 [Category Matching] 1순위 사용자 명시 키워드 매칭 완료: {target_category}")
-        elif 'detected_cat' in locals() and detected_cat in ["sofa", "bed", "table", "chair", "lighting", "plant"]:
+        # 1순위: 이미지 분석(YOLOv8 또는 종횡비/색상 필터)에 의해 실제로 오려내어 감지된 가구 결과 (sofa, bed, table, chair, lighting, plant)
+        # 2순위: 사용자가 명시한 텍스트 카테고리 (디폴트가 아닌 경우)
+        # 3순위: 디폴트 프롬프트 분석 및 기타 텍스트 매칭
+        # 4순위: 최종 Fallback "table" (또는 "sofa")
+        if 'detected_cat' in locals() and detected_cat in ["sofa", "bed", "table", "chair", "lighting", "plant"]:
             target_category = detected_cat
-            print(f"🎯 [Category Matching] 2순위 이미지 분석 감지 매칭 완료: {target_category}")
+            print(f"🎯 [Category Matching] 1순위 이미지 분석 감지 매칭 성공: {target_category}")
+        elif user_typed_category:
+            target_category = user_typed_category
+            print(f"🎯 [Category Matching] 2순위 사용자 명시 키워드 매칭 성공: {target_category}")
         else:
             if any(x in combined_query for x in ["침대", "bed", "sleep", "이불", "매트리스"]):
                 target_category = "bed"
@@ -2702,7 +2655,7 @@ def search_similar_products(payload: Dict[str, Any]):
                 target_category = "plant"
             else:
                 target_category = "sofa"
-            print(f"🎯 [Category Matching] 3순위 텍스트 기반 매칭 완료: {target_category}")
+            print(f"🎯 [Category Matching] 3순위 텍스트 기반 매칭 성공: {target_category}")
             
         recommended_items = product_db.get(target_category, product_db["sofa"])
         
