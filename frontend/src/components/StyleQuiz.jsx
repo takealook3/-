@@ -194,6 +194,7 @@ export default function StyleQuiz({ onApplyPrompt }) {
   const [resultStyle, setResultStyle] = useState(null);
   const [generatedPrompt, setGeneratedPrompt] = useState('');
   const [copied, setCopied] = useState(false);
+  const [resultTraits, setResultTraits] = useState([]); // 성향 저장용 상태 추가
 
   // 옵션 선택 시 점수 누적 및 다음 단계 이동
   const handleSelectOption = (axis, score) => {
@@ -209,6 +210,28 @@ export default function StyleQuiz({ onApplyPrompt }) {
         calculateResult(nextScores);
       }, 1500); // 1.5초 분석 애니메이션 대기
     }
+  };
+
+  const getStyleDescription = (name) => {
+    const descMap = {
+      '내추럴': '따뜻한 원목 가구와 자연 질감의 패브릭을 매치하여 도심 속에서도 숲속 같은 편안함과 자연의 생동감을 제공하는 힐링 스타일입니다.',
+      '다크 모던': '깊이 있는 어두운 톤의 월넛 원목과 무채색 스틸 가구의 강렬한 대비를 통해 시크하고 묵직한 중후함을 살린 남성적이고 세련된 스타일입니다.',
+      '미니멀': '불필요한 장식과 소품을 배제하고 간결한 직선 실루엣과 차분한 모노톤을 기본으로 설계하여, 시각적 피로를 덜어주는 극도의 정돈미를 제공합니다.',
+      '북유럽': '화사한 자연 채광을 극대화하며, 부드러운 패브릭과 파스텔톤 컬러 포인트를 더해 실용적이면서도 따뜻한 북유럽의 코지함을 제공합니다.',
+      '재팬디': '일본의 젠 스타일이 주는 고요한 정갈함과 북유럽의 따뜻함이 기분 좋게 어우러진 현대적인 베이지/우드 중심의 럭셔리 스타일입니다.'
+    };
+    return descMap[name] || '선택하신 취향의 조화로운 질감과 라이트 톤을 기반으로, 공간의 시각적 밸런스와 고급스러운 감성을 유감없이 발휘하는 맞춤형 공간 인테리어입니다.';
+  };
+
+  const getStyleMaterialTip = (name) => {
+    const materialMap = {
+      '내추럴': '실크 무지 벽지 (베이지/아이보리), 광폭 원목 마루, 린넨 패브릭 소파',
+      '다크 모던': '다크 차콜 도장 벽면, 월넛 원목 가구, 블랙 가죽 시트, 스틸 프레임',
+      '미니멀': '클린 화이트 무광 페인트, 포슬린 타일 바닥, 간결한 미니멀 소파',
+      '북유럽': '라이트 그레이 실크벽지, 내추럴 리얼 오크 바닥, 쿨그레이 패브릭 소파',
+      '재팬디': '샌드 베이지 친환경 도배지, 미디움 우드 텍스처 마루, 미니멀 라탄 조명'
+    };
+    return materialMap[name] || '화이트/뉴트럴 도배 벽면, 차분한 오크 톤 마루, 패브릭 가구 조화';
   };
 
   // 결과 연산 및 매핑
@@ -235,6 +258,7 @@ export default function StyleQuiz({ onApplyPrompt }) {
     ].join(', ');
 
     setResultStyle(dbStyle);
+    setResultTraits([spaceLabel, toneLabel, eraLabel]);
     // [수정] 100% 깔끔한 한국어 핵심 프롬프트 키워드 조합으로 정돈
     setGeneratedPrompt(`${dbStyle.name} 스타일, ${promptKeywords}`);
     setIsAnalyzing(false);
@@ -248,6 +272,7 @@ export default function StyleQuiz({ onApplyPrompt }) {
     setResultStyle(null);
     setGeneratedPrompt('');
     setCopied(false);
+    setResultTraits([]);
   };
 
   const handleCopyPrompt = () => {
@@ -274,69 +299,141 @@ export default function StyleQuiz({ onApplyPrompt }) {
   // 2. 결과 출력 화면
   if (showResult && resultStyle) {
     return (
-      <div className="quiz-container" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
-        <div className="quiz-result-card glassmorphism p-xl flex-column gap-lg animate-fade-in" style={{ padding: '36px', borderRadius: '20px' }}>
-          <div className="text-center" style={{ marginBottom: '8px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: '700', color: 'var(--primary)', background: 'rgba(43, 53, 48, 0.08)', padding: '4px 12px', borderRadius: '12px' }}>
-              취향 분석 결과
+      <div className="quiz-container" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', width: '100%', maxWidth: '960px', margin: '0 auto' }}>
+        <div className="quiz-result-card glassmorphism animate-fade-in" style={{ padding: '48px 40px', borderRadius: '32px', backgroundColor: '#FFFFFF', border: '1px solid rgba(205, 188, 178, 0.3)', boxShadow: '0 30px 70px rgba(46,40,36,0.06)' }}>
+          
+          <div className="text-center" style={{ marginBottom: '36px' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8B7E74', background: 'rgba(139, 126, 116, 0.1)', padding: '6px 18px', borderRadius: '30px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Your Styling Match
             </span>
-            <h2 style={{ fontSize: '1.35rem', fontWeight: '850', color: 'var(--text-main)', marginTop: '12px' }}>나의 인테리어 취향 스타일</h2>
+            <h2 style={{ fontSize: '2.4rem', fontWeight: '950', color: 'var(--primary)', marginTop: '16px', letterSpacing: '-0.8px', fontFamily: 'Outfit, sans-serif' }}>
+              🎉 {resultStyle.name} 스타일
+            </h2>
+            
+            {/* 성향 배지 태그 리스트 */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '14px' }}>
+              {resultTraits.map((trait, idx) => (
+                <span key={idx} style={{ fontSize: '0.74rem', fontWeight: '700', backgroundColor: '#F5EFEB', color: '#7A6C62', padding: '4px 14px', borderRadius: '30px', border: '1px solid rgba(205, 188, 178, 0.2)' }}>
+                  #{trait}
+                </span>
+              ))}
+            </div>
           </div>
 
-          <div className="quiz-result-layout" style={{ gap: '24px' }}>
+          <div className="quiz-result-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: '40px', alignItems: 'stretch' }}>
             {/* 좌측: 고해상도 매핑 프리미엄 화보 이미지 */}
-            <div className="quiz-result-image-box" style={{ borderRadius: '12px', overflow: 'hidden' }}>
+            <div className="quiz-result-image-box" style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 20px 48px rgba(0,0,0,0.06)', position: 'relative', minHeight: '420px', height: '100%' }}>
               <img 
                 src={resultStyle.imageUrl} 
                 alt={resultStyle.name} 
                 className="quiz-result-img"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' }}
               />
-              <div className="quiz-result-img-overlay">
-                <span className="quiz-style-badge" style={{ backgroundColor: 'var(--primary)', fontFamily: 'Outfit, sans-serif' }}>{resultStyle.name} 스타일</span>
+              <div className="quiz-result-img-overlay" style={{ position: 'absolute', bottom: '0', left: '0', right: '0', background: 'linear-gradient(transparent, rgba(28,23,20,0.75))', padding: '24px', color: '#fff' }}>
+                <span className="quiz-style-badge" style={{ backgroundColor: 'var(--primary)', color: '#FCFAF7', padding: '8px 18px', borderRadius: '30px', fontSize: '0.8rem', fontWeight: '800', letterSpacing: '0.03em' }}>
+                  {resultStyle.name} Curation
+                </span>
               </div>
             </div>
 
             {/* 우측: 감성 설명 및 프롬프트 연동 섹션 */}
-            <div className="quiz-result-info flex-column" style={{ gap: '16px' }}>
-              <div className="style-description-box p-md bg-glass-dark" style={{ borderRadius: '10px', padding: '16px', background: '#FCFAF7', border: '1px solid var(--border-color)' }}>
-                <div className="style-tips-list">
-                  <strong style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: '800' }}>💡 공간 스타일링 연출 팁: </strong>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-main)', opacity: 0.9, marginLeft: '4px' }}>
-                    선택하신 질감과 톤이 가장 돋보일 수 있는 베이직 가구를 중심으로 공간의 분위기를 극대화해 보세요.
-                  </span>
+            <div className="quiz-result-info" style={{ display: 'flex', flexDirection: 'column', gap: '22px', justifyContent: 'space-between' }}>
+              
+              {/* 1) 맞춤 설명 가이드 카드 & 2) 추천 마감재 가이드 카드 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ padding: '22px', background: 'rgba(252, 250, 247, 0.8)', border: '1px solid rgba(205, 188, 178, 0.4)', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.01)' }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: '900', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>✍️</span> 나만의 스타일 특징
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.65', opacity: 0.9 }}>
+                    {getStyleDescription(resultStyle.name)}
+                  </p>
+                </div>
+
+                <div style={{ padding: '22px', background: 'rgba(252, 250, 247, 0.8)', border: '1px solid rgba(205, 188, 178, 0.4)', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.01)' }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: '900', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>💡</span> 추천 마감재 & 포인트 데코
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.65', opacity: 0.9 }}>
+                    {getStyleMaterialTip(resultStyle.name)}
+                  </p>
                 </div>
               </div>
 
               {/* 영문 프롬프트 제공 박스 */}
-              <div className="prompt-output-box" style={{ background: '#FCFAF7', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '14px 16px' }}>
-                <label style={{ fontSize: '0.74rem', fontWeight: '800', color: 'var(--primary)', display: 'block', marginBottom: '8px' }}>생성된 AI 리모델링 키워드</label>
-                <div className="prompt-text-field">
-                  <span className="prompt-text-content">{generatedPrompt}</span>
+              <div className="prompt-output-box" style={{ background: '#FAF8F5', border: '1px solid rgba(205, 188, 178, 0.5)', borderRadius: '20px', padding: '18px 24px', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.01)' }}>
+                <label style={{ fontSize: '0.74rem', fontWeight: '850', color: '#8B7E74', display: 'block', marginBottom: '8px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                  Generated AI Remodeling Keywords
+                </label>
+                <div className="prompt-text-field" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                  <span className="prompt-text-content" style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: '700', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {generatedPrompt}
+                  </span>
                   <button 
                     onClick={handleCopyPrompt} 
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-muted)' }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--primary)', padding: '6px', transition: 'opacity 0.2s' }}
                     title="프롬프트 복사"
+                    onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
+                    onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                   >
-                    {copied ? <Check style={{ color: '#16a34a' }} size={16} /> : <Copy size={16} />}
+                    {copied ? <Check style={{ color: '#16a34a' }} size={18} /> : <Copy size={18} />}
                   </button>
                 </div>
               </div>
 
-              {/* 하단 제어 액션들 - 간격을 확실히 벌리고 한눈에 인지되도록 개선 */}
-              <div style={{ display: 'flex', gap: '20px', marginTop: '16px' }}>
+              {/* 하단 제어 액션들 */}
+              <div style={{ display: 'flex', gap: '16px', marginTop: '4px' }}>
                 <button 
                   onClick={() => onApplyPrompt(generatedPrompt)} 
                   className="btn btn-primary"
-                  style={{ flex: 1, padding: '12px 24px', fontSize: '0.85rem', fontWeight: '750', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', borderRadius: '10px', transition: 'all 0.25s' }}
+                  style={{ 
+                    flex: 1, 
+                    padding: '16px 24px', 
+                    fontSize: '0.9rem', 
+                    fontWeight: '800', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    gap: '8px', 
+                    borderRadius: '16px', 
+                    border: 'none', 
+                    cursor: 'pointer', 
+                    transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                    boxShadow: '0 8px 24px rgba(43, 53, 48, 0.15)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 12px 30px rgba(43, 53, 48, 0.25)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(43, 53, 48, 0.15)';
+                  }}
                 >
-                  이 스타일로 AI 리모델링 해보기 <ArrowRight size={16} />
+                  이 스타일로 AI 리모델링 해보기 <ArrowRight size={18} />
                 </button>
                 <button 
                   onClick={handleRestart} 
                   className="btn btn-secondary"
-                  style={{ padding: '12px 20px', fontSize: '0.85rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '10px', transition: 'all 0.25s' }}
+                  style={{ 
+                    padding: '16px 24px', 
+                    fontSize: '0.9rem', 
+                    fontWeight: '800', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    borderRadius: '16px', 
+                    cursor: 'pointer', 
+                    transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)' 
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
                 >
-                  <RefreshCw size={16} /> 다시 하기
+                  <RefreshCw size={18} /> 다시 하기
                 </button>
               </div>
             </div>

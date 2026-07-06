@@ -88,6 +88,27 @@ class ErrorCode:
     SERVER_ERROR = "SERVER_ERROR"                   # 꽌踰 궡遺 삤瑜
 
 
+    MODEL_NOT_FOUND = "MODEL_NOT_FOUND"             # Realistic Vision 등 모델 파일을 찾을 수 없음
+
+
+    MODEL_LOAD_FAILED = "MODEL_LOAD_FAILED"         # 모델 로딩 실패
+
+
+    IMAGE_GENERATION_FAILED = "IMAGE_GENERATION_FAILED" # 이미지 생성 중 오류 발생
+
+
+    CUDA_OUT_OF_MEMORY = "CUDA_OUT_OF_MEMORY"       # GPU 메모리 부족
+
+
+    MASK_REQUIRED = "MASK_REQUIRED"                 # 수정할 마스크나 영역이 선택되지 않음
+
+
+    REGION_REQUIRED = "REGION_REQUIRED"             # bbox 좌표가 없음
+
+
+    INPAINTING_FAILED = "INPAINTING_FAILED"         # 부분 가구 교체/수정 생성 실패
+
+
 
 
 
@@ -450,6 +471,9 @@ class ImageGenerateRequest(BaseModel):
     image_id: Optional[str] = Field(None, description="원본 이미지 고유 ID")
     strength: Optional[float] = Field(65.0, description="스타일 변환 강도 (0~100)")
     keep_structure: Optional[bool] = Field(True, description="기존 공간 구조 유지 여부")
+    mode: Optional[str] = Field("style_transform", description="작업 모드 (style_transform 또는 inpainting)")
+    mask: Optional[Any] = Field(None, description="마스크 정보 (좌표 리스트 또는 문자열)")
+    bbox: Optional[Any] = Field(None, description="바운딩 박스 좌표 dict 또는 list")
 
 
 class ImageGenerateResponse(BaseModel):
@@ -692,6 +716,7 @@ class SessionHistoryResponse(BaseModel):
     generations: List[dict] = Field(default_factory=list, description="이미지 생성 내역 목록")
     edits: List[dict] = Field(default_factory=list, description="이미지 편집 및 낙서 제거 내역 목록")
     chats: List[dict] = Field(default_factory=list, description="챗봇 대화 내역 목록")
+    results: List[dict] = Field(default_factory=list, description="통합 이미지 결과 목록")
     updated_at: str = Field(..., description="최근 활동 일시")
 
 
@@ -715,3 +740,38 @@ class ProductSearchResponse(BaseModel):
     [유사 상품 검색 결과 목록]
     """
     products: List[ProductItem] = Field(default_factory=list, description="유사 상품 목록")
+
+
+# =====================================================================
+# [NEW API 9 규격] 부분 가구 교체 및 수정 요청/결과 양식 (POST /api/image/inpaint)
+# =====================================================================
+
+class ImageInpaintRequest(BaseModel):
+    """
+    [부분 가구 교체 주문서 (Image Inpainting)]
+    사용자가 선택한 영역(bbox 또는 mask) 내의 가구만 교체하도록 요청하는 주문서입니다.
+    """
+    image_id: str = Field(..., description="원본 이미지 ID (예: img_001)")
+    session_id: str = Field(..., description="작업 세션 ID")
+    mode: Optional[str] = Field("inpainting", description="작업 모드 (기본값: inpainting)")
+    prompt: str = Field(..., description="수정 프롬프트 (예: 하얀색 소파로 교체)")
+    mask: Optional[Any] = Field(None, description="마스크 영역 정보")
+    bbox: Optional[Any] = Field(None, description="바운딩 박스 정보 {x, y, width, height} 또는 [x, y, w, h]")
+    selected_object: Optional[str] = Field(None, description="선택된 가구 객체명")
+
+
+class ImageInpaintResponse(BaseModel):
+    """
+    [부분 가구 교체 완료서]
+    Realistic Vision V6.0 B1 기반 인페인팅 결과를 반환하는 응답 규격입니다.
+    """
+    result_id: str = Field(..., description="수정된 결과 이미지 고유 ID")
+    image_id: str = Field(..., description="원본 이미지 ID")
+    session_id: str = Field(..., description="작업 세션 ID")
+    mode: str = Field("inpainting", description="작업 모드")
+    prompt: str = Field(..., description="수정 프롬프트")
+    result_image_url: str = Field(..., description="수정 완료된 결과 이미지 URL")
+    processing_time: float = Field(..., description="작업 소요 시간(초)")
+    status: str = Field("completed", description="처리 상태")
+    message: str = Field("선택 영역 가구 수정이 완료되었습니다.", description="결과 안내 메시지")
+

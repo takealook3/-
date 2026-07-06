@@ -11,6 +11,7 @@ export default function StyleTransformer({
   onGenerateSuccess, 
   onError,
   onResetImage,
+  onResetResult,
   pendingPrompt,
   setPendingPrompt,
   globalLoading,
@@ -216,6 +217,30 @@ export default function StyleTransformer({
                 이미지 변환 중...
               </button>
             </div>
+          ) : resultImageUrl ? (
+            /* 변환 완료 피드백 화면 */
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'center', alignItems: 'stretch', gap: '20px', textAlign: 'center' }}>
+              <div style={{ fontSize: '3rem', margin: '0 auto' }}>🎉</div>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--primary)', margin: '10px 0 4px', fontFamily: 'Outfit, sans-serif' }}>스타일 변환 완료!</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.6', margin: '0 0 10px', fontFamily: 'Outfit, sans-serif' }}>
+                성공적으로 인테리어 스타일 변환이 완료되었습니다.<br />
+                <strong>아래 Before / After 쇼룸</strong>에서 결과를 확인하고 맞춤 제안을 받아보세요!
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: 'auto' }}>
+                <button
+                  type="button"
+                  onClick={onResetResult}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '14px', fontSize: '0.9rem', fontWeight: '700', borderRadius: '12px',
+                    border: '1px solid var(--border-color)', transition: 'all 0.2s', width: '100%',
+                    fontFamily: 'Outfit, sans-serif', cursor: 'pointer'
+                  }}
+                >
+                  다른 스타일로 다시 하기
+                </button>
+              </div>
+            </div>
           ) : (
             /* 기존 폼 & 칩 뷰 */
             <form onSubmit={handleTransformSubmit} style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', gap: '16px', margin: 0 }}>
@@ -241,50 +266,7 @@ export default function StyleTransformer({
                 />
               </div>
 
-              {/* [퀵 칩 추천 영역] */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#7A6C62', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Quick Recommendation
-                </span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {STYLES_CHIPS.map((chip, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setPrompt(chip.text)}
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: '0.78rem',
-                        fontWeight: '700',
-                        borderRadius: '30px',
-                        border: '1px solid rgba(43, 53, 48, 0.1)',
-                        backgroundColor: '#FFFFFF',
-                        color: 'var(--primary)',
-                        cursor: 'pointer',
-                        transition: 'all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        boxShadow: '0 2px 6px rgba(46, 40, 36, 0.02)'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--accent)';
-                        e.currentTarget.style.backgroundColor = '#FCFAF7';
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(195, 159, 125, 0.15)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = 'rgba(43, 53, 48, 0.1)';
-                        e.currentTarget.style.backgroundColor = '#FFFFFF';
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 2px 6px rgba(46, 40, 36, 0.02)';
-                      }}
-                    >
-                      {chip.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+
 
               <button
                 type="submit"
