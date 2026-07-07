@@ -18,7 +18,8 @@ export default function StyleTransformer({
   globalResultImageUrl,
   globalRawAnswer,
   globalSummaryData,
-  onSubmitTransform
+  onSubmitTransform,
+  globalProgress
 }) {
   const [prompt, setPrompt] = useState('밝고 미니멀한 거실로 바꿔줘');
 
@@ -140,10 +141,14 @@ export default function StyleTransformer({
             {loading && (
               <div style={{ 
                 position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, 
-                background: 'rgba(15, 23, 42, 0.8)', 
-                display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: '#fff' 
+                background: 'rgba(15, 23, 42, 0.85)', 
+                display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: '#fff',
+                padding: '20px', textAlign: 'center'
               }}>
-                <div style={{ fontWeight: '700', fontSize: '1rem' }}>이미지 변환 중...</div>
+                <div style={{ fontWeight: '800', fontSize: '1.1rem', marginBottom: '8px', letterSpacing: '-0.02em' }}>이미지 변환 중...</div>
+                <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.8)', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
+                  {globalProgress || '리모델링 엔진 연산을 대기 중입니다.'}
+                </div>
               </div>
             )}
 
@@ -201,10 +206,13 @@ export default function StyleTransformer({
               gap: '20px',
               padding: '10px 0'
             }}>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', margin: 'auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', margin: 'auto', textAlign: 'center', padding: '0 10px' }}>
                 <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: 'var(--accent)', animation: 'pulse 1.2s infinite' }} />
                 <span style={{ fontSize: '0.95rem', fontWeight: '800', color: 'var(--primary)', letterSpacing: '0.02em' }}>
                   이미지 변환 중...
+                </span>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'pre-wrap', lineHeight: '1.4', marginTop: '4px' }}>
+                  {globalProgress || '작업을 로드 중입니다.'}
                 </span>
               </div>
 

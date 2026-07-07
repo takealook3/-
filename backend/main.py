@@ -524,7 +524,7 @@ def translate_prompt_to_english(prompt: str) -> str:
     translation_cache[prompt] = fallback_prompt
     return fallback_prompt
 
-def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
+def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callback=None) -> str:
     import requests
     import shutil
     try:
@@ -820,12 +820,29 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                     msg = ws.recv()
                     if isinstance(msg, str):
                         event = json.loads(msg)
-                        if event.get("type") == "executing":
-                            data = event.get("data", {})
-                            # node가 None이고 prompt_id가 일치할 때 완료
-                            if data.get("node") is None and data.get("prompt_id") == prompt_id:
+                        etype = event.get("type")
+                        data = event.get("data", {})
+                        
+                        if etype == "executing" and data.get("prompt_id") == prompt_id:
+                            node_id = data.get("node")
+                            if node_id is None:
                                 print(f"🟢 [ComfyUI API (WS)] 작업 완료 이벤트를 수신했습니다. Prompt ID: {prompt_id}")
+                                if status_callback:
+                                    status_callback("completed", "인테리어 변환 연산 완료!")
                                 break
+                            else:
+                                node_title = prompt_api_data.get(str(node_id), {}).get("_meta", {}).get("title", f"노드 {node_id}")
+                                print(f"📡 [ComfyUI WS Executing] Node {node_id}: {node_title}")
+                                if status_callback:
+                                    status_callback("generating", f"AI 엔진 연산 중: '{node_title}' 실행 중...")
+                                    
+                        elif etype == "progress" and data.get("prompt_id") == prompt_id:
+                            value = data.get("value")
+                            max_val = data.get("max")
+                            percent = int((value / max_val) * 100) if max_val else 0
+                            print(f"📐 [ComfyUI WS Progress] {value}/{max_val} ({percent}%)")
+                            if status_callback:
+                                status_callback("progress", f"이미지 디퓨전 생성 중... ({percent}%)")
                     else:
                         continue
             except Exception as ws_recv_err:
@@ -836,6 +853,7 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
                     ws.close()
                 except:
                     pass
+
 
         # 웹소켓이 성공적으로 완료되었든, 실패하여 Fallback 하든 최종 결과 수집은 /history 에서 수행
         history_url = f"{COMFYUI_API_URL}/history/{prompt_id}"
@@ -1423,6 +1441,220 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
         "workflow": workflow_info,
         "is_t2i": False
     }
+
+
+def translate_prompt_to_english_strict(prompt: str) -> str:
+    """사용자가 작성한 프롬프트를 번역하되, API 사용량 초과(429) 등의 오류를 삼키지 않고 그대로 에러로 던집니다."""
+    import re
+    if not prompt or not prompt.strip():
+        return "modern interior styling"
+
+    global translation_cache
+    if prompt in translation_cache:
+        return translation_cache[prompt]
+
+    has_korean = bool(re.search("[ㄱ-ㅎㅏ-ㅣ가-힣]", prompt))
+    if not has_korean:
+        result = prompt if (prompt.startswith("(") and prompt.endswith(")")) else f"({prompt}:1.35)"
+        translation_cache[prompt] = result
+        return result
+
+    global rag_llm, rag_enabled
+    if rag_enabled and rag_llm:
+        from concurrent.futures import ThreadPoolExecutor
+        from langchain_core.messages import HumanMessage
+        try:
+            system_prompt = (
+                "You are an expert interior designer and prompt engineer for Stable Diffusion.\n"
+                "Your task is to translate and expand the following Korean interior/furniture prompt into a highly descriptive English prompt suitable for inpainting/redesign.\n"
+                "CRITICAL: Ensure that the main object or furniture is placed at the very beginning of the prompt.\n"
+                "Keep the output as a clean, single-line comma-separated list of descriptive words, without any explanation, markdown, or intro.\n\n"
+                f"Korean: {prompt}\n"
+                "English Prompt:"
+            )
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(rag_llm.invoke, [HumanMessage(content=system_prompt)])
+                response = future.result(timeout=4.0)
+            translated = response.content.strip().replace('"', '').replace("'", "")
+            translation_cache[prompt] = translated
+            return translated
+        except Exception as e:
+            # 쿼터 도달 429 등의 에러인 경우 상위로 전파
+            raise RuntimeError(f"Gemini API가 요청을 수용할 수 없습니다: {str(e)}")
+    else:
+        raise ValueError("RAG LLM 엔진이 비활성화 상태이거나 API Key가 설정되지 않았습니다.")
+
+
+from fastapi.responses import StreamingResponse
+
+@app.post("/api/image/generate/stream")
+async def generate_interior_image_stream(request: Request):
+    """
+    [실시간 진행 상태 피드백 인테리어 이미지 변환 창구 (SSE)]
+    사용자가 요청을 보내면 Server-Sent Events (SSE) 형식으로 실시간 진행 단계를 스트리밍하고,
+    마지막에 완료된 이미지 결과 URL 및 상태 데이터를 반환합니다.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+        
+    image_id = body.get("image_id")
+    session_id = body.get("session_id")
+    style = body.get("style", "modern")
+    prompt = body.get("prompt", "").strip()
+    
+    if not session_id:
+        return JSONResponse(status_code=400, content={"success": False, "message": "세션 ID가 누락되었습니다."})
+    if not prompt:
+        return JSONResponse(status_code=400, content={"success": False, "message": "인테리어 변환을 위한 프롬프트를 입력해 주세요."})
+
+    async def event_generator():
+        import queue
+        status_queue = queue.Queue()
+        
+        def status_callback(status_type: str, message: str, extra_data: dict = None):
+            payload = {"status": status_type, "message": message}
+            if extra_data:
+                payload.update(extra_data)
+            status_queue.put(payload)
+
+        # 1단계: 번역 시작 안내
+        status_callback("translating", "한글 요구사항 번역 및 스타일 데코레이션 보강 중...")
+        
+        import asyncio
+        
+        def run_transform():
+            try:
+                # ── Step 1. 번역 수행 ──
+                t_translate_start = time.time()
+                try:
+                    translated_prompt = translate_prompt_to_english_strict(prompt)
+                except Exception as trans_err:
+                    status_callback("error", f"Gemini 번역 API 호출에 실패했습니다: {str(trans_err)}")
+                    return
+                t_translate_end = time.time()
+                print(f"⏱️ [성능측정 - 번역] '{prompt}' 번역 소요시간: {t_translate_end - t_translate_start:.4f}초")
+                status_callback("translating_done", "번역 및 프롬프트 보강이 성공적으로 완료되었습니다.", {"translated": translated_prompt})
+                
+                # ── Step 2. ComfyUI 구동 가능 여부 체크 ──
+                comfy_online = check_comfyui_online()
+                if not comfy_online:
+                    # Fallback sd_tutorial 모델이 있는지 체크
+                    sd_model_path = COMFYUI_MODEL_PATH
+                    if not os.path.exists(sd_model_path):
+                        status_callback("error", "ComfyUI 서버가 오프라인 상태이며, 로컬 AI 연산 파일(realisticVisionV60B1_v51HyperVAE.safetensors)이 부재하여 스타일 변환을 시작할 수 없습니다. ComfyUI 포트(8188) 또는 로컬 자재 구성을 확인해 주세요.")
+                        return
+                    else:
+                        status_callback("fallback", "ComfyUI 서버가 준비되지 않아, 로컬 가속 파이프라인(sd_tutorial)으로 우회 구동을 개시합니다...")
+                else:
+                    status_queue.put({"status": "comfy_queue", "message": "ComfyUI 이미지 생성 엔진에 작업 대기열 등록 중..."})
+                    
+                # ── Step 3. 이미지 존재 확인 및 연산 실행 ──
+                result_id = f"result_{uuid.uuid4().hex[:6]}"
+                
+                if not image_id:
+                    status_callback("completed", "인테리어 이미지 생성이 완료되었습니다.", {
+                        "result_id": result_id,
+                        "session_id": session_id,
+                        "original_image_url": None,
+                        "result_image_url": f"/static/results/interior_result_{style}_01.jpg" if style in ("modern", "minimal", "natural") else "/static/results/interior_result_sample_01.jpg",
+                        "style": style,
+                        "prompt": prompt,
+                        "status": "completed",
+                        "is_t2i": True
+                    })
+                    return
+                    
+                ext_found = ".jpg"
+                for ext in (".jpg", ".jpeg", ".png"):
+                    if os.path.exists(os.path.join(PROJECT_ROOT, "uploads", f"{image_id}{ext}")):
+                        ext_found = ext
+                        break
+                input_filename = f"{image_id}{ext_found}"
+                original_url = f"/static/uploads/{input_filename}"
+                
+                parameters = {
+                    "image_filename": input_filename,
+                    "prompt": translated_prompt,
+                    "denoise": 0.6,
+                    "seed": int(time.time()) % 1000000
+                }
+                
+                if comfy_online:
+                    real_filename = execute_real_comfyui(
+                        "room_redesign_workflow_api.json", 
+                        parameters, 
+                        status_callback=lambda st, msg: status_callback(st, msg)
+                    )
+                    if real_filename:
+                        result_filename = real_filename
+                        result_url = f"/static/results/{result_filename}"
+                        execution_mode = "real_comfyui"
+                    else:
+                        status_callback("error", "ComfyUI 렌더링 서버 연산 오류가 발생하여 최종 이미지를 생성하지 못했습니다. 워크플로우 구성을 재검토하십시오.")
+                        return
+                else:
+                    dest_path = os.path.join(PROJECT_ROOT, "results", f"{result_id}.jpg")
+                    orig_path = os.path.join(PROJECT_ROOT, "uploads", input_filename)
+                    import sd_tutorial
+                    sd_tutorial.run_interior_style_change(
+                        model_path=sd_model_path,
+                        input_image_path=orig_path,
+                        output_image_path=dest_path,
+                        prompt=translated_prompt,
+                        negative_prompt="blurry, low quality, distorted, bad proportions, ugly, disfigured"
+                    )
+                    result_url = f"/static/results/{result_id}.jpg"
+                    execution_mode = "local_sd_tutorial"
+                    
+                res_data = {
+                    "result_id": result_id,
+                    "session_id": session_id,
+                    "original_image_url": original_url,
+                    "result_image_url": result_url,
+                    "style": style,
+                    "prompt": prompt,
+                    "status": "completed",
+                    "is_t2i": False,
+                    "workflow": {
+                        "execution_mode": execution_mode,
+                        "comfyui_status": "online" if comfy_online else "offline"
+                    }
+                }
+                
+                session_data = get_or_create_session(session_id)
+                session_data["generations"].append({
+                    "type": "interior_transform",
+                    "result_id": result_id,
+                    "original_image_url": original_url,
+                    "result_image_url": result_url,
+                    "style": style,
+                    "prompt": prompt,
+                    "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                })
+                session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+                
+                status_callback("completed", "공간 리모델링 스타일 변환이 모두 완료되었습니다!", {"result_data": res_data})
+                
+            except Exception as total_err:
+                status_callback("error", f"예기치 못한 런타임 오류가 발생했습니다: {str(total_err)}")
+
+        loop = asyncio.get_event_loop()
+        future_task = loop.run_in_executor(None, run_transform)
+        
+        while not future_task.done() or not status_queue.empty():
+            while not status_queue.empty():
+                item = status_queue.get()
+                yield f"data: {json.dumps(item)}\n\n"
+            await asyncio.sleep(0.2)
+            
+        while not status_queue.empty():
+            item = status_queue.get()
+            yield f"data: {json.dumps(item)}\n\n"
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 
 # =====================================================================

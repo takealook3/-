@@ -136,6 +136,7 @@ export default function App() {
   
   // [신설] 스타일 변환 비동기 연산 부모 끌어올리기 상태들 (탭 전환 시에도 백그라운드 작업 및 비교 쇼룸 유지 보장)
   const [transformLoading, setTransformLoading] = useState(false);
+  const [transformProgress, setTransformProgress] = useState('');
   const [transformResultUrl, setTransformResultUrl] = useState(null);
   const [transformRawAnswer, setTransformRawAnswer] = useState('');
   const [transformSummary, setTransformSummary] = useState(null);
@@ -301,6 +302,7 @@ export default function App() {
     if (!promptText || !promptText.trim() || transformLoading) return;
 
     setTransformLoading(true);
+    setTransformProgress('스타일 변환 개시 준비 중...');
     setTransformResultUrl(null);
     setTransformRawAnswer('');
     setTransformSummary(null);
@@ -313,43 +315,84 @@ export default function App() {
     };
 
     try {
-      const res = await sendChatMessage({
-        sessionId: sessionId || "session_default",
-        question: promptText.trim(),
-        imageId: imageId
+      const response = await fetch(`${API_BASE_URL}/api/image/generate/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image_id: imageId,
+          session_id: sessionId || "session_default",
+          style: "custom",
+          prompt: promptText.trim()
+        })
       });
 
-      if (res.success) {
-        const respData = res.data || {};
-        const fullImg = getFullUrl(respData.image_url);
-        setTransformResultUrl(fullImg);
-        setTransformRawAnswer(respData.answer || "");
-        
-        const parsed = parseInteriorRecommendation(respData.answer);
-        setTransformSummary(parsed);
+      if (!response.ok) {
+        throw new Error(`HTTP 통신 실패 (Status: ${response.status})`);
+      }
 
-        if (respData.result_id && handleGenerateSuccess) {
-          handleGenerateSuccess({
-            resultId: respData.result_id,
-            resultImageUrl: fullImg,
-            style: respData.style || "modern",
-            prompt: promptText.trim(),
-            processingTime: respData.processing_time || 0,
-            status: "completed",
-            recommendations: parsed
-          });
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop(); // 미완성 조각 보관
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const rawData = line.slice(6).trim();
+              if (!rawData) continue;
+              const item = JSON.parse(rawData);
+              
+              if (item.status === "error") {
+                setCurrentError({
+                  errorCode: "TRANSFORM_FAILED",
+                  message: item.message || "스타일 변환에 실패했습니다."
+                });
+                setTransformLoading(false);
+                setTransformProgress('');
+                return;
+              } else if (item.status === "completed") {
+                const respData = item.result_data || {};
+                const fullImg = getFullUrl(respData.result_image_url);
+                setTransformResultUrl(fullImg);
+                
+                const successMsg = `스타일 변환이 완료되었습니다! (엔진: ${respData.workflow?.execution_mode || "AI 연산"})`;
+                setTransformRawAnswer(successMsg);
+                
+                if (respData.result_id && handleGenerateSuccess) {
+                  handleGenerateSuccess({
+                    resultId: respData.result_id,
+                    resultImageUrl: fullImg,
+                    style: respData.style || "custom",
+                    prompt: promptText.trim(),
+                    processingTime: respData.processing_time || 5.0,
+                    status: "completed",
+                    recommendations: null
+                  });
+                }
+                setTransformProgress('');
+              } else {
+                setTransformProgress(item.message);
+              }
+            } catch (jsonErr) {
+              console.error("SSE JSON Parse Error:", jsonErr);
+            }
+          }
         }
-      } else {
-        setCurrentError({
-          errorCode: res.errorCode || "PROCESSING_FAILED",
-          message: res.message || "스타일 변환 작업에 실패했습니다."
-        });
       }
     } catch (err) {
       console.error(err);
       setCurrentError({
         errorCode: "SERVER_ERROR",
-        message: `스타일 변환 통신 오류: ${err.message}`
+        message: `스타일 변환 처리 중 오류가 발생했습니다: ${err.message}`
       });
     } finally {
       setTransformLoading(false);
@@ -738,6 +781,7 @@ export default function App() {
                   globalRawAnswer={transformRawAnswer}
                   globalSummaryData={transformSummary}
                   onSubmitTransform={handleTransformSubmitGlobal}
+                  globalProgress={transformProgress}
                 />
               </div>
 
