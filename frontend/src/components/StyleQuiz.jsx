@@ -365,7 +365,9 @@ export default function StyleQuiz({ onApplyPrompt }) {
                   Generated AI Remodeling Keywords
                 </label>
                 <div className="prompt-text-field" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                  <span className="prompt-text-content" style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: '700', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {/* [수정] 텍스트가 강제로 가로로 늘어나 화면을 뚫고 나가던 whiteSpace: 'nowrap' 제거 */}
+                  {/* index.css의 .prompt-text-content 속성(pre-wrap, break-word)이 자연스럽게 적용되어 자동 줄바꿈됩니다. */}
+                  <span className="prompt-text-content" style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: '700' }}>
                     {generatedPrompt}
                   </span>
                   <button 

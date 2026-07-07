@@ -64,7 +64,8 @@ const HIGH_RES_FALLBACK_IMAGES = {
   "에스닉": "https://images.unsplash.com/photo-1533090161767-e6ffed986c88?auto=format&fit=crop&w=1000&q=80",
   "미드센추리 모던": "https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=1000&q=80",
   "컨템포러리": "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1000&q=80",
-  "러스틱": "https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=1000&q=80",
+  /* [수정] 기존 에코백 가방 이미지 주소를 실제 아늑한 원목 러스틱 거실 화보 주소로 교체 */
+  "러스틱": "https://images.unsplash.com/photo-1593696140826-c58b021acf8b?auto=format&fit=crop&w=1000&q=80",
   "아트데코": "https://images.unsplash.com/photo-1506812779316-934cef51b42e?auto=format&fit=crop&w=1000&q=80",
   "셔비 시크": "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1000&q=80",
   "어반 모던": "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1000&q=80",
