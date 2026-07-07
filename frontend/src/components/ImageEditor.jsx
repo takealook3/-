@@ -5,7 +5,7 @@
 // 1차 단독 혹은 2차 동시 수선을 의뢰하는 프리미엄 편집 컴포넌트입니다.
 // =====================================================================
 import React, { useState, useRef } from 'react';
-import { editImage, searchProducts, API_BASE_URL } from '../services/api';
+import { editImage, searchProducts, embedCropImage, API_BASE_URL } from '../services/api';
 
 export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGenerateSuccess, onError }) {
   // 마스크 모드: 'A' (1차 가구 수선) 또는 'B' (2차 가구 수선)
@@ -37,6 +37,13 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
   const [productsListA, setProductsListA] = useState([]);
   const [productsListB, setProductsListB] = useState([]);
 
+  // 🎨 [산디과 코딩 가이드 - 실시간 CLIP 임베딩 상태 등록]
+  // 비유: 드래그가 끝난 소파나 테이블의 512차원 특징값(임베딩)과 추출 진행 상태를 각각 담는 레이어(State)입니다.
+  const [embeddingA, setEmbeddingA] = useState(null);
+  const [isEmbeddingA, setIsEmbeddingA] = useState(false);
+  const [embeddingB, setEmbeddingB] = useState(null);
+  const [isEmbeddingB, setIsEmbeddingB] = useState(false);
+
   const containerRef = useRef(null);
   const imgRef = useRef(null);
 
@@ -62,9 +69,11 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
     if (maskMode === 'A') {
       setBboxNormA(null);
       setMaskPixelsA(null);
+      setEmbeddingA(null);
     } else {
       setBboxNormB(null);
       setMaskPixelsB(null);
+      setEmbeddingB(null);
     }
   };
 
@@ -88,6 +97,46 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
       setBboxNormA(coords);
     } else {
       setBboxNormB(coords);
+    }
+  };
+
+  // 🎨 [산디과 코딩 가이드 - 실시간 CLIP 임베딩 비동기 트리거 함수]
+  // 비유: 백엔드 주방에 좌표를 보내 그 영역만 크롭하고, 분석 완료된 임베딩(특징벡터)을 받아오는 비동기 주문 작업입니다.
+  const triggerClipEmbedding = async (mode, pixels) => {
+    if (!imageId || !pixels || pixels.length !== 4) return;
+    
+    if (mode === 'A') {
+      setIsEmbeddingA(true);
+      setEmbeddingA(null);
+    } else {
+      setIsEmbeddingB(true);
+      setEmbeddingB(null);
+    }
+    
+    try {
+      const res = await embedCropImage({
+        imageId,
+        maskPixels: pixels
+      });
+      
+      if (res.success && res.data?.embedding) {
+        console.log(`🧠 [CLIP Embedding ${mode}] 추출 성공 (차원: ${res.data.dimension})`, res.data.embedding);
+        if (mode === 'A') {
+          setEmbeddingA(res.data.embedding);
+        } else {
+          setEmbeddingB(res.data.embedding);
+        }
+      } else {
+        console.error(`⚠️ [CLIP Embedding ${mode}] 추출 오류:`, res.message);
+      }
+    } catch (err) {
+      console.error(`❌ [CLIP Embedding ${mode}] API 통신 에러:`, err);
+    } finally {
+      if (mode === 'A') {
+        setIsEmbeddingA(false);
+      } else {
+        setIsEmbeddingB(false);
+      }
     }
   };
 
@@ -117,23 +166,32 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
     const px2 = Math.round(x2Norm * natW);
     const py2 = Math.round(y2Norm * natH);
 
+    const targetPixels = [px1, py1, px2, py2];
+
     if (maskMode === 'A') {
       setBboxNormA(finalCoords);
-      setMaskPixelsA([px1, py1, px2, py2]);
+      setMaskPixelsA(targetPixels);
+      // 드래그 완료 후 즉시 실시간 임베딩 트리거
+      triggerClipEmbedding('A', targetPixels);
     } else {
       setBboxNormB(finalCoords);
-      setMaskPixelsB([px1, py1, px2, py2]);
+      setMaskPixelsB(targetPixels);
+      // 드래그 완료 후 즉시 실시간 임베딩 트리거
+      triggerClipEmbedding('B', targetPixels);
     }
   };
+
   // 개별 마스크 영역 클리어
   const handleClearActiveMask = () => {
     if (maskMode === 'A') {
       setBboxNormA(null);
       setMaskPixelsA(null);
+      setEmbeddingA(null);
       setProductsListA([]);
     } else {
       setBboxNormB(null);
       setMaskPixelsB(null);
+      setEmbeddingB(null);
       setProductsListB([]);
     }
   };
@@ -142,8 +200,10 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
   const handleClearAll = () => {
     setBboxNormA(null);
     setMaskPixelsA(null);
+    setEmbeddingA(null);
     setBboxNormB(null);
     setMaskPixelsB(null);
+    setEmbeddingB(null);
     setEditedResultUrl(null);
     setProductsListA([]);
     setProductsListB([]);
@@ -297,6 +357,20 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
       setSearchingProducts(false);
     }
   };
+
+  // 🎨 [산디과 코딩 가이드 - 실시간 CLIP 임베딩 상태 피드백 문자열 포맷팅]
+  // 비유: 소파나 테이블의 임베딩 분석 진행률 및 특징 벡터의 앞 3자리 대표값을 보기 좋게 정리해 주는 표지판입니다.
+  const getClipLabelFeedback = (isEmbedding, embedding) => {
+    if (isEmbedding) return " (🧠 CLIP 분석 중...)";
+    if (embedding && Array.isArray(embedding)) {
+      const sliceVal = embedding.slice(0, 3).map(v => v.toFixed(3)).join(', ');
+      return ` (🧠 추출 완료: [${sliceVal}...])`;
+    }
+    return "";
+  };
+
+  const labelAFeedback = getClipLabelFeedback(isEmbeddingA, embeddingA);
+  const labelBFeedback = getClipLabelFeedback(isEmbeddingB, embeddingB);
 
   return (
     /* 아이폰6 시스템 폰트(Helvetica Neue)를 최상단 카드 컨테이너에 적용 */
@@ -510,11 +584,22 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
 
               {/* 인풋 영역 A - 이모지 및 사진 드래그 필요 문구 삭제, 얇은 폰트 적용 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '0.82rem', fontWeight: '400', color: '#1E40AF', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <label style={{ 
+                  fontSize: '0.82rem', 
+                  fontWeight: '400', 
+                  color: '#075985', 
+                  fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
                   가구 A 교체 스타일 입력 (필수)
                   {maskPixelsA && (
                     <span style={{ fontSize: '0.72rem', background: '#3B82F6', color: '#fff', padding: '1px 6px', borderRadius: '4px' }}>영역 등록됨</span>
                   )}
+                  <span style={{ fontSize: '0.72rem', color: isEmbeddingA ? '#64748B' : '#10B981', fontStyle: isEmbeddingA ? 'italic' : 'normal', fontWeight: '500' }}>
+                    {labelAFeedback}
+                  </span>
                 </label>
                 <input
                   type="text"
@@ -552,6 +637,9 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                   {maskPixelsB && (
                     <span style={{ fontSize: '0.72rem', background: '#EC4899', color: '#fff', padding: '1px 6px', borderRadius: '4px' }}>영역 등록됨</span>
                   )}
+                  <span style={{ fontSize: '0.72rem', color: isEmbeddingB ? '#64748B' : '#10B981', fontStyle: isEmbeddingB ? 'italic' : 'normal', fontWeight: '500' }}>
+                    {labelBFeedback}
+                  </span>
                 </label>
                 <input
                   type="text"
@@ -625,7 +713,6 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
               </div>
             </>
           )}
->>>>>>> c9fbd41757bfcd0c5b18c9e176e49f16bcb0a1c7
 
         </div>  {/* 우측 패널의 닫기 태그 */}
       </div>    {/* 상단 1.25fr 1fr 그리드 레이아웃의 닫기 태그 */}
@@ -687,7 +774,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                             {item.price}
                           </div>
                         </div>
-<<<<<<< HEAD
+                        {/* [유사도 및 구매 링크 UI 렌더링 영역] */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px', gap: '8px' }}>
                           <span style={{ fontSize: '0.68rem', color: '#1E40AF', background: '#EFF6FF', padding: '3px 8px', borderRadius: '4px', fontWeight: '400', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', whiteSpace: 'nowrap' }}>
                             유사도 {Math.round(item.similarity * 100)}%
@@ -712,8 +799,6 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                             구매 링크 ↗
                           </a>
                         </div>
-=======
->>>>>>> c9fbd41757bfcd0c5b18c9e176e49f16bcb0a1c7
                       </div>
                     </div>
                   ))}

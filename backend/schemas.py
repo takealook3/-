@@ -775,3 +775,18 @@ class ImageInpaintResponse(BaseModel):
     status: str = Field("completed", description="처리 상태")
     message: str = Field("선택 영역 가구 수정이 완료되었습니다.", description="결과 안내 메시지")
 
+
+# =====================================================================
+# [NEW API 10 규격] 드래그 영역 CLIP 임베딩 추출 응답 양식 (POST /api/images/embed-crop)
+# =====================================================================
+
+class CropEmbeddingResponse(BaseModel):
+    """
+    [드래그 영역 CLIP 임베딩 결과 규격]
+    비유: 디자이너가 오려낸 가구 사진 조각에서 추출한 512차원 특징값 리스트입니다.
+    """
+    embedding: List[float] = Field(..., description="512차원의 정규화된 CLIP 임베딩 벡터 값")
+    dimension: int = Field(512, description="벡터 차원 크기 (기본값: 512)")
+    bbox: List[int] = Field(..., description="크롭에 사용된 실제 픽셀 좌표 바운딩 박스 [px1, py1, px2, py2]")
+
+

@@ -10,7 +10,8 @@ import ComparisonGallery from './components/ComparisonGallery';
 import SessionModal from './components/SessionModal';
 import StyleTransformer from './components/StyleTransformer';
 import ChatWidget from './components/ChatWidget';
-import { STYLE_DATABASE } from './components/StyleEncyclopedia';
+// [StyleEncyclopedia 컴포넌트 및 데이터베이스 임포트 추가]
+import StyleEncyclopedia, { STYLE_DATABASE } from './components/StyleEncyclopedia';
 import StyleQuiz from './components/StyleQuiz';
 import FurnitureShopShowroom from './components/FurnitureShopShowroom';
 import { checkHealth, sendChatMessage, API_BASE_URL } from './services/api';
@@ -142,6 +143,10 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     return params.get('category') || null;
   });
+
+  // [StyleEncyclopedia 도감용 상태 선언]
+  const [activeStyleId, setActiveStyleId] = useState(null);
+  const [isStyleModalOpen, setIsStyleModalOpen] = useState(false);
 
   // 5초 간격 최상단 히어로 배경 롤링 타이머
   useEffect(() => {

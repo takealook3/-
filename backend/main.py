@@ -152,7 +152,7 @@ from schemas import (
     ImageGenerateRequest, ImageGenerateResponse,
     ChatMessageRequest, ChatMessageResponse,
     ImageEditRequest, ImageEditResponse,
-    SessionHistoryResponse, ProductItem, ProductSearchResponse
+    SessionHistoryResponse, ProductItem, ProductSearchResponse, CropEmbeddingResponse
 )
 
 app = FastAPI(title="ZipPT API - 종합 이미지 복원 & 편집 & 대화 서비스")
@@ -2574,6 +2574,92 @@ def get_session_history(session_id: str):
 
 
 # =====================================================================
+# [NEW API 10 창구] 드래그 영역 실시간 CLIP 임베딩 API (POST /api/images/embed-crop)
+# =====================================================================
+@app.post("/api/images/embed-crop", response_model=SuccessResponse[CropEmbeddingResponse])
+def embed_cropped_image(payload: Dict[str, Any]):
+    """
+    [드래그 영역 실시간 CLIP 임베딩 추출]
+    사용자가 드래그하여 지정한 이미지 영역을 크롭하여,
+    로컬 CLIP 모델(openai/clip-vit-base-patch32)을 통해 512차원 특징 벡터를 실시간 추출합니다.
+    """
+    image_id = payload.get("image_id")
+    mask_pixels = payload.get("mask_pixels") # [px1, py1, px2, py2]
+    
+    # 1. 원본 파일 위치 탐색 (uploads 또는 results 폴더 순회)
+    orig_path = None
+    if image_id:
+        for search_folder in ("uploads", "results"):
+            for ext in (".jpg", ".jpeg", ".png"):
+                candidate_path = os.path.join(PROJECT_ROOT, search_folder, f"{image_id}{ext}")
+                if os.path.exists(candidate_path):
+                    orig_path = candidate_path
+                    break
+            if orig_path:
+                break
+                
+    if not orig_path:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "원본 이미지 파일을 찾을 수 없습니다."}
+        )
+
+    if not mask_pixels or not isinstance(mask_pixels, list) or len(mask_pixels) != 4:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "유효한 마스크 픽셀 좌표가 필요합니다."}
+        )
+        
+    try:
+        px1, py1, px2, py2 = mask_pixels
+        with Image.open(orig_path) as img:
+            w, h = img.size
+            # 좌표가 원본 이미지 범위를 벗어나지 않게 클램핑 처리 및 정렬
+            px1, px2 = sorted([max(0, min(px1, w)), max(0, min(px2, w))])
+            py1, py2 = sorted([max(0, min(py1, h)), max(0, min(py2, h))])
+            
+            # 크롭할 크기가 너무 미비한 경우 방지
+            if px2 - px1 <= 5 or py2 - py1 <= 5:
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "message": "지정한 드래그 영역이 너무 작습니다."}
+                )
+                
+            # 이미지 싹둑 오려내기 (Crop)
+            cropped_img = img.crop((px1, py1, px2, py2)).convert("RGB")
+            
+            # 🎨 [산디과 코딩 가이드 - 실시간 가구 영역 임베딩 모델 기동]
+            # 로컬 싱글톤 서비스에서 CLIP 모델 로드하여 512차원 특징 벡터값 생성
+            from services.clip_service import CLIPService
+            clip_service = CLIPService()
+            embedding = clip_service.get_image_embedding(cropped_img)
+            
+            if not embedding:
+                return JSONResponse(
+                    status_code=500,
+                    content={"success": False, "message": "CLIP 모델을 통한 이미지 임베딩 추출에 실패했습니다."}
+                )
+                
+            print(f"🧠 [CLIP Embed] 이미지 영역 임베딩 추출 성공! (BBox: {[px1, py1, px2, py2]}, 차원수: {len(embedding)})")
+            
+            return {
+                "success": True,
+                "data": CropEmbeddingResponse(
+                    embedding=embedding,
+                    dimension=len(embedding),
+                    bbox=[px1, py1, px2, py2]
+                )
+            }
+            
+    except Exception as e:
+        print(f"❌ [CLIP Embed API] 처리 중 오류 발생: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": f"서버 내부 오류로 임베딩 추출 실패: {str(e)}"}
+        )
+
+
+# =====================================================================
 # [NEW API 8 창구] 유사 상품 검색 API (POST /api/products/search)
 # =====================================================================
 @app.post("/api/products/search", response_model=SuccessResponse[ProductSearchResponse])
@@ -2656,6 +2742,8 @@ def search_similar_products(payload: Dict[str, Any]):
                     prompt_lower = (payload.get("prompt") or "").lower()
                     if any(x in prompt_lower for x in ["테이블", "식탁", "책상", "desk", "table", "식사"]):
                         search_query = "원목 식탁 테이블"
+                    elif any(x in prompt_lower for x in ["소파", "sofa", "couch", "카우치"]):
+                        search_query = "인테리어 소파"  # 한글 주석: 소파 검색어 추가
                     elif any(x in prompt_lower for x in ["침대", "bed", "sleep", "이불", "매트리스"]):
                         search_query = "모던 침대"
                     elif any(x in prompt_lower for x in ["의자", "체어", "chair", "스툴"]):
@@ -2671,18 +2759,58 @@ def search_similar_products(payload: Dict[str, Any]):
             api_items = search_naver_shopping_api(search_query)
             
             if api_items and len(api_items) > 0:
+                # 🎨 [산디과 코딩 가이드 - 실시간 네이버 이미지 CLIP 유사도 비교]
+                use_clip = False
+                clip_service = None
+                crop_embedding = None
+                
+                if cropped_img_path and os.path.exists(cropped_img_path):
+                    try:
+                        from services.clip_service import CLIPService
+                        clip_service = CLIPService()
+                        crop_embedding = clip_service.get_image_embedding(cropped_img_path)
+                        if crop_embedding:
+                            use_clip = True
+                            print("🧠 [Product Search] 네이버 결과에 대한 실시간 CLIP 유사도 계산 기동 완료")
+                    except Exception as e:
+                        print(f"⚠️ [Product Search] 실시간 CLIP 로드 실패: {e}")
+
+                import requests
+                from io import BytesIO
+                
                 for item in api_items[:3]:
+                    sim_val = 0.85  # 기본값
+                    img_url = item.get("image_url")
+                    
+                    if use_clip and clip_service and crop_embedding and img_url:
+                        try:
+                            # 실시간으로 인터넷 상의 상품 이미지 다운로드 (타임아웃 2초로 딜레이 방지)
+                            resp = requests.get(img_url, timeout=2.0)
+                            if resp.status_code == 200:
+                                pil_img = Image.open(BytesIO(resp.content)).convert("RGB")
+                                db_embedding = clip_service.get_image_embedding(pil_img)
+                                if db_embedding:
+                                    # 코사인 유사도 구하기
+                                    raw_sim = clip_service.calculate_similarity(crop_embedding, db_embedding)
+                                    # 원본 코사인 유사도 값을 소수점 둘째 자리까지 반올림하여 점수로 반영합니다
+                                    sim_val = round(raw_sim, 2)
+                                    print(f"📐 [CLIP Web Sim] '{item.get('product_name')}' 실시간 유사도: {raw_sim:.4f} ➡️ 보정 유사도: {sim_val:.2f}")
+                        except Exception as dl_err:
+                            print(f"⚠️ [Product Search] 상품 이미지 다운로드/비교 에러: {dl_err}")
+                            
                     products.append(
                         ProductItem(
                             product_name=item.get("product_name") or "유사 매칭 가구 상품",
                             price=item.get("price") or "가격 정보 없음",
-                            image_url=item.get("image_url") or "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
+                            image_url=img_url or "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
                             purchase_link=item.get("purchase_link") or "https://www.google.com",
-                            similarity=float(item.get("similarity") or 0.85)
+                            similarity=sim_val
                         )
                     )
+                # 유사도 높은 순으로 최종 정렬
+                products.sort(key=lambda x: x.similarity, reverse=True)
                 success_search = True
-                print(f"🛍️ [Product Search] 실시간 네이버 OpenAPI 연동 성공! 수집 개수: {len(products)}개")
+                print(f"🛍️ [Product Search] 실시간 네이버 OpenAPI + CLIP 연동 성공! 수집 개수: {len(products)}개")
             else:
                 print("⚠️ [Product Search] 네이버 API 조회 결과가 없거나 API 키가 설정되지 않아 최종 3단계 Mock DB로 전환합니다.")
         except Exception as fallback_err:
@@ -2770,21 +2898,96 @@ def search_similar_products(payload: Dict[str, Any]):
             
         recommended_items = product_db.get(target_category, product_db["sofa"])
         
-        import random
-        for item in recommended_items:
-            sim_val = round(min(0.99, max(0.50, item["similarity"] + random.uniform(-0.03, 0.03))), 2)
-            products.append(
-                ProductItem(
-                    product_name=item["product_name"],
-                    price=item["price"],
-                    image_url=item["image_url"],
-                    purchase_link=item["purchase_link"],
-                    similarity=sim_val
-                )
-            )
+        # 🎨 [산디과 코딩 가이드 - 시각적 유사도 추천 기능 접목]
+        # 로컬 이미지 파일 매핑 딕셔너리
+        local_image_mappings = {
+            "이케아 쇠데르함(SÖDERHAMN) 3인용 패브릭 소파": "베이지 브라운 패브릭 소파.jpg",
+            "한샘 밀란 303 프레임 모던 패브릭 소파": "블루 그레이 패브릭 소파.jpg",
+            "무인양행 깃털 포켓코일 로우 코지 소파": "여백이 넉넉한 심플한 거실.jpg",
             
-        products.sort(key=lambda x: x.similarity, reverse=True)
-        print(f"🛍️ [Product Search Fallback] 모킹 추천 상품 리스트 제공완료 (Category: {target_category})")
+            "이케아 말름(MALM) 모던 수납형 침대 프레임": "가구 개수를 최소화한 침실.jpg",
+            "에이스침대 BMA-1139-E 코지 라이트형 침대": "다양한 소재를 믹스한 침실.jpg",
+            "시몬스 뷰티레스트 자스민 안방 가죽 침대": "우드 프레임의 클래식 가구.jpg",
+            
+            "이케아 독스타(DOCKSTA) 원형 라운드 테이블": "우드톤 가구와 따뜻한 조명.jpg",
+            "한샘 도노 세라믹 식탁 4인용 웜화이트": "직선 라인의 미니멀 벽면.jpg",
+            
+            "이케아 뇌뷔(NÖBBY) 카페 원목 체어": "우드 프레임의 클래식 가구.jpg",
+            "시디즈 T50 에어 메쉬 라이트 사무용 의자": "직선 라인의 미니멀 벽면.jpg",
+            
+            "이케아 프뤼보(FLYBO) 모던 블랙 플로어 스탠드": "우드톤 가구와 따뜻한 조명.jpg",
+            "필립스 휴(Hue) 그라디언트 스마트 앰비언트 스트립": "우드톤 가구와 따뜻한 조명.jpg",
+            
+            "이케아 페이카(FEJKA) 인조관엽식물 몬스테라 화분": "소품과 패턴이 가득한 거실.jpg",
+            "한샘 디어그린 대형 올리브나무 조화 화분": "소품과 패턴이 가득한 거실.jpg"
+        }
+        
+        # 로컬 CLIP 서비스를 호출하여 시각적 유사도 계산 시도
+        use_clip_similarity = False
+        clip_service = None
+        
+        if cropped_img_path and os.path.exists(cropped_img_path):
+            try:
+                from services.clip_service import CLIPService
+                clip_service = CLIPService()
+                use_clip_similarity = True
+                print("🧠 [Product Search] CLIP 모델 기반 실시간 시각적 유사도 비교 모드 기동 완료")
+            except Exception as clip_err:
+                print(f"⚠️ [Product Search] CLIP 서비스 로드 에러: {clip_err} (기본 무작위 계산 모드로 전환합니다)")
+
+        if use_clip_similarity and clip_service:
+            # 크롭된 타겟 가구 이미지의 임베딩 추출
+            crop_embedding = clip_service.get_image_embedding(cropped_img_path)
+            
+            if crop_embedding:
+                for item in recommended_items:
+                    sim_val = 0.50  # 기본값
+                    local_img_name = local_image_mappings.get(item["product_name"])
+                    
+                    if local_img_name:
+                        local_img_path = os.path.join(PROJECT_ROOT, "QUIZ images", local_img_name)
+                        if os.path.exists(local_img_path):
+                            # 매칭할 상품 이미지의 임베딩 추출
+                            db_img_embedding = clip_service.get_image_embedding(local_img_path)
+                            if db_img_embedding:
+                                # 코사인 유사도 구하기
+                                raw_sim = clip_service.calculate_similarity(crop_embedding, db_img_embedding)
+                                # 원본 코사인 유사도 값을 소수점 둘째 자리까지 반올림하여 점수로 반영합니다
+                                # (이미지-이미지 유사도는 기본적으로 0.65~0.95 범위에 조화롭게 분포합니다)
+                                sim_val = round(raw_sim, 2)
+                                print(f"📐 [CLIP Sim Calc] '{item['product_name']}'의 원본 유사도: {raw_sim:.4f} ➡️ 보정 유사도: {sim_val:.2f}")
+                                
+                    products.append(
+                        ProductItem(
+                            product_name=item["product_name"],
+                            price=item["price"],
+                            image_url=item["image_url"],
+                            purchase_link=item["purchase_link"],
+                            similarity=sim_val
+                        )
+                    )
+                # 유사도 순 정렬
+                products.sort(key=lambda x: x.similarity, reverse=True)
+                print(f"🛍️ [Product Search CLIP] 실시간 시각적 유사도 추천 리스트 제공 완료 (총 {len(products)}개)")
+            else:
+                use_clip_similarity = False
+                
+        # CLIP 검색에 실패했거나 임베딩을 못 구한 경우의 Fallback
+        if not use_clip_similarity or not products:
+            import random
+            for item in recommended_items:
+                sim_val = round(min(0.99, max(0.50, item["similarity"] + random.uniform(-0.03, 0.03))), 2)
+                products.append(
+                    ProductItem(
+                        product_name=item["product_name"],
+                        price=item["price"],
+                        image_url=item["image_url"],
+                        purchase_link=item["purchase_link"],
+                        similarity=sim_val
+                    )
+                )
+            products.sort(key=lambda x: x.similarity, reverse=True)
+            print(f"🛍️ [Product Search Fallback] 모킹 추천 상품 리스트 제공완료 (Category: {target_category})")
 
     return SuccessResponse(
         success=True,

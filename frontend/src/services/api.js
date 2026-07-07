@@ -288,3 +288,40 @@ export async function searchProducts({ imageId, sessionId, maskPixels, prompt })
     };
   }
 }
+
+/**
+ * 10번 창구: 드래그 영역 실시간 CLIP 임베딩 추출 (POST /api/images/embed-crop)
+ * 비유: 사용자가 드래그해서 지정한 가구 부분만 오려내어 실시간 CLIP 특징 벡터를 얻어오는 통신원입니다.
+ * @param {string} imageId - 이미지 ID
+ * @param {Array<number>} maskPixels - [px1, py1, px2, py2] 픽셀 좌표
+ */
+export async function embedCropImage({ imageId, maskPixels }) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/images/embed-crop`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        image_id: imageId,
+        mask_pixels: maskPixels,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        errorCode: data.error_code || "EMBED_FAILED",
+        message: data.message || "이미지 영역 임베딩 추출에 실패했습니다."
+      };
+    }
+    return data;
+  } catch (error) {
+    return {
+      success: false,
+      errorCode: "SERVER_CONNECTION_FAILED",
+      message: `서버 통신 실패: ${error.message}`
+    };
+  }
+}
