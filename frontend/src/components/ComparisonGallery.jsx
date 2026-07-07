@@ -180,6 +180,64 @@ export default function ComparisonGallery({
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
           </div>
+
+          {/* =====================================================================
+              [한글 주석: 선택지 A 적용 - AI 정량평가 지표 뱃지 표시부]
+              비유: 조리대에서 완성된 음식에 찍혀 나오는 AI 품질 검사 도장 뱃지입니다.
+             ===================================================================== */}
+          {resultData.metrics && (
+            <div style={{
+              marginTop: '14px',
+              padding: '12px 16px',
+              background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)',
+              border: '1px solid #bfdbfe',
+              borderRadius: '10px',
+              display: 'flex',
+              justifyContent: 'space-around',
+              alignItems: 'center',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
+            }}>
+              {/* ① CLIP Score (프롬프트 일치도) */}
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.75rem', color: '#1e40af', fontWeight: '700' }}>🎯 CLIP 일치도</div>
+                <div style={{ fontSize: '1.05rem', color: '#1d4ed8', fontWeight: '850', marginTop: '2px' }}>
+                  {resultData.metrics.clip_score !== undefined && resultData.metrics.clip_score !== null 
+                    ? `${(resultData.metrics.clip_score * 100).toFixed(0)}점` 
+                    : 'N/A'}
+                  <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#60a5fa', marginLeft: '4px' }}>
+                    ({resultData.metrics.clip_score || 0})
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ width: '1px', height: '30px', background: '#cbd5e1' }} />
+
+              {/* ② PSNR (화질 손상/유지 변화량) - 보조 지표 */}
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: '700' }}>📐 화질 유지(PSNR)</div>
+                <div style={{ fontSize: '1.05rem', color: '#16a34a', fontWeight: '850', marginTop: '2px' }}>
+                  {resultData.metrics.psnr !== undefined && resultData.metrics.psnr !== null 
+                    ? `${resultData.metrics.psnr} dB` 
+                    : 'N/A'}
+                </div>
+              </div>
+
+              <div style={{ width: '1px', height: '30px', background: '#cbd5e1' }} />
+
+              {/* ③ SSIM (구조 유지도) */}
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '0.75rem', color: '#6b21a8', fontWeight: '700' }}>🏗️ 구조 유지(SSIM)</div>
+                <div style={{ fontSize: '1.05rem', color: '#9333ea', fontWeight: '850', marginTop: '2px' }}>
+                  {resultData.metrics.ssim !== undefined && resultData.metrics.ssim !== null 
+                    ? `${(resultData.metrics.ssim * 100).toFixed(0)}%` 
+                    : 'N/A'}
+                  <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#c084fc', marginLeft: '4px' }}>
+                    ({resultData.metrics.ssim || 0})
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

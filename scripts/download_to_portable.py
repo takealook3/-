@@ -88,9 +88,15 @@ models_to_download = [
         "url": "https://huggingface.co/SicariusSicariiStuff/Stable-Diffusion_1.5_Collection/resolve/main/realisticVisionV60B1_v51HyperVAE.safetensors",
         "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/checkpoints/realisticVisionV60B1_v51HyperVAE.safetensors")
     },
+    # [인페인팅용 ControlNet 모델] 부분 이미지를 자연스럽게 수정할 때 사용
     {
         "url": "https://huggingface.co/lllyasviel/control_v11p_sd15_inpaint/resolve/main/diffusion_pytorch_model.safetensors",
         "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/controlnet/control_v11p_sd15_inpaint.safetensors")
+    },
+    # [방 구조 유지용 M-LSD ControlNet 모델] 방 리모델링 시 벽면과 직선 구도를 유지할 때 사용
+    {
+        "url": "https://huggingface.co/lllyasviel/control_v11p_sd15_mlsd/resolve/main/diffusion_pytorch_model.safetensors",
+        "dest": os.path.join(PORTABLE_COMFY_ROOT, "models/controlnet/control_v11p_sd15_mlsd.safetensors")
     },
     {
         "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth",

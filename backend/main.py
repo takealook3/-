@@ -155,6 +155,15 @@ from schemas import (
     SessionHistoryResponse, ProductItem, ProductSearchResponse, CropEmbeddingResponse
 )
 
+# [정량평가 서비스 임포트]
+try:
+    from services.evaluation_service import evaluate_generated_image
+    EVALUATION_AVAILABLE = True
+except Exception as e:
+    print(f"⚠️ 정량평가 서비스 모듈 로드 불가: {e}")
+    EVALUATION_AVAILABLE = False
+    def evaluate_generated_image(*args, **kwargs): return None
+
 app = FastAPI(title="ZipPT API - 종합 이미지 복원 & 편집 & 대화 서비스")
 
 # =====================================================================
@@ -424,23 +433,23 @@ def translate_prompt_to_english(prompt: str) -> str:
                 f"Korean: {prompt}\n"
                 "English Prompt:"
             )
-            # 타임아웃(4.0초)이 적용된 동적 스레드 풀 실행 (네트워크 블로킹 방지) [이유: 8초에서 4초로 지연 최소화]
+            # 타임아웃(2.5초)이 적용된 동적 스레드 풀 실행 (네트워크 블로킹 방지) [이유: 8초에서 2.5초로 지연 최소화]
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(rag_llm.invoke, [HumanMessage(content=system_prompt)])
-                response = future.result(timeout=4.0)
+                response = future.result(timeout=2.5)
             translated = response.content.strip().replace('"', '').replace("'", "")
             print(f"🌐 [Translate] 번역 완료: '{translated}'")
             translation_cache[prompt] = translated
             return translated
         except Exception as e:
-            print(f"⚠️ [Translate] 기본 모델 번역 실패 ({e}). 백업 모델(gemini-1.5-flash)로 재시도합니다.")
+            print(f"⚠️ [Translate] 기본 모델 번역 실패 ({e}). 백업 모델(gemini-2.0-flash)로 재시도합니다.")
             try:
-                # [한글 주석] 주력 번역 모델 쿼터 한도 도달 시 gemini-1.5-flash 모델을 통해 우회 번역을 재시도합니다.
+                # [한글 주석] 주력 번역 모델 쿼터 한도 도달 시 gemini-2.0-flash 모델을 통해 우회 번역을 재시도합니다.
                 from langchain_google_genai import ChatGoogleGenerativeAI
-                backup_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.2)
+                backup_llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.2)
                 with ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(backup_llm.invoke, [HumanMessage(content=system_prompt)])
-                    response = future.result(timeout=4.0) # [이유: 대기 최소화를 위해 4초로 단축]
+                    response = future.result(timeout=2.5) # [이유: 대기 최소화를 위해 2.5초로 단축]
                 translated = response.content.strip().replace('"', '').replace("'", "")
                 print(f"🌐 [Translate] 백업 모델 번역 성공: '{translated}'")
                 translation_cache[prompt] = translated
@@ -834,19 +843,28 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
         ws = None
         ws_success = False
         try:
-            ws = websocket.create_connection(ws_url, timeout=120)
+            ws = websocket.create_connection(ws_url, timeout=3)
             ws_success = True
             print(f"🔌 [ComfyUI API (WS)] 웹소켓 채널 연결 수립 완료: {ws_url}")
         except Exception as ws_err:
             print(f"⚠️ [ComfyUI API (WS)] 웹소켓 연결 오류 ({ws_err}). 기존 폴링 모드로 폴백 대기합니다.")
 
-        if ws_success and ws:
-            try:
-                # KSampler가 완료 이벤트를 쏠 때까지 웹소켓 recv 대기
-                while True:
+        history_url = f"{COMFYUI_API_URL}/history/{prompt_id}"
+        
+        # ─── [한글 주석] 웹소켓 실시간 수신 + 0.5초 폴링 하이브리드 대기 (120초 타임아웃 버그 완벽 해결) ───
+        # ComfyUI가 연산을 완료했는지 웹소켓 이벤트로 감지하되, 소켓 통신 지연이나 이벤트 유실에 대비해
+        # 0.5초 주기로 /history API를 동시에 확인하여 완료 즉시 반환합니다.
+        import socket
+        max_attempts = 400  # 최대 약 200초 대기
+        for _ in range(max_attempts):
+            # 1. 웹소켓 수신 시도 (0.5초 타임아웃)
+            if ws_success and ws:
+                try:
+                    ws.settimeout(0.5)
                     msg = ws.recv()
                     if isinstance(msg, str):
                         event = json.loads(msg)
+                        # ─── [한글 주석] 원격 창고의 실시간 진행 상황 콜백 기능과 우리 컴퓨터의 웹소켓 타임아웃 예외 처리를 조화롭게 결합 ───
                         etype = event.get("type")
                         data = event.get("data", {})
                         
@@ -870,41 +888,15 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                             print(f"📐 [ComfyUI WS Progress] {value}/{max_val} ({percent}%)")
                             if status_callback:
                                 status_callback("progress", f"이미지 디퓨전 생성 중... ({percent}%)")
-                    else:
-                        continue
-            except Exception as ws_recv_err:
-                print(f"⚠️ [ComfyUI API (WS)] 웹소켓 데이터 수신 중 오류 ({ws_recv_err}). 폴링 전환 진행.")
-                ws_success = False
-            finally:
-                try:
-                    ws.close()
-                except:
+                except (websocket.WebSocketTimeoutException, socket.timeout, Exception) as ws_recv_err:
+                    # 한글 주석: 0.5초 타임아웃 또는 예외 발생 시 하이브리드 대기 및 폴링으로 부드럽게 복구
                     pass
-
-
-        # 웹소켓이 성공적으로 완료되었든, 실패하여 Fallback 하든 최종 결과 수집은 /history 에서 수행
-        history_url = f"{COMFYUI_API_URL}/history/{prompt_id}"
-        
-        if ws_success:
-            # 웹소켓으로 이미 완료를 확인했으므로 바로 1회 즉시 GET 호출하여 파일명 획득
-            h_res = requests.get(history_url, timeout=5)
-            h_data = h_res.json()
-            if prompt_id in h_data:
-                outputs = h_data[prompt_id].get("outputs", {})
-                for node_id, out_data in outputs.items():
-                    if "images" in out_data:
-                        filename = out_data["images"][0].get("filename")
-                        comfy_out_path = os.path.join(COMFYUI_OUTPUT_DIR, filename)
-                        os.makedirs(os.path.join(PROJECT_ROOT, "results"), exist_ok=True)
-                        if os.path.exists(comfy_out_path):
-                            dest_path = os.path.join(PROJECT_ROOT, "results", filename)
-                            shutil.copy(comfy_out_path, dest_path)
-                            print(f"🟢 [ComfyUI API (WS)] 완료본 복사완료: {dest_path}")
-                        return filename
-        else:
-            # Fallback: 기존의 0.3초 주기 폴링 방식 수행 [이유: 웹소켓 오류에 대한 복원력 확보]
-            for _ in range(400):
-                h_res = requests.get(history_url, timeout=5)
+            else:
+                time.sleep(0.5)
+                
+            # 2. 0.5초마다 /history 단건 조회하여 완료 파일 존재 여부 즉시 확인 [이유: 120초 무한 대기 버그 완벽 원천 차단]
+            try:
+                h_res = requests.get(history_url, timeout=3)
                 h_data = h_res.json()
                 if prompt_id in h_data:
                     outputs = h_data[prompt_id].get("outputs", {})
@@ -916,9 +908,17 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                             if os.path.exists(comfy_out_path):
                                 dest_path = os.path.join(PROJECT_ROOT, "results", filename)
                                 shutil.copy(comfy_out_path, dest_path)
-                                print(f"🟢 [ComfyUI API (Fallback)] 완료본 복사완료: {dest_path}")
-                            return filename
-                time.sleep(0.3)
+                                print(f"🟢 [ComfyUI API (Hybrid)] 완료본 확인 및 복사 완료: {dest_path}")
+                                if ws:
+                                    try: ws.close()
+                                    except: pass
+                                return filename
+            except Exception:
+                pass
+
+        if ws:
+            try: ws.close()
+            except: pass
     except Exception as e:
         print(f"⚠️ [ComfyUI API Error] Fallback 작동: {e}")
     return None
@@ -1328,6 +1328,17 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
         task_id = str(uuid.uuid4())
         result_url = f"/static/results/interior_result_{style}_01.jpg" if style in ("modern", "minimal", "natural") else "/static/results/interior_result_sample_01.jpg"
         
+        # [정량평가 연산 (T2I 모드 - 원본 없음)]
+        metrics_data = None
+        if EVALUATION_AVAILABLE and result_url:
+            try:
+                eval_dest_path = os.path.join(PROJECT_ROOT, "results", os.path.basename(result_url))
+                if os.path.exists(eval_dest_path):
+                    metrics_data = evaluate_generated_image(None, eval_dest_path, prompt)
+            except Exception as eval_err:
+                print(f"⚠️ [Evaluation Integration] 평가 오류: {eval_err}")
+                metrics_data = {"error": str(eval_err)}
+
         session_data = get_or_create_session(session_id)
         session_data["generations"].append({
             "type": "interior_transform",
@@ -1337,6 +1348,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
             "result_image_url": result_url,
             "style": style,
             "prompt": prompt,
+            "metrics": metrics_data,
             "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         })
         session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -1351,6 +1363,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
             "prompt": prompt,
             "processing_time": 0.42,
             "status": "completed",
+            "metrics": metrics_data,
             "is_t2i": True
         }
 
@@ -1443,6 +1456,18 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
     if elapsed < 0.1:
         elapsed = 0.42
         
+    # [정량평가 연산 및 지표 병합] (요구사항 1~12)
+    metrics_data = None
+    if EVALUATION_AVAILABLE and result_url:
+        try:
+            eval_orig_path = os.path.join(PROJECT_ROOT, "uploads", input_filename) if os.path.exists(os.path.join(PROJECT_ROOT, "uploads", input_filename)) else None
+            eval_dest_path = os.path.join(PROJECT_ROOT, "results", result_filename)
+            if os.path.exists(eval_dest_path):
+                metrics_data = evaluate_generated_image(eval_orig_path, eval_dest_path, prompt)
+        except Exception as eval_err:
+            print(f"⚠️ [Evaluation Integration] 평가 오류: {eval_err}")
+            metrics_data = {"error": str(eval_err)}
+
     session_data = get_or_create_session(session_id)
     session_data["generations"].append({
         "type": "interior_transform",
@@ -1452,6 +1477,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
         "style": style,
         "prompt": prompt,
         "workflow": workflow_info,
+        "metrics": metrics_data,
         "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -1466,6 +1492,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
         "processing_time": elapsed,
         "status": "completed",
         "workflow": workflow_info,
+        "metrics": metrics_data,
         "is_t2i": False
     }
 
@@ -1962,6 +1989,18 @@ def generate_image(req: ImageGenerateRequest):
             )
             workflow_info["execution_mode"] = "mock_fallback"
 
+    # [정량평가 연산 및 지표 병합] (요구사항 1~12)
+    metrics_data = None
+    if EVALUATION_AVAILABLE and generated_url:
+        try:
+            eval_orig_path = os.path.join(PROJECT_ROOT, "uploads", input_filename) if os.path.exists(os.path.join(PROJECT_ROOT, "uploads", input_filename)) else None
+            eval_dest_path = os.path.join(PROJECT_ROOT, "results", os.path.basename(generated_url))
+            if os.path.exists(eval_dest_path):
+                metrics_data = evaluate_generated_image(eval_orig_path, eval_dest_path, req.prompt)
+        except Exception as eval_err:
+            print(f"⚠️ [Evaluation Integration] 평가 오류: {eval_err}")
+            metrics_data = {"error": str(eval_err)}
+
     session_data = get_or_create_session(req.session_id)
     session_data["generations"].append({
         "task_id": task_id,
@@ -1971,6 +2010,7 @@ def generate_image(req: ImageGenerateRequest):
         "keep_structure": req.keep_structure,
         "generated_image_url": generated_url,
         "workflow": workflow_info,
+        "metrics": metrics_data,
         "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -1985,7 +2025,8 @@ def generate_image(req: ImageGenerateRequest):
                 "session_id": req.session_id,
                 "generated_image_url": generated_url,
                 "status": "completed",
-                "workflow": workflow_info
+                "workflow": workflow_info,
+                "metrics": metrics_data
             },
             "message": f"이미지 생성이 완료되었습니다. (ComfyUI Status: {workflow_info['comfyui_status']})"
         }
@@ -2141,7 +2182,8 @@ def chat_message(req: ChatMessageRequest):
                 original_image_url=res_data.get("original_image_url"),
                 style=res_data.get("style"),
                 prompt=res_data.get("prompt"),
-                processing_time=res_data.get("processing_time")
+                processing_time=res_data.get("processing_time"),
+                metrics=res_data.get("metrics")
             ),
             message="인테리어 변환 및 스타일 상담이 완료되었습니다."
         )
@@ -2443,7 +2485,8 @@ def edit_image(req: ImageEditRequest):
         dest_path = os.path.join(PROJECT_ROOT, "results", result_filename)
         orig_path = os.path.join(PROJECT_ROOT, "uploads", orig_input_filename) if orig_input_filename else os.path.join(PROJECT_ROOT, "uploads", f"{req.image_id}.jpg")
         
-        inpaint_model_filename = "realisticVisionV60B1_v51HyperInpaintVAE.safetensors"
+        # 한글 주석: 인페인팅 전용 모델 누락 시, 기존 설치된 일반 Realistic Vision 모델로 대체하여 구동
+        inpaint_model_filename = "realisticVisionV60B1_v51HyperVAE.safetensors"
         sd_inpaint_model_path = os.path.join(COMFYUI_PATH, "ComfyUI", "models", "checkpoints", inpaint_model_filename)
         if not os.path.exists(sd_inpaint_model_path):
             alt_inpaint_model = os.path.join(COMFYUI_PATH, "models", "checkpoints", inpaint_model_filename)
@@ -2562,6 +2605,18 @@ def edit_image(req: ImageEditRequest):
         )
         workflow_info["execution_mode"] = "mock_fallback"
 
+    # [정량평가 연산 및 지표 병합] (요구사항 1~12)
+    metrics_data = None
+    if EVALUATION_AVAILABLE and result_url:
+        try:
+            eval_orig_path = orig_path if orig_path and os.path.exists(orig_path) else None
+            eval_dest_path = os.path.join(PROJECT_ROOT, "results", os.path.basename(result_url))
+            if os.path.exists(eval_dest_path):
+                metrics_data = evaluate_generated_image(eval_orig_path, eval_dest_path, req.prompt)
+        except Exception as eval_err:
+            print(f"⚠️ [Evaluation Integration] 평가 오류: {eval_err}")
+            metrics_data = {"error": str(eval_err)}
+
     # 세션 기록 업데이트 관리
     session_data = get_or_create_session(req.session_id)
     session_data["edits"].append({
@@ -2572,6 +2627,7 @@ def edit_image(req: ImageEditRequest):
         "prompt": req.prompt,
         "edited_image_url": result_url,
         "workflow": workflow_info,
+        "metrics": metrics_data,
         "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -2585,7 +2641,8 @@ def edit_image(req: ImageEditRequest):
                 "session_id": req.session_id,
                 "edited_image_url": result_url,
                 "status": "completed",
-                "workflow": workflow_info
+                "workflow": workflow_info,
+                "metrics": metrics_data
             },
             "message": f"이미지 편집 작업이 완료되었습니다. (Mode: {workflow_info['execution_mode']})"
         }

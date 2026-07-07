@@ -324,9 +324,9 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
       const res = await editImage({
         imageId,
         sessionId,
-        mask: base64MaskA,
+        mask: base64MaskA,           // ComfyUI 인페인팅용 Base64 PNG 마스크
         mask_b: base64MaskB,
-        mask_pixels_a: maskPixelsA,
+        mask_pixels_a: maskPixelsA,  // mock 폴백용 픽셀 좌표 배열 [x1,y1,x2,y2]
         mask_pixels_b: maskPixelsB ? maskPixelsB : null,
         prompt: promptA.trim(),
         prompt_b: base64MaskB ? promptB.trim() : null
@@ -334,6 +334,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
 
       if (res.success) {
         const eUrl = res.data?.edited_image_url || res.data?.editedImageUrl;
+        // 브라우저 캐시 방지를 위해 타임스탬프 쿼리 파라미터 추가
         const cacheBustedUrl = eUrl ? `${eUrl}?t=${Date.now()}` : eUrl;
         setEditedResultUrl(cacheBustedUrl);
 
@@ -344,7 +345,8 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
             style: "repair",
             prompt: promptA.trim(),
             processingTime: res.data?.processing_time || 0.42,
-            status: "completed"
+            status: "completed",
+            metrics: res.data?.metrics || null // 한글 주석: 부분 인페인팅 정량평가 점수 전달
           });
         }
       } else {

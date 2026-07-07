@@ -19,7 +19,7 @@
 from pydantic import BaseModel, Field, field_validator
 
 
-from typing import Optional, List, Generic, TypeVar, Literal, Any
+from typing import Optional, List, Generic, TypeVar, Literal, Any, Dict
 
 
 
@@ -392,6 +392,7 @@ class GraffitiRemoveResponse(BaseModel):
 
 
     status: str = Field("completed", description="泥섎━ 寃곌낵 긽깭 (삁: completed)")
+    metrics: Optional[Dict[str, Any]] = Field(None, description="정량평가 지표 (CLIP Score, PSNR, SSIM)")
 
 
 
@@ -501,6 +502,7 @@ class ImageGenerateResponse(BaseModel):
 
 
     status: str = Field("completed", description="옉뾽 泥섎━ 긽깭")
+    metrics: Optional[Dict[str, Any]] = Field(None, description="정량평가 지표 (CLIP Score, PSNR, SSIM)")
 
 
 
@@ -591,6 +593,7 @@ class ChatMessageResponse(BaseModel):
 
 
     processing_time: Optional[float] = Field(None, description="변환 소요 시간")
+    metrics: Optional[Dict[str, Any]] = Field(None, description="정량평가 지표 (CLIP Score, PSNR, SSIM)")
 
 
 
@@ -690,6 +693,7 @@ class ImageEditResponse(BaseModel):
 
 
     status: str = Field("completed", description="옉뾽 泥섎━ 긽깭")
+    metrics: Optional[Dict[str, Any]] = Field(None, description="정량평가 지표 (CLIP Score, PSNR, SSIM)")
 
 
 
@@ -774,6 +778,7 @@ class ImageInpaintResponse(BaseModel):
     processing_time: float = Field(..., description="작업 소요 시간(초)")
     status: str = Field("completed", description="처리 상태")
     message: str = Field("선택 영역 가구 수정이 완료되었습니다.", description="결과 안내 메시지")
+    metrics: Optional[Dict[str, Any]] = Field(None, description="정량평가 지표 (CLIP Score, PSNR, SSIM)")
 
 
 # =====================================================================

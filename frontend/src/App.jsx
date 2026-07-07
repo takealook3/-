@@ -332,6 +332,7 @@ export default function App() {
         throw new Error(`HTTP 통신 실패 (Status: ${response.status})`);
       }
 
+      // 한글 주석: 원격 창고의 SSE 스트리밍 로직과 우리 컴퓨터의 정량평가 점수(metrics)/추천(recommendations) 기능을 조화롭게 통합
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
@@ -371,11 +372,12 @@ export default function App() {
                   handleGenerateSuccess({
                     resultId: respData.result_id,
                     resultImageUrl: fullImg,
-                    style: respData.style || "custom",
+                    style: respData.style || "modern",
                     prompt: promptText.trim(),
                     processingTime: respData.processing_time || 5.0,
                     status: "completed",
-                    recommendations: null
+                    recommendations: respData.recommendations || null,
+                    metrics: respData.metrics || null // 한글 주석: 백엔드에서 연산한 정량평가 점수 전달 (로컬 장점 병합)
                   });
                 }
                 setTransformProgress('');
