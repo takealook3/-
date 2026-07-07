@@ -23,7 +23,7 @@ if defined COMFYUI_PATH (
 )
 
 echo 1. FastAPI 백엔드 서버 구동 중... (포트 8000)
-start "FastAPI Backend" cmd /k ".\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload"
+start "FastAPI Backend" cmd /k "python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload"
 echo 2. React (Vite) 프론트엔드 개발 서버 구동 중... (포트 5173)
 start "React Frontend" cmd /k "cd frontend && npm.cmd run dev"
 echo 3. ComfyUI AI 가속 서버 구동 중... (포트 8188)
@@ -38,4 +38,3 @@ timeout /t 4 /nobreak > nul
 start http://localhost:5173
 echo 모든 서버 실행 및 브라우저 기동 명령을 완료했습니다.
 echo ==================================================
-pause

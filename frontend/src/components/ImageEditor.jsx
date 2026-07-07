@@ -228,7 +228,8 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
             style: "repair",
             prompt: promptA.trim(),
             processingTime: res.data?.processing_time || 0.42,
-            status: "completed"
+            status: "completed",
+            metrics: res.data?.metrics || null // 한글 주석: 부분 인페인팅 정량평가 점수 전달
           });
         }
       } else {

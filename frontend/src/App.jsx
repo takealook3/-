@@ -342,7 +342,8 @@ export default function App() {
             prompt: promptText.trim(),
             processingTime: respData.processing_time || 0,
             status: "completed",
-            recommendations: parsed
+            recommendations: parsed,
+            metrics: respData.metrics || null // 한글 주석: 백엔드에서 연산한 정량평가 점수 전달
           });
         }
       } else {
