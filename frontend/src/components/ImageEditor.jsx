@@ -1,8 +1,10 @@
-// ==============================================================// [ImageEditor.jsx: 1/2차 원형 마스킹 (Circle Double Inpainting) 통합 편집소]
+// ==============================================================
+// [ImageEditor.jsx: 1/2차 원형 마스킹 (Circle Double Inpainting) 통합 편집소]
 // 비유: 사진 속에서 바꾸고 싶은 가구 영역들을 각각 블루(A)와 핑크(B) 원형 스티커로
 // 동그랗게 지정하여 흑백 이미지 파일로 개별 캔버스 추출한 뒤, 백엔드로 송신하여 
 // 1차 단독 혹은 2차 동시 수선을 의뢰하는 프리미엄 편집 컴포넌트입니다.
-// ==============================================================import React, { useState, useRef } from 'react';
+// ==============================================================
+import React, { useState, useRef } from 'react';
 import { editImage, searchProducts, embedCropImage, API_BASE_URL } from '../services/api';
 
 export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGenerateSuccess, onError }) {
