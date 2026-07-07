@@ -11,13 +11,15 @@ export default function StyleTransformer({
   onGenerateSuccess, 
   onError,
   onResetImage,
+  onResetResult,
   pendingPrompt,
   setPendingPrompt,
   globalLoading,
   globalResultImageUrl,
   globalRawAnswer,
   globalSummaryData,
-  onSubmitTransform
+  onSubmitTransform,
+  globalProgress
 }) {
   const [prompt, setPrompt] = useState('밝고 미니멀한 거실로 바꿔줘');
 
@@ -28,12 +30,18 @@ export default function StyleTransformer({
   const summaryData = globalSummaryData;
 
   // 퀴즈 결과 프롬프트 주입 감지 및 인풋 갱신
-  useEffect(() => {
+  // 리액트 런타임 렌더링 충돌을 완벽하게 방지하기 위해 setTimeout으로 격리 실행합니다.
+  React.useEffect(() => {
     if (pendingPrompt) {
       setPrompt(pendingPrompt);
-      setPendingPrompt('');
+      const timer = setTimeout(() => {
+        setPendingPrompt('');
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [pendingPrompt, setPendingPrompt]);
+
+
 
   const getFullUrl = (url) => {
     if (!url) return "";
@@ -130,15 +138,17 @@ export default function StyleTransformer({
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
             
-            {/* 로딩 인디케이터 오버레이 - 이모지 제거 */}
             {loading && (
               <div style={{ 
                 position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, 
-                background: 'rgba(15, 23, 42, 0.8)', 
-                display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: '#fff' 
+                background: 'rgba(15, 23, 42, 0.85)', 
+                display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', color: '#fff',
+                padding: '20px', textAlign: 'center'
               }}>
-                <div style={{ fontWeight: '700', fontSize: '1rem' }}>공간 리모델링 및 자재 분석 중...</div>
-                <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>대략 5~10초 소요됩니다. 잠시만 기다려주세요.</div>
+                <div style={{ fontWeight: '800', fontSize: '1.1rem', marginBottom: '8px', letterSpacing: '-0.02em' }}>이미지 변환 중...</div>
+                <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.8)', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}>
+                  {globalProgress || '리모델링 엔진 연산을 대기 중입니다.'}
+                </div>
               </div>
             )}
 
@@ -187,39 +197,23 @@ export default function StyleTransformer({
           minHeight: '340px'
         }}>
           {loading ? (
-            /* 로딩 중 모션 플레이트 */
             <div style={{ 
               display: 'flex', 
               flexDirection: 'column', 
               height: '100%', 
               justifyContent: 'center', 
-              alignItems: 'stretch',
+              alignItems: 'center',
               gap: '20px',
               padding: '10px 0'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--accent)', animation: 'pulse 1.2s infinite' }} />
-                <span style={{ fontSize: '0.82rem', fontWeight: '800', color: 'var(--primary)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                  AI Spatial Analysis
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', margin: 'auto', textAlign: 'center', padding: '0 10px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: 'var(--accent)', animation: 'pulse 1.2s infinite' }} />
+                <span style={{ fontSize: '0.95rem', fontWeight: '800', color: 'var(--primary)', letterSpacing: '0.02em' }}>
+                  이미지 변환 중...
                 </span>
-              </div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div className="skeleton-line" style={{ width: '100%', height: '18px', borderRadius: '4px', background: 'linear-gradient(90deg, #F5EFEB 25%, #EAE5DF 50%, #F5EFEB 75%)', backgroundSize: '200% 100%', animation: 'skeleton-glow 1.5s infinite' }} />
-                <div className="skeleton-line" style={{ width: '85%', height: '14px', borderRadius: '4px', background: 'linear-gradient(90deg, #F5EFEB 25%, #EAE5DF 50%, #F5EFEB 75%)', backgroundSize: '200% 100%', animation: 'skeleton-glow 1.5s infinite' }} />
-                <div className="skeleton-line" style={{ width: '60%', height: '14px', borderRadius: '4px', background: 'linear-gradient(90deg, #F5EFEB 25%, #EAE5DF 50%, #F5EFEB 75%)', backgroundSize: '200% 100%', animation: 'skeleton-glow 1.5s infinite' }} />
-              </div>
-
-              <div style={{ 
-                marginTop: '10px',
-                padding: '16px', 
-                backgroundColor: 'rgba(234, 229, 223, 0.3)', 
-                borderRadius: '12px',
-                border: '1px solid rgba(255,255,255,0.5)'
-              }}>
-                <p style={{ margin: 0, fontSize: '0.82rem', lineHeight: '1.5', color: 'var(--text-main)', fontWeight: '600' }}>
-                  공간의 벽지 질감 and 광원 정보를 기반으로 신규 가구 텍스처를 맵핑하고 있습니다. 잠시만 기다려주세요.
-                </p>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', whiteSpace: 'pre-wrap', lineHeight: '1.4', marginTop: '4px' }}>
+                  {globalProgress || '작업을 로드 중입니다.'}
+                </span>
               </div>
 
               <button
@@ -227,14 +221,39 @@ export default function StyleTransformer({
                 className="btn btn-primary"
                 style={{ 
                   marginTop: 'auto',
+                  width: '100%',
                   padding: '14px', fontSize: '0.95rem', fontWeight: '700',
                   background: 'rgba(43, 53, 48, 0.1)',
                   color: 'var(--text-muted)',
                   border: 'none', borderRadius: '12px'
                 }}
               >
-                스타일 리모델링 변환 중...
+                이미지 변환 중...
               </button>
+            </div>
+          ) : resultImageUrl ? (
+            /* 변환 완료 피드백 화면 */
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'center', alignItems: 'stretch', gap: '20px', textAlign: 'center' }}>
+              <div style={{ fontSize: '3rem', margin: '0 auto' }}>🎉</div>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--primary)', margin: '10px 0 4px', fontFamily: 'Outfit, sans-serif' }}>스타일 변환 완료!</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.6', margin: '0 0 10px', fontFamily: 'Outfit, sans-serif' }}>
+                성공적으로 인테리어 스타일 변환이 완료되었습니다.<br />
+                <strong>아래 Before / After 쇼룸</strong>에서 결과를 확인하고 맞춤 제안을 받아보세요!
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: 'auto' }}>
+                <button
+                  type="button"
+                  onClick={onResetResult}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '14px', fontSize: '0.9rem', fontWeight: '700', borderRadius: '12px',
+                    border: '1px solid var(--border-color)', transition: 'all 0.2s', width: '100%',
+                    fontFamily: 'Outfit, sans-serif', cursor: 'pointer'
+                  }}
+                >
+                  다른 스타일로 다시 하기
+                </button>
+              </div>
             </div>
           ) : (
             /* 기존 폼 & 칩 뷰 */

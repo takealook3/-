@@ -155,41 +155,7 @@ from schemas import (
     SessionHistoryResponse, ProductItem, ProductSearchResponse, CropEmbeddingResponse
 )
 
-# [정량평가 서비스 임포트]
-try:
-    from services.evaluation_service import evaluate_generated_image
-    EVALUATION_AVAILABLE = True
-except Exception as e:
-    print(f"⚠️ 정량평가 서비스 모듈 로드 불가: {e}")
-    EVALUATION_AVAILABLE = False
-    def evaluate_generated_image(*args, **kwargs): return None
-
 app = FastAPI(title="ZipPT API - 종합 이미지 복원 & 편집 & 대화 서비스")
-
-# =====================================================================
-# [DB3_furniture.csv 가구 데이터 인메모리 로딩 및 캐싱]
-# =====================================================================
-CSV_ITEMS = []
-
-def load_db3_csv_items():
-    import csv
-    global CSV_ITEMS
-    csv_path = os.path.join(PROJECT_ROOT, "backend", "DB3_furniture.csv")
-    if os.path.exists(csv_path):
-        try:
-            with open(csv_path, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    CSV_ITEMS.append(row)
-            print(f"📖 [Backend Load] DB3_furniture.csv 가구 상품 {len(CSV_ITEMS)}개 파싱 캐싱 완료!")
-        except Exception as e:
-            print(f"⚠️ [Backend Load] DB3_furniture.csv 캐싱 오류: {e}")
-    else:
-        print(f"⚠️ [Backend Load] DB3_furniture.csv 파일을 찾을 수 없습니다: {csv_path}")
-
-# 서버 시작 시 메타데이터 맵 구축 및 DB3 가구 리스트 기동 로드
-build_db_metadata_maps()
-load_db3_csv_items()
 
 # =====================================================================
 # [ComfyUI 로컬 실행 경로 환경설정]
@@ -433,23 +399,23 @@ def translate_prompt_to_english(prompt: str) -> str:
                 f"Korean: {prompt}\n"
                 "English Prompt:"
             )
-            # 타임아웃(2.5초)이 적용된 동적 스레드 풀 실행 (네트워크 블로킹 방지) [이유: 8초에서 2.5초로 지연 최소화]
+            # 타임아웃(4.0초)이 적용된 동적 스레드 풀 실행 (네트워크 블로킹 방지) [이유: 8초에서 4초로 지연 최소화]
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(rag_llm.invoke, [HumanMessage(content=system_prompt)])
-                response = future.result(timeout=2.5)
+                response = future.result(timeout=4.0)
             translated = response.content.strip().replace('"', '').replace("'", "")
             print(f"🌐 [Translate] 번역 완료: '{translated}'")
             translation_cache[prompt] = translated
             return translated
         except Exception as e:
-            print(f"⚠️ [Translate] 기본 모델 번역 실패 ({e}). 백업 모델(gemini-2.0-flash)로 재시도합니다.")
+            print(f"⚠️ [Translate] 기본 모델 번역 실패 ({e}). 백업 모델(gemini-1.5-flash)로 재시도합니다.")
             try:
-                # [한글 주석] 주력 번역 모델 쿼터 한도 도달 시 gemini-2.0-flash 모델을 통해 우회 번역을 재시도합니다.
+                # [한글 주석] 주력 번역 모델 쿼터 한도 도달 시 gemini-1.5-flash 모델을 통해 우회 번역을 재시도합니다.
                 from langchain_google_genai import ChatGoogleGenerativeAI
-                backup_llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.2)
+                backup_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.2)
                 with ThreadPoolExecutor(max_workers=1) as executor:
                     future = executor.submit(backup_llm.invoke, [HumanMessage(content=system_prompt)])
-                    response = future.result(timeout=2.5) # [이유: 대기 최소화를 위해 2.5초로 단축]
+                    response = future.result(timeout=4.0) # [이유: 대기 최소화를 위해 4초로 단축]
                 translated = response.content.strip().replace('"', '').replace("'", "")
                 print(f"🌐 [Translate] 백업 모델 번역 성공: '{translated}'")
                 translation_cache[prompt] = translated
@@ -558,7 +524,7 @@ def translate_prompt_to_english(prompt: str) -> str:
     translation_cache[prompt] = fallback_prompt
     return fallback_prompt
 
-def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callback=None) -> str:
+def execute_real_comfyui(workflow_filename: str, parameters: dict) -> str:
     import requests
     import shutil
     try:
@@ -841,60 +807,59 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
         ws = None
         ws_success = False
         try:
-            ws = websocket.create_connection(ws_url, timeout=3)
+            ws = websocket.create_connection(ws_url, timeout=120)
             ws_success = True
             print(f"🔌 [ComfyUI API (WS)] 웹소켓 채널 연결 수립 완료: {ws_url}")
         except Exception as ws_err:
             print(f"⚠️ [ComfyUI API (WS)] 웹소켓 연결 오류 ({ws_err}). 기존 폴링 모드로 폴백 대기합니다.")
 
-        history_url = f"{COMFYUI_API_URL}/history/{prompt_id}"
-        
-        # ─── [한글 주석] 웹소켓 실시간 수신 + 0.5초 폴링 하이브리드 대기 (120초 타임아웃 버그 완벽 해결) ───
-        # ComfyUI가 연산을 완료했는지 웹소켓 이벤트로 감지하되, 소켓 통신 지연이나 이벤트 유실에 대비해
-        # 0.5초 주기로 /history API를 동시에 확인하여 완료 즉시 반환합니다.
-        import socket
-        max_attempts = 400  # 최대 약 200초 대기
-        for _ in range(max_attempts):
-            # 1. 웹소켓 수신 시도 (0.5초 타임아웃)
-            if ws_success and ws:
-                try:
-                    ws.settimeout(0.5)
+        if ws_success and ws:
+            try:
+                # KSampler가 완료 이벤트를 쏠 때까지 웹소켓 recv 대기
+                while True:
                     msg = ws.recv()
                     if isinstance(msg, str):
                         event = json.loads(msg)
-                        # ─── [한글 주석] 원격 창고의 실시간 진행 상황 콜백 기능과 우리 컴퓨터의 웹소켓 타임아웃 예외 처리를 조화롭게 결합 ───
-                        etype = event.get("type")
-                        data = event.get("data", {})
-                        
-                        if etype == "executing" and data.get("prompt_id") == prompt_id:
-                            node_id = data.get("node")
-                            if node_id is None:
+                        if event.get("type") == "executing":
+                            data = event.get("data", {})
+                            # node가 None이고 prompt_id가 일치할 때 완료
+                            if data.get("node") is None and data.get("prompt_id") == prompt_id:
                                 print(f"🟢 [ComfyUI API (WS)] 작업 완료 이벤트를 수신했습니다. Prompt ID: {prompt_id}")
-                                if status_callback:
-                                    status_callback("completed", "인테리어 변환 연산 완료!")
                                 break
-                            else:
-                                node_title = prompt_api_data.get(str(node_id), {}).get("_meta", {}).get("title", f"노드 {node_id}")
-                                print(f"📡 [ComfyUI WS Executing] Node {node_id}: {node_title}")
-                                if status_callback:
-                                    status_callback("generating", f"AI 엔진 연산 중: '{node_title}' 실행 중...")
-                                    
-                        elif etype == "progress" and data.get("prompt_id") == prompt_id:
-                            value = data.get("value")
-                            max_val = data.get("max")
-                            percent = int((value / max_val) * 100) if max_val else 0
-                            print(f"📐 [ComfyUI WS Progress] {value}/{max_val} ({percent}%)")
-                            if status_callback:
-                                status_callback("progress", f"이미지 디퓨전 생성 중... ({percent}%)")
-                except (websocket.WebSocketTimeoutException, socket.timeout, Exception) as ws_recv_err:
-                    # 한글 주석: 0.5초 타임아웃 또는 예외 발생 시 하이브리드 대기 및 폴링으로 부드럽게 복구
+                    else:
+                        continue
+            except Exception as ws_recv_err:
+                print(f"⚠️ [ComfyUI API (WS)] 웹소켓 데이터 수신 중 오류 ({ws_recv_err}). 폴링 전환 진행.")
+                ws_success = False
+            finally:
+                try:
+                    ws.close()
+                except:
                     pass
-            else:
-                time.sleep(0.5)
-                
-            # 2. 0.5초마다 /history 단건 조회하여 완료 파일 존재 여부 즉시 확인 [이유: 120초 무한 대기 버그 완벽 원천 차단]
-            try:
-                h_res = requests.get(history_url, timeout=3)
+
+        # 웹소켓이 성공적으로 완료되었든, 실패하여 Fallback 하든 최종 결과 수집은 /history 에서 수행
+        history_url = f"{COMFYUI_API_URL}/history/{prompt_id}"
+        
+        if ws_success:
+            # 웹소켓으로 이미 완료를 확인했으므로 바로 1회 즉시 GET 호출하여 파일명 획득
+            h_res = requests.get(history_url, timeout=5)
+            h_data = h_res.json()
+            if prompt_id in h_data:
+                outputs = h_data[prompt_id].get("outputs", {})
+                for node_id, out_data in outputs.items():
+                    if "images" in out_data:
+                        filename = out_data["images"][0].get("filename")
+                        comfy_out_path = os.path.join(COMFYUI_OUTPUT_DIR, filename)
+                        os.makedirs(os.path.join(PROJECT_ROOT, "results"), exist_ok=True)
+                        if os.path.exists(comfy_out_path):
+                            dest_path = os.path.join(PROJECT_ROOT, "results", filename)
+                            shutil.copy(comfy_out_path, dest_path)
+                            print(f"🟢 [ComfyUI API (WS)] 완료본 복사완료: {dest_path}")
+                        return filename
+        else:
+            # Fallback: 기존의 0.3초 주기 폴링 방식 수행 [이유: 웹소켓 오류에 대한 복원력 확보]
+            for _ in range(400):
+                h_res = requests.get(history_url, timeout=5)
                 h_data = h_res.json()
                 if prompt_id in h_data:
                     outputs = h_data[prompt_id].get("outputs", {})
@@ -906,17 +871,9 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                             if os.path.exists(comfy_out_path):
                                 dest_path = os.path.join(PROJECT_ROOT, "results", filename)
                                 shutil.copy(comfy_out_path, dest_path)
-                                print(f"🟢 [ComfyUI API (Hybrid)] 완료본 확인 및 복사 완료: {dest_path}")
-                                if ws:
-                                    try: ws.close()
-                                    except: pass
-                                return filename
-            except Exception:
-                pass
-
-        if ws:
-            try: ws.close()
-            except: pass
+                                print(f"🟢 [ComfyUI API (Fallback)] 완료본 복사완료: {dest_path}")
+                            return filename
+                time.sleep(0.3)
     except Exception as e:
         print(f"⚠️ [ComfyUI API Error] Fallback 작동: {e}")
     return None
@@ -1326,17 +1283,6 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
         task_id = str(uuid.uuid4())
         result_url = f"/static/results/interior_result_{style}_01.jpg" if style in ("modern", "minimal", "natural") else "/static/results/interior_result_sample_01.jpg"
         
-        # [정량평가 연산 (T2I 모드 - 원본 없음)]
-        metrics_data = None
-        if EVALUATION_AVAILABLE and result_url:
-            try:
-                eval_dest_path = os.path.join(PROJECT_ROOT, "results", os.path.basename(result_url))
-                if os.path.exists(eval_dest_path):
-                    metrics_data = evaluate_generated_image(None, eval_dest_path, prompt)
-            except Exception as eval_err:
-                print(f"⚠️ [Evaluation Integration] 평가 오류: {eval_err}")
-                metrics_data = {"error": str(eval_err)}
-
         session_data = get_or_create_session(session_id)
         session_data["generations"].append({
             "type": "interior_transform",
@@ -1346,7 +1292,6 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
             "result_image_url": result_url,
             "style": style,
             "prompt": prompt,
-            "metrics": metrics_data,
             "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         })
         session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -1361,7 +1306,6 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
             "prompt": prompt,
             "processing_time": 0.42,
             "status": "completed",
-            "metrics": metrics_data,
             "is_t2i": True
         }
 
@@ -1454,18 +1398,6 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
     if elapsed < 0.1:
         elapsed = 0.42
         
-    # [정량평가 연산 및 지표 병합] (요구사항 1~12)
-    metrics_data = None
-    if EVALUATION_AVAILABLE and result_url:
-        try:
-            eval_orig_path = os.path.join(PROJECT_ROOT, "uploads", input_filename) if os.path.exists(os.path.join(PROJECT_ROOT, "uploads", input_filename)) else None
-            eval_dest_path = os.path.join(PROJECT_ROOT, "results", result_filename)
-            if os.path.exists(eval_dest_path):
-                metrics_data = evaluate_generated_image(eval_orig_path, eval_dest_path, prompt)
-        except Exception as eval_err:
-            print(f"⚠️ [Evaluation Integration] 평가 오류: {eval_err}")
-            metrics_data = {"error": str(eval_err)}
-
     session_data = get_or_create_session(session_id)
     session_data["generations"].append({
         "type": "interior_transform",
@@ -1475,7 +1407,6 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
         "style": style,
         "prompt": prompt,
         "workflow": workflow_info,
-        "metrics": metrics_data,
         "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -1490,223 +1421,8 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
         "processing_time": elapsed,
         "status": "completed",
         "workflow": workflow_info,
-        "metrics": metrics_data,
         "is_t2i": False
     }
-
-
-def translate_prompt_to_english_strict(prompt: str) -> str:
-    """사용자가 작성한 프롬프트를 번역하되, API 사용량 초과(429) 등의 오류를 삼키지 않고 그대로 에러로 던집니다."""
-    import re
-    if not prompt or not prompt.strip():
-        return "modern interior styling"
-
-    global translation_cache
-    if prompt in translation_cache:
-        return translation_cache[prompt]
-
-    has_korean = bool(re.search("[ㄱ-ㅎㅏ-ㅣ가-힣]", prompt))
-    if not has_korean:
-        result = prompt if (prompt.startswith("(") and prompt.endswith(")")) else f"({prompt}:1.35)"
-        translation_cache[prompt] = result
-        return result
-
-    global rag_llm, rag_enabled
-    if rag_enabled and rag_llm:
-        from concurrent.futures import ThreadPoolExecutor
-        from langchain_core.messages import HumanMessage
-        try:
-            system_prompt = (
-                "You are an expert interior designer and prompt engineer for Stable Diffusion.\n"
-                "Your task is to translate and expand the following Korean interior/furniture prompt into a highly descriptive English prompt suitable for inpainting/redesign.\n"
-                "CRITICAL: Ensure that the main object or furniture is placed at the very beginning of the prompt.\n"
-                "Keep the output as a clean, single-line comma-separated list of descriptive words, without any explanation, markdown, or intro.\n\n"
-                f"Korean: {prompt}\n"
-                "English Prompt:"
-            )
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(rag_llm.invoke, [HumanMessage(content=system_prompt)])
-                response = future.result(timeout=4.0)
-            translated = response.content.strip().replace('"', '').replace("'", "")
-            translation_cache[prompt] = translated
-            return translated
-        except Exception as e:
-            # 쿼터 도달 429 등의 에러인 경우 상위로 전파
-            raise RuntimeError(f"Gemini API가 요청을 수용할 수 없습니다: {str(e)}")
-    else:
-        raise ValueError("RAG LLM 엔진이 비활성화 상태이거나 API Key가 설정되지 않았습니다.")
-
-
-from fastapi.responses import StreamingResponse
-
-@app.post("/api/image/generate/stream")
-async def generate_interior_image_stream(request: Request):
-    """
-    [실시간 진행 상태 피드백 인테리어 이미지 변환 창구 (SSE)]
-    사용자가 요청을 보내면 Server-Sent Events (SSE) 형식으로 실시간 진행 단계를 스트리밍하고,
-    마지막에 완료된 이미지 결과 URL 및 상태 데이터를 반환합니다.
-    """
-    try:
-        body = await request.json()
-    except Exception:
-        body = {}
-        
-    image_id = body.get("image_id")
-    session_id = body.get("session_id")
-    style = body.get("style", "modern")
-    prompt = body.get("prompt", "").strip()
-    
-    if not session_id:
-        return JSONResponse(status_code=400, content={"success": False, "message": "세션 ID가 누락되었습니다."})
-    if not prompt:
-        return JSONResponse(status_code=400, content={"success": False, "message": "인테리어 변환을 위한 프롬프트를 입력해 주세요."})
-
-    async def event_generator():
-        import queue
-        status_queue = queue.Queue()
-        
-        def status_callback(status_type: str, message: str, extra_data: dict = None):
-            payload = {"status": status_type, "message": message}
-            if extra_data:
-                payload.update(extra_data)
-            status_queue.put(payload)
-
-        # 1단계: 번역 시작 안내
-        status_callback("translating", "한글 요구사항 번역 및 스타일 데코레이션 보강 중...")
-        
-        import asyncio
-        
-        def run_transform():
-            try:
-                # ── Step 1. 번역 수행 ──
-                t_translate_start = time.time()
-                try:
-                    translated_prompt = translate_prompt_to_english_strict(prompt)
-                except Exception as trans_err:
-                    status_callback("error", f"Gemini 번역 API 호출에 실패했습니다: {str(trans_err)}")
-                    return
-                t_translate_end = time.time()
-                print(f"⏱️ [성능측정 - 번역] '{prompt}' 번역 소요시간: {t_translate_end - t_translate_start:.4f}초")
-                status_callback("translating_done", "번역 및 프롬프트 보강이 성공적으로 완료되었습니다.", {"translated": translated_prompt})
-                
-                # ── Step 2. ComfyUI 구동 가능 여부 체크 ──
-                comfy_online = check_comfyui_online()
-                if not comfy_online:
-                    # Fallback sd_tutorial 모델이 있는지 체크
-                    sd_model_path = COMFYUI_MODEL_PATH
-                    if not os.path.exists(sd_model_path):
-                        status_callback("error", "ComfyUI 서버가 오프라인 상태이며, 로컬 AI 연산 파일(realisticVisionV60B1_v51HyperVAE.safetensors)이 부재하여 스타일 변환을 시작할 수 없습니다. ComfyUI 포트(8188) 또는 로컬 자재 구성을 확인해 주세요.")
-                        return
-                    else:
-                        status_callback("fallback", "ComfyUI 서버가 준비되지 않아, 로컬 가속 파이프라인(sd_tutorial)으로 우회 구동을 개시합니다...")
-                else:
-                    status_queue.put({"status": "comfy_queue", "message": "ComfyUI 이미지 생성 엔진에 작업 대기열 등록 중..."})
-                    
-                # ── Step 3. 이미지 존재 확인 및 연산 실행 ──
-                result_id = f"result_{uuid.uuid4().hex[:6]}"
-                
-                if not image_id:
-                    status_callback("completed", "인테리어 이미지 생성이 완료되었습니다.", {
-                        "result_id": result_id,
-                        "session_id": session_id,
-                        "original_image_url": None,
-                        "result_image_url": f"/static/results/interior_result_{style}_01.jpg" if style in ("modern", "minimal", "natural") else "/static/results/interior_result_sample_01.jpg",
-                        "style": style,
-                        "prompt": prompt,
-                        "status": "completed",
-                        "is_t2i": True
-                    })
-                    return
-                    
-                ext_found = ".jpg"
-                for ext in (".jpg", ".jpeg", ".png"):
-                    if os.path.exists(os.path.join(PROJECT_ROOT, "uploads", f"{image_id}{ext}")):
-                        ext_found = ext
-                        break
-                input_filename = f"{image_id}{ext_found}"
-                original_url = f"/static/uploads/{input_filename}"
-                
-                parameters = {
-                    "image_filename": input_filename,
-                    "prompt": translated_prompt,
-                    "denoise": 0.6,
-                    "seed": int(time.time()) % 1000000
-                }
-                
-                if comfy_online:
-                    real_filename = execute_real_comfyui(
-                        "room_redesign_workflow_api.json", 
-                        parameters, 
-                        status_callback=lambda st, msg: status_callback(st, msg)
-                    )
-                    if real_filename:
-                        result_filename = real_filename
-                        result_url = f"/static/results/{result_filename}"
-                        execution_mode = "real_comfyui"
-                    else:
-                        status_callback("error", "ComfyUI 렌더링 서버 연산 오류가 발생하여 최종 이미지를 생성하지 못했습니다. 워크플로우 구성을 재검토하십시오.")
-                        return
-                else:
-                    dest_path = os.path.join(PROJECT_ROOT, "results", f"{result_id}.jpg")
-                    orig_path = os.path.join(PROJECT_ROOT, "uploads", input_filename)
-                    import sd_tutorial
-                    sd_tutorial.run_interior_style_change(
-                        model_path=sd_model_path,
-                        input_image_path=orig_path,
-                        output_image_path=dest_path,
-                        prompt=translated_prompt,
-                        negative_prompt="blurry, low quality, distorted, bad proportions, ugly, disfigured"
-                    )
-                    result_url = f"/static/results/{result_id}.jpg"
-                    execution_mode = "local_sd_tutorial"
-                    
-                res_data = {
-                    "result_id": result_id,
-                    "session_id": session_id,
-                    "original_image_url": original_url,
-                    "result_image_url": result_url,
-                    "style": style,
-                    "prompt": prompt,
-                    "status": "completed",
-                    "is_t2i": False,
-                    "workflow": {
-                        "execution_mode": execution_mode,
-                        "comfyui_status": "online" if comfy_online else "offline"
-                    }
-                }
-                
-                session_data = get_or_create_session(session_id)
-                session_data["generations"].append({
-                    "type": "interior_transform",
-                    "result_id": result_id,
-                    "original_image_url": original_url,
-                    "result_image_url": result_url,
-                    "style": style,
-                    "prompt": prompt,
-                    "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-                })
-                session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-                
-                status_callback("completed", "공간 리모델링 스타일 변환이 모두 완료되었습니다!", {"result_data": res_data})
-                
-            except Exception as total_err:
-                status_callback("error", f"예기치 못한 런타임 오류가 발생했습니다: {str(total_err)}")
-
-        loop = asyncio.get_event_loop()
-        future_task = loop.run_in_executor(None, run_transform)
-        
-        while not future_task.done() or not status_queue.empty():
-            while not status_queue.empty():
-                item = status_queue.get()
-                yield f"data: {json.dumps(item)}\n\n"
-            await asyncio.sleep(0.2)
-            
-        while not status_queue.empty():
-            item = status_queue.get()
-            yield f"data: {json.dumps(item)}\n\n"
-            
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-
 
 
 # =====================================================================
@@ -1928,18 +1644,6 @@ def generate_image(req: ImageGenerateRequest):
             )
             workflow_info["execution_mode"] = "mock_fallback"
 
-    # [정량평가 연산 및 지표 병합] (요구사항 1~12)
-    metrics_data = None
-    if EVALUATION_AVAILABLE and generated_url:
-        try:
-            eval_orig_path = os.path.join(PROJECT_ROOT, "uploads", input_filename) if os.path.exists(os.path.join(PROJECT_ROOT, "uploads", input_filename)) else None
-            eval_dest_path = os.path.join(PROJECT_ROOT, "results", os.path.basename(generated_url))
-            if os.path.exists(eval_dest_path):
-                metrics_data = evaluate_generated_image(eval_orig_path, eval_dest_path, req.prompt)
-        except Exception as eval_err:
-            print(f"⚠️ [Evaluation Integration] 평가 오류: {eval_err}")
-            metrics_data = {"error": str(eval_err)}
-
     session_data = get_or_create_session(req.session_id)
     session_data["generations"].append({
         "task_id": task_id,
@@ -1949,7 +1653,6 @@ def generate_image(req: ImageGenerateRequest):
         "keep_structure": req.keep_structure,
         "generated_image_url": generated_url,
         "workflow": workflow_info,
-        "metrics": metrics_data,
         "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -1964,8 +1667,7 @@ def generate_image(req: ImageGenerateRequest):
                 "session_id": req.session_id,
                 "generated_image_url": generated_url,
                 "status": "completed",
-                "workflow": workflow_info,
-                "metrics": metrics_data
+                "workflow": workflow_info
             },
             "message": f"이미지 생성이 완료되었습니다. (ComfyUI Status: {workflow_info['comfyui_status']})"
         }
@@ -2121,8 +1823,7 @@ def chat_message(req: ChatMessageRequest):
                 original_image_url=res_data.get("original_image_url"),
                 style=res_data.get("style"),
                 prompt=res_data.get("prompt"),
-                processing_time=res_data.get("processing_time"),
-                metrics=res_data.get("metrics")
+                processing_time=res_data.get("processing_time")
             ),
             message="인테리어 변환 및 스타일 상담이 완료되었습니다."
         )
@@ -2424,8 +2125,7 @@ def edit_image(req: ImageEditRequest):
         dest_path = os.path.join(PROJECT_ROOT, "results", result_filename)
         orig_path = os.path.join(PROJECT_ROOT, "uploads", orig_input_filename) if orig_input_filename else os.path.join(PROJECT_ROOT, "uploads", f"{req.image_id}.jpg")
         
-        # 한글 주석: 인페인팅 전용 모델 누락 시, 기존 설치된 일반 Realistic Vision 모델로 대체하여 구동
-        inpaint_model_filename = "realisticVisionV60B1_v51HyperVAE.safetensors"
+        inpaint_model_filename = "realisticVisionV60B1_v51HyperInpaintVAE.safetensors"
         sd_inpaint_model_path = os.path.join(COMFYUI_PATH, "ComfyUI", "models", "checkpoints", inpaint_model_filename)
         if not os.path.exists(sd_inpaint_model_path):
             alt_inpaint_model = os.path.join(COMFYUI_PATH, "models", "checkpoints", inpaint_model_filename)
@@ -2544,18 +2244,6 @@ def edit_image(req: ImageEditRequest):
         )
         workflow_info["execution_mode"] = "mock_fallback"
 
-    # [정량평가 연산 및 지표 병합] (요구사항 1~12)
-    metrics_data = None
-    if EVALUATION_AVAILABLE and result_url:
-        try:
-            eval_orig_path = orig_path if orig_path and os.path.exists(orig_path) else None
-            eval_dest_path = os.path.join(PROJECT_ROOT, "results", os.path.basename(result_url))
-            if os.path.exists(eval_dest_path):
-                metrics_data = evaluate_generated_image(eval_orig_path, eval_dest_path, req.prompt)
-        except Exception as eval_err:
-            print(f"⚠️ [Evaluation Integration] 평가 오류: {eval_err}")
-            metrics_data = {"error": str(eval_err)}
-
     # 세션 기록 업데이트 관리
     session_data = get_or_create_session(req.session_id)
     session_data["edits"].append({
@@ -2566,7 +2254,6 @@ def edit_image(req: ImageEditRequest):
         "prompt": req.prompt,
         "edited_image_url": result_url,
         "workflow": workflow_info,
-        "metrics": metrics_data,
         "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -2580,8 +2267,7 @@ def edit_image(req: ImageEditRequest):
                 "session_id": req.session_id,
                 "edited_image_url": result_url,
                 "status": "completed",
-                "workflow": workflow_info,
-                "metrics": metrics_data
+                "workflow": workflow_info
             },
             "message": f"이미지 편집 작업이 완료되었습니다. (Mode: {workflow_info['execution_mode']})"
         }
@@ -2672,141 +2358,170 @@ def extract_visual_search_query_with_gemini(cropped_image_path: str) -> Optional
             "이 이미지 조각에 나오는 인테리어 가구 또는 소품의 시각적 특징(종류, 세부 디자인, 색상, 재질)을 정밀 분석해서, "
             "네이버 쇼핑에서 검색하기에 가장 적합한 실용적인 한국어 검색 키워드 1개만 생성해줘.\n"
             "추가 설명이나 마크다운 코드 블록(``` 등)은 절대 넣지 말고, 오직 단어 조합 1개만 반환해.\n"
-            "예시: '아이보리 패브릭 1인용 안락 의자', '철제 골드 스탠드 조명', '몬스테라 세라믹 화분'"
-        )
-        
-        response = model.generate_content([c_img, prompt])
-        result_text = response.text.strip()
-        
-        # 줄바꿈 및 불필요 기호 필터링
-        result_text = result_text.replace("\n", " ").replace("\r", "").replace("`", "").strip()
-        
-        if result_text and len(result_text) < 40:
-            print(f"🎯 [Gemini Vision Query Extractor] 이미지 분석 기반 묘사 쿼리 추출 완료: '{result_text}'")
-            return result_text
-    except Exception as e:
-        print(f"⚠️ [Gemini Vision Query Extractor] 분석 중 실패: {e}")
-    return None
-
-
-def search_naver_shopping_api(query: str) -> list:
-    """
-    [네이버 OpenAPI 쇼핑 검색]
-    한글 주석: 네이버 공식 OpenAPI를 활용해 봇 차단 없이 실시간 최신 상품 3가지를 안전하게 받아옵니다.
-    """
-    client_id = os.getenv("NAVER_CLIENT_ID")
-    client_secret = os.getenv("NAVER_CLIENT_SECRET")
-    
-    if not client_id or not client_secret:
-        print("⚠️ [Naver OpenAPI] 네이버 API Client ID/Secret 설정이 없습니다. (.env 파일을 확인하세요)")
-        return []
-        
-    import requests
-    import urllib.parse
-    import re
-    
-    encoded_query = urllib.parse.quote(query)
-    url = f"https://openapi.naver.com/v1/search/shop.json?query={encoded_query}&display=3"
-    
-    headers = {
-        "X-Naver-Client-Id": client_id,
-        "X-Naver-Client-Secret": client_secret
-    }
-    
-    try:
-        response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            items = data.get("items", [])
-            products = []
-            for item in items:
-                # HTML 태그 제거 (<b> 등 제거)
-                raw_title = item.get("title", "")
-                clean_title = re.sub(r'<[^>]*>', '', raw_title)
-                
-                # 가격 포맷팅
-                raw_price = item.get("lprice", "0")
-                try:
-                    formatted_price = f"{int(raw_price):,}원"
-                except ValueError:
-                    formatted_price = f"{raw_price}원"
-                    
-                products.append({
-                    "product_name": clean_title,
-                    "price": formatted_price,
-                    "image_url": item.get("image", ""),
-                    "purchase_link": item.get("link", ""),
-                    "similarity": 0.90  # 기본 유사도 지정
-                })
-            print(f"✅ [Naver OpenAPI] 실시간 상품 {len(products)}건 조회 성공!")
-            return products
-        else:
-            print(f"⚠️ [Naver OpenAPI] API 호출 에러 (Status: {response.status_code})")
-    except Exception as e:
-        print(f"⚠️ [Naver OpenAPI] 요청 실패: {e}")
-    return []
-
-
-def scrape_shopping_products(query: str) -> list:
-    """
-    [실시간 쇼핑 크롤러]
-    비유: 쿼리(예: '인테리어 소파')를 들고 네이버 쇼핑 사이트로 뛰어가서 
-    실시간으로 현재 판매 중인 진짜 상품 정보 3개를 파싱해 오는 심부름꾼입니다.
-    """
-    import urllib.parse
-    import requests
-    import re
-    import json
-    
+            "예시: '아이보리 패브릭 1인용 안락 의자', '철    # 3. [0순위] Chroma DB 가구 전용 벡터 데이터베이스(ChromaDB) 우선 검색 작동
     products = []
-    try:
-        encoded_query = urllib.parse.quote(query)
-        url = f"https://search.shopping.naver.com/search/all?query={encoded_query}"
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        
-        response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code == 200:
-            html = response.text
-            # __NEXT_DATA__ 스크립트 블록 추출
-            match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html)
-            if match:
-                data = json.loads(match.group(1))
-                # 상품 리스트 경로 찾기
-                products_list = data.get("props", {}).get("pageProps", {}).get("initialState", {}).get("products", {}).get("list", [])
+    success_search = False
+    
+    if cropped_img_path and os.path.exists(cropped_img_path):
+        try:
+            from services.clip_service import CLIPService
+            import chromadb
+            
+            # 드래그하여 크롭된 영역의 512차원 임베딩 추출
+            clip_service = CLIPService()
+            crop_embedding = clip_service.get_image_embedding(cropped_img_path)
+            
+            if crop_embedding:
+                print("🧠 [Chroma Search] 가구 전용 벡터 데이터베이스(ChromaDB)로부터 실시간 시각적 유사 가구 검색 작동...")
+                chroma_client = chromadb.PersistentClient(path=config.DB_DIR)
                 
-                for p in products_list:
-                    # 광고 상품은 상세 정보 구조가 간혹 다른 경우가 있으므로 거르고, 실제 일반 상품 위주로 수집
-                    item_info = p.get("item", {})
-                    product_name = item_info.get("productName")
-                    price = item_info.get("price")
-                    image_url = item_info.get("imageUrl")
-                    purchase_link = item_info.get("crUrl") or f"https://search.shopping.naver.com/catalog/{item_info.get('id')}"
+                # 가구 컬렉션 존재 여부 체크 및 로드
+                try:
+                    collection = chroma_client.get_collection(name=config.COLLECTION_FURNITURE)
                     
-                    if product_name and price:
-                        # 가격 포맷팅 (예: 699000 -> 699,000원)
-                        try:
-                            formatted_price = f"{int(price):,}원"
-                        except:
-                            formatted_price = f"{price}원"
-                            
-                        # 유사도는 80%~95% 사이의 적합한 무작위 값 대입
-                        import random
-                        sim_val = round(random.uniform(0.82, 0.96), 2)
+                    # 쿼리 수행 (코사인 유사도로 가장 가까운 상위 4개 상품 추출)
+                    query_results = collection.query(
+                        query_embeddings=[crop_embedding],
+                        n_results=4
+                    )
+                    
+                    if query_results and query_results.get("ids") and len(query_results["ids"][0]) > 0:
+                        ids = query_results["ids"][0]
+                        metadatas = query_results["metadatas"][0]
+                        distances = query_results["distances"][0]
                         
-                        products.append({
-                            "product_name": product_name,
-                            "price": formatted_price,
-                            "image_url": image_url or "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
-                            "purchase_link": purchase_link,
-                            "similarity": sim_val
-                        })
-                        if len(products) >= 3:
-                            break
-    except Exception as scrape_err:
-        print(f"⚠️ [Shopping Scraper] 크롤링 중 에러: {scrape_err}")
+                        for idx_meta, meta in enumerate(metadatas):
+                            # 코사인 유사도 점수 변환 (유사도 = 1.0 - 거리)
+                            dist = distances[idx_meta]
+                            sim_val = round(1.0 - float(dist), 2)
+                            # 최소/최대 유사도 보정 (0.1 ~ 0.99 범위)
+                            sim_val = max(0.1, min(0.99, sim_val))
+                            
+                            products.append(
+                                ProductItem(
+                                    product_name=meta.get("product_name") or "유사 가구 상품",
+                                    price=meta.get("price") or "가격 정보 없음",
+                                    image_url=meta.get("image_url") or "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
+                                    purchase_link=meta.get("link") or meta.get("purchase_link") or "https://www.google.com",
+                                    similarity=sim_val
+                                )
+                            )
+                        
+                        # 유사도 기준 정렬
+                        products.sort(key=lambda x: x.similarity, reverse=True)
+                        success_search = True
+                        print(f"🎯 [Chroma Search] 벡터 DB 조회 매칭 성공! 추천 가구 수: {len(products)}개")
+                except Exception as db_miss:
+                    print(f"⚠️ [Chroma Search] 가구 컬렉션 조회 불가 또는 비어있음 (Fallbacks로 전환): {db_miss}")
+        except Exception as embed_err:
+            print(f"⚠️ [Chroma Search] 특징 벡터 추출 과정 중 예외 발생: {embed_err}")
+
+    # 4. [1순위 Fallback] 벡터 DB에 검색 결과가 없을 경우 실시간 네이버 쇼핑 공식 OpenAPI 연동 실행
+    if not success_search and cropped_img_path and os.path.exists(cropped_img_path):
+        try:
+            search_query = None
+            
+            # 1순위: Gemini Vision 기반 동적 묘사 쿼리 추출 시도 (가장 묘사적이고 정확한 네이버용 검색어 추출)
+            try:
+                print("🔍 [Product Search] 1순위 Gemini Vision 기반 시각적 검색어 추출 시작...")
+                search_query = extract_visual_search_query_with_gemini(cropped_img_path)
+            except Exception as vision_err:
+                print(f"⚠️ [Product Search] Gemini Vision 검색어 추출 에러: {vision_err}")
+                
+            # 2순위: Gemini Vision 실패 시, 로컬 YOLOv8 기반 기본 카테고리 매핑 작동
+            if not search_query:
+                print("🔍 [Product Search] 2순위 로컬 YOLOv8 객체 탐지 및 기본 키워드 매칭 기동...")
+                detected_cat = detect_furniture_class(cropped_img_path)
+                
+                # 탐지된 영문 가구 클래스에 따라 네이버 쇼핑용 한글 검색 쿼리 매핑
+                query_map = {
+                    "sofa": "인테리어 소파",
+                    "bed": "모던 침대",
+                    "table": "원목 식탁",
+                    "chair": "디자인 의자",
+                    "lighting": "플로어 스탠드 조명",
+                    "plant": "인테리어 화분 식물"
+                }
+                search_query = query_map.get(detected_cat, None)
+                
+                # [한글 주석] 제미나이 429 한도 초과 및 YOLOv8 미감지 시, 사용자가 수선 칸에 직접 입력한 텍스트 프롬프트를 2차 파싱하여 올바른 가구를 분류합니다.
+                if not search_query:
+                    prompt_lower = (payload.get("prompt") or "").lower()
+                    if any(x in prompt_lower for x in ["테이블", "식탁", "책상", "desk", "table", "식사"]):
+                        search_query = "원목 식탁 테이블"
+                    elif any(x in prompt_lower for x in ["소파", "sofa", "couch", "카우치"]):
+                        search_query = "인테리어 소파"  # 한글 주석: 소파 검색어 추가
+                    elif any(x in prompt_lower for x in ["침대", "bed", "sleep", "이불", "매트리스"]):
+                        search_query = "모던 침대"
+                    elif any(x in prompt_lower for x in ["의자", "체어", "chair", "스툴"]):
+                        search_query = "디자인 의자"
+                    elif any(x in prompt_lower for x in ["조명", "스탠드", "light", "lamp", "네온"]):
+                        search_query = "인테리어 플로어 스탠드 조명"
+                    elif any(x in prompt_lower for x in ["화분", "식물", "plant", "tree"]):
+                        search_query = "인테리어 화분 식물"
+                    else:
+                        search_query = "인테리어 가구"
+            
+            print(f"🛍️ [Product Search] 실시간 네이버 공식 OpenAPI 호출 (검색어: '{search_query}')")
+            api_items = search_naver_shopping_api(search_query)
+            
+            if api_items and len(api_items) > 0:
+                # 🎨 [산디과 코딩 가이드 - 실시간 네이버 이미지 CLIP 유사도 비교]
+                use_clip = False
+                clip_service = None
+                crop_embedding = None
+                
+                if cropped_img_path and os.path.exists(cropped_img_path):
+                    try:
+                        from services.clip_service import CLIPService
+                        clip_service = CLIPService()
+                        crop_embedding = clip_service.get_image_embedding(cropped_img_path)
+                        if crop_embedding:
+                            use_clip = True
+                            print("🧠 [Product Search] 네이버 결과에 대한 실시간 CLIP 유사도 계산 기동 완료")
+                    except Exception as e:
+                        print(f"⚠️ [Product Search] 실시간 CLIP 로드 실패: {e}")
+ 
+                import requests
+                from io import BytesIO
+                
+                for item in api_items[:3]:
+                    sim_val = 0.85  # 기본값
+                    img_url = item.get("image_url")
+                    
+                    if use_clip and clip_service and crop_embedding and img_url:
+                        try:
+                            # 실시간으로 인터넷 상의 상품 이미지 다운로드 (타임아웃 2초로 딜레이 방지)
+                            resp = requests.get(img_url, timeout=2.0)
+                            if resp.status_code == 200:
+                                pil_img = Image.open(BytesIO(resp.content)).convert("RGB")
+                                db_embedding = clip_service.get_image_embedding(pil_img)
+                                if db_embedding:
+                                    # 코사인 유사도 구하기
+                                    raw_sim = clip_service.calculate_similarity(crop_embedding, db_embedding)
+                                    # 원본 코사인 유사도 값을 소수점 둘째 자리까지 반올림하여 점수로 반영합니다
+                                    sim_val = round(raw_sim, 2)
+                                    print(f"📐 [CLIP Web Sim] '{item.get('product_name')}' 실시간 유사도: {raw_sim:.4f} ➡️ 보정 유사도: {sim_val:.2f}")
+                        except Exception as dl_err:
+                            print(f"⚠️ [Product Search] 상품 이미지 다운로드/비교 에러: {dl_err}")
+                            
+                    products.append(
+                        ProductItem(
+                            product_name=item.get("product_name") or "유사 매칭 가구 상품",
+                            price=item.get("price") or "가격 정보 없음",
+                            image_url=img_url or "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
+                            purchase_link=item.get("purchase_link") or "https://www.google.com",
+                            similarity=sim_val
+                        )
+                    )
+                # 유사도 높은 순으로 최종 정렬
+                products.sort(key=lambda x: x.similarity, reverse=True)
+                success_search = True
+                print(f"🛍️ [Product Search] 실시간 네이버 OpenAPI + CLIP 연동 성공! 수집 개수: {len(products)}개")
+            else:
+                print("⚠️ [Product Search] 네이버 API 조회 결과가 없거나 API 키가 설정되지 않아 최종 3단계 Mock DB로 전환합니다.")
+        except Exception as fallback_err:
+            print(f"⚠️ [Product Search] 네이버 OpenAPI 연동 중 에러: {fallback_err}")opping Scraper] 크롤링 중 에러: {scrape_err}")
         
     return products
 
@@ -2992,216 +2707,6 @@ def embed_cropped_image(payload: Dict[str, Any]):
 # =====================================================================
 @app.post("/api/products/search", response_model=SuccessResponse[ProductSearchResponse])
 def search_similar_products(payload: Dict[str, Any]):
-    """
-    [유사 상품 검색 창구]
-    사용자가 원형 마스크로 선택한 가구 영역을 크롭한 뒤,
-    로컬 CLIP 모델과 Chroma DB(furniture_collection)를 연동하여
-    데이터베이스에 저장되어 있는 벡터 정보와 유사도를 계산해 실제 상품을 추천합니다.
-    """
-    image_id = payload.get("image_id")
-    mask_pixels = payload.get("mask_pixels") # [px1, py1, px2, py2]
-    
-    # 1. 원본 파일 위치 탐색
-    orig_path = None
-    if image_id:
-        for search_folder in ("uploads", "results"):
-            for ext in (".jpg", ".jpeg", ".png"):
-                candidate_path = os.path.join(PROJECT_ROOT, search_folder, f"{image_id}{ext}")
-                if os.path.exists(candidate_path):
-                    orig_path = candidate_path
-                    break
-            if orig_path:
-                break
-                
-    # 2. 이미지 싹둑 오려내기 (Crop)
-    cropped_img_path = None
-    if orig_path and mask_pixels and isinstance(mask_pixels, list) and len(mask_pixels) == 4:
-        try:
-            px1, py1, px2, py2 = mask_pixels
-            with Image.open(orig_path) as img:
-                w, h = img.size
-                # 좌표 바운더리 체크 및 정렬
-                px1, px2 = sorted([max(0, min(px1, w)), max(0, min(px2, w))])
-                y1, y2 = sorted([max(0, min(py1, h)), max(0, min(py2, h))])
-                
-                if px2 - px1 > 5 and y2 - y1 > 5:
-                    cropped_img = img.crop((px1, y1, px2, y2)).convert("RGB")
-                    crops_dir = os.path.join(PROJECT_ROOT, "uploads", "crops")
-                    os.makedirs(crops_dir, exist_ok=True)
-                    cropped_img_path = os.path.join(crops_dir, f"{image_id}_{px1}_{py1}_{px2}_{py2}_crop.jpg")
-                    cropped_img.save(cropped_img_path, "JPEG", quality=90)
-                    print(f"✂️ [Product Search] 가구 이미지 오려내기 완료: {cropped_img_path}")
-        except Exception as e:
-            print(f"⚠️ [Product Search] 이미지 오려내기 중 에러: {e}")
-
-    # 3. 크로마 DB 벡터 유사도 기반 가구 추천
-    products = []
-    success_search = False
-
-    if cropped_img_path and os.path.exists(cropped_img_path):
-        try:
-            # 3-1. CLIP 이미지 임베딩 추출
-            from services.clip_service import CLIPService
-            clip_service = CLIPService()
-            crop_embedding = clip_service.get_image_embedding(cropped_img_path)
-            
-            if crop_embedding:
-                print("🧠 [Product Search] 크롭 이미지 CLIP 임베딩 추출 성공, Chroma DB 조회 개시...")
-                
-                # 3-2. Chroma DB 연결
-                import chromadb
-                import config
-                
-                if os.path.exists(config.DB_DIR):
-                    chroma_client = chromadb.PersistentClient(path=config.DB_DIR)
-                    col_names = [col.name for col in chroma_client.list_collections()]
-                    
-                    if config.COLLECTION_FURNITURE in col_names:
-                        collection = chroma_client.get_collection(config.COLLECTION_FURNITURE)
-                        db_count = collection.count()
-                        
-                        if db_count > 0:
-                            # 3-3. Chroma DB 쿼리 실행
-                            # n_results는 최대 6개까지 가져옵니다.
-                            results = collection.query(
-                                query_embeddings=[crop_embedding],
-                                n_results=6
-                            )
-                            
-                            if results and results.get("ids") and results["ids"][0]:
-                                ids = results["ids"][0]
-                                metadatas = results["metadatas"][0] if results.get("metadatas") else []
-                                distances = results["distances"][0] if results.get("distances") else []
-                                
-                                for idx, pid in enumerate(ids):
-                                    meta = metadatas[idx] if idx < len(metadatas) else {}
-                                    dist = distances[idx] if idx < len(distances) else 0.5
-                                    
-                                    # 코사인 유사도 점수 산출: Chroma의 cosine 거리는 1 - sim 이므로
-                                    sim_val = round(float(1.0 - dist), 2)
-                                    # 안전 보장 클램핑
-                                    sim_val = max(0.0, min(1.0, sim_val))
-                                    
-                                    products.append(
-                                        ProductItem(
-                                            product_name=meta.get("product_name") or "매칭 가구 상품",
-                                            price=meta.get("price") or "가격 정보 없음",
-                                            image_url=meta.get("image_url") or "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
-                                            purchase_link="",  # 사용자의 요구에 따라 구매 링크 제거
-                                            similarity=sim_val
-                                        )
-                                    )
-                                
-                                # 유사도 순 정렬
-                                products.sort(key=lambda x: x.similarity, reverse=True)
-                                success_search = True
-                                print(f"🎉 [Product Search] Chroma DB 매칭 성공! 추천 상품 수: {len(products)}개")
-                            else:
-                                print("⚠️ [Product Search] Chroma DB에서 일치하는 벡터 결과가 없습니다.")
-                        else:
-                            print("⚠️ [Product Search] 가구 컬렉션의 데이터가 0개입니다.")
-                    else:
-                        print(f"⚠️ [Product Search] '{config.COLLECTION_FURNITURE}' 컬렉션이 없습니다.")
-                else:
-                    print("⚠️ [Product Search] Chroma DB 저장경로가 존재하지 않습니다.")
-            else:
-                print("❌ [Product Search] 크롭 이미지의 CLIP 임베딩 추출 실패.")
-        except Exception as db_err:
-            print(f"❌ [Product Search] Chroma DB 연동 검색 중 예외 발생: {db_err}")
-
-    # 4. [Fallback] Chroma DB 내 가구 데이터 미비 시 CSV 데이터베이스 실시간 카테고리 매칭 로드
-    if not success_search or len(products) == 0:
-        print("⚠️ [Product Search] Chroma DB 매칭 실패 또는 데이터 부재로 4단계 CSV Fallback DB 가동합니다.")
-        prompt = (payload.get("prompt") or "").lower()
-        selected_obj = (payload.get("selected_object") or "").lower()
-        combined_query = f"{prompt} {selected_obj}"
-        
-        target_category = "sofa"
-        if any(x in combined_query for x in ["침대", "bed", "sleep", "이불", "매트리스"]):
-            target_category = "bed"
-        elif any(x in combined_query for x in ["테이블", "식탁", "책상", "desk", "table", "식사"]):
-            target_category = "table"
-        elif any(x in combined_query for x in ["의자", "체어", "chair", "스툴"]):
-            target_category = "chair"
-        elif any(x in combined_query for x in ["조명", "스탠드", "light", "lamp", "불빛", "스폿"]):
-            target_category = "lighting"
-        elif any(x in combined_query for x in ["화분", "식물", "plant", "flowerpot", "tree"]):
-            target_category = "plant"
-
-        cat_keywords = {
-            "sofa": ["소파", "쇼파"],
-            "bed": ["침대", "매트리스"],
-            "table": ["식탁", "테이블", "책상"],
-            "chair": ["의자", "체어", "스툴"],
-            "lighting": ["조명", "스탠드", "램프"],
-            "plant": ["식물", "화분", "조화"]
-        }
-        
-        keywords = cat_keywords.get(target_category, ["소파"])
-        
-        filtered_items = []
-        if CSV_ITEMS:
-            for item in CSV_ITEMS:
-                pname = item.get("product_name", "")
-                cat2 = item.get("category2", "")
-                cat3 = item.get("category3", "")
-                cat4 = item.get("category4", "")
-                
-                # 카테고리나 상품 이름 중 키워드가 발견되는지 검사
-                found = False
-                for kw in keywords:
-                    if kw in pname or kw in cat2 or kw in cat3 or kw in cat4:
-                        found = True
-                        break
-                if found:
-                    filtered_items.append(item)
-                    
-        # 만약 필터링된 상품이 없거나 부족하면 전체에서 로드
-        if len(filtered_items) < 3:
-            filtered_items = CSV_ITEMS if CSV_ITEMS else []
-            
-        if filtered_items:
-            import random
-            sample_size = min(len(filtered_items), 5)
-            chosen_items = random.sample(filtered_items, sample_size)
-            
-            for idx, item in enumerate(chosen_items):
-                sim_val = round(0.95 - (idx * 0.04) + random.uniform(-0.02, 0.02), 2)
-                sim_val = max(0.50, min(0.99, sim_val))
-                
-                price_raw = item.get("price", "0")
-                if price_raw.isdigit():
-                    price_val = f"{int(price_raw):,}원"
-                else:
-                    price_val = price_raw
-                    
-                products.append(
-                    ProductItem(
-                        product_name=item.get("product_name") or "매칭 가구 상품",
-                        price=price_val,
-                        image_url=item.get("image_url") or "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
-                        purchase_link="",  # 사용자의 요구에 따라 구매 링크 제거
-                        similarity=sim_val
-                    )
-                )
-            # 유사도 높은 순으로 정렬
-            products.sort(key=lambda x: x.similarity, reverse=True)
-            print(f"🛍️ [Product Search CSV Fallback] 매칭 성공! 추천 상품 수: {len(products)}개 (Category: {target_category})")
-            
-    # 최종적으로 가격 데이터 포맷 정리 (예: "335000" -> "335,000원")
-    for item in products:
-        if item.price.isdigit():
-            item.price = f"{int(item.price):,}원"
-
-    return SuccessResponse(
-        success=True,
-        data=ProductSearchResponse(products=products),
-        message="유사 가구 상품 추천 결과입니다."
-    )
-
-
-# 레거시 백업 함수 (라우터 데코레이터 제거 및 이름 변경)
-def search_similar_products_legacy(payload: Dict[str, Any]):
     """
     [유사 상품 검색 창구]
     사용자가 원형 마스크로 선택한 가구 영역을 싹둑 오려낸 뒤(Crop),

@@ -10,10 +10,12 @@ import ComparisonGallery from './components/ComparisonGallery';
 import SessionModal from './components/SessionModal';
 import StyleTransformer from './components/StyleTransformer';
 import ChatWidget from './components/ChatWidget';
-import StyleEncyclopedia, { STYLE_DATABASE } from './components/StyleEncyclopedia';
 import StyleQuiz from './components/StyleQuiz';
+
+import StyleDetailModal, { STYLE_DATABASE } from './components/StyleDetailModal';
 import FurnitureShopShowroom from './components/FurnitureShopShowroom';
 import { checkHealth, sendChatMessage, API_BASE_URL } from './services/api';
+
 import { Sofa, Bed, Table, Monitor, Trees, Archive, Lamp, Palette, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // [가구 카테고리 퀵 링크 아이콘 정보 리스트 (시안 이미지 스타일 그대로 구현)]
@@ -67,12 +69,7 @@ function TopNav({ activeTab, onTabClick, serverStatus, onRefreshHealth, sessionI
         >
           Repair Studio
         </span>
-        <span 
-          className={`top-nav-link ${activeTab === 'gallery' ? 'active' : ''}`} 
-          onClick={() => onTabClick('style-encyclopedia', 'gallery')}
-        >
-          28 Styles
-        </span>
+
       </nav>
       <div className="top-nav-actions">
         {/* [신설] 상단 오른쪽 Shop 새 창 열기 버튼 */}
@@ -130,9 +127,8 @@ export default function App() {
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [activeTab, setActiveTab] = useState('home'); // GNB active 탭 상태 부모 통합
   const [heroImageIndex, setHeroImageIndex] = useState(0);
-
-  const [activeStyleId, setActiveStyleId] = useState(1); // 도감 탭 연동을 위한 전역 활성 스타일 ID
-  const [isStyleModalOpen, setIsStyleModalOpen] = useState(false); // [스타일 도감 모달 오픈 상태 추가]
+  const [activeStyleId, setActiveStyleId] = useState(STYLE_DATABASE[0]?.id || 1);
+  const [isStyleModalOpen, setIsStyleModalOpen] = useState(false);
   const [startIndex, setStartIndex] = useState(0); // Featured Collections 카루셀 시작 인덱스 (모던=0으로 고정 기동)
 
   const [pendingPrompt, setPendingPrompt] = useState(''); // 취향 퀴즈 연동용 자동 프롬프트 상태
@@ -140,6 +136,7 @@ export default function App() {
   
   // [신설] 스타일 변환 비동기 연산 부모 끌어올리기 상태들 (탭 전환 시에도 백그라운드 작업 및 비교 쇼룸 유지 보장)
   const [transformLoading, setTransformLoading] = useState(false);
+  const [transformProgress, setTransformProgress] = useState('');
   const [transformResultUrl, setTransformResultUrl] = useState(null);
   const [transformRawAnswer, setTransformRawAnswer] = useState('');
   const [transformSummary, setTransformSummary] = useState(null);
@@ -148,6 +145,8 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     return params.get('category') || null;
   });
+
+
 
   // 5초 간격 최상단 히어로 배경 롤링 타이머
   useEffect(() => {
@@ -212,19 +211,15 @@ export default function App() {
 
       const quizEl = document.getElementById('quiz-section');
       const uploaderEl = document.getElementById('uploader-card');
-      const galleryEl = document.getElementById('style-encyclopedia');
 
       const offset = 220; // 스크롤 판정 문턱값 (탑 내비바 80px + 여유폭 140px)
 
       // 각 작업 카드의 화면 내 스크롤 경계선 도출
       const quizTop = quizEl ? quizEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
       const uploaderTop = uploaderEl ? uploaderEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
-      const galleryTop = galleryEl ? galleryEl.getBoundingClientRect().top + window.scrollY - offset : Infinity;
 
       // 아래에서부터 순차적으로 경계선을 넘었는지 체크하여 활성 탭 스위칭
-      if (scrollPos >= galleryTop) {
-        setActiveTab('gallery');
-      } else if (scrollPos >= uploaderTop) {
+      if (scrollPos >= uploaderTop) {
         setActiveTab(studioTab === 'repair' ? 'editor' : 'transform');
       } else if (scrollPos >= quizTop) {
         setActiveTab('quiz');
@@ -307,6 +302,7 @@ export default function App() {
     if (!promptText || !promptText.trim() || transformLoading) return;
 
     setTransformLoading(true);
+    setTransformProgress('스타일 변환 개시 준비 중...');
     setTransformResultUrl(null);
     setTransformRawAnswer('');
     setTransformSummary(null);
@@ -319,53 +315,95 @@ export default function App() {
     };
 
     try {
-      const res = await sendChatMessage({
-        sessionId: sessionId || "session_default",
-        question: promptText.trim(),
-        imageId: imageId
+      const response = await fetch(`${API_BASE_URL}/api/image/generate/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          image_id: imageId,
+          session_id: sessionId || "session_default",
+          style: "custom",
+          prompt: promptText.trim()
+        })
       });
 
-      if (res.success) {
-        const respData = res.data || {};
-        const fullImg = getFullUrl(respData.image_url);
-        setTransformResultUrl(fullImg);
-        setTransformRawAnswer(respData.answer || "");
-        
-        const parsed = parseInteriorRecommendation(respData.answer);
-        setTransformSummary(parsed);
+      if (!response.ok) {
+        throw new Error(`HTTP 통신 실패 (Status: ${response.status})`);
+      }
 
-        if (respData.result_id && handleGenerateSuccess) {
-          handleGenerateSuccess({
-            resultId: respData.result_id,
-            resultImageUrl: fullImg,
-            style: respData.style || "modern",
-            prompt: promptText.trim(),
-            processingTime: respData.processing_time || 0,
-            status: "completed",
-            recommendations: parsed,
-            metrics: respData.metrics || null // 한글 주석: 백엔드에서 연산한 정량평가 점수 전달
-          });
+      // 한글 주석: 원격 창고의 SSE 스트리밍 로직과 우리 컴퓨터의 정량평가 점수(metrics)/추천(recommendations) 기능을 조화롭게 통합
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop(); // 미완성 조각 보관
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const rawData = line.slice(6).trim();
+              if (!rawData) continue;
+              const item = JSON.parse(rawData);
+              
+              if (item.status === "error") {
+                setCurrentError({
+                  errorCode: "TRANSFORM_FAILED",
+                  message: item.message || "스타일 변환에 실패했습니다."
+                });
+                setTransformLoading(false);
+                setTransformProgress('');
+                return;
+              } else if (item.status === "completed") {
+                const respData = item.result_data || {};
+                const fullImg = getFullUrl(respData.result_image_url);
+                setTransformResultUrl(fullImg);
+                
+                const successMsg = `스타일 변환이 완료되었습니다! (엔진: ${respData.workflow?.execution_mode || "AI 연산"})`;
+                setTransformRawAnswer(successMsg);
+                
+                if (respData.result_id && handleGenerateSuccess) {
+                  handleGenerateSuccess({
+                    resultId: respData.result_id,
+                    resultImageUrl: fullImg,
+                    style: respData.style || "modern",
+                    prompt: promptText.trim(),
+                    processingTime: respData.processing_time || 5.0,
+                    status: "completed",
+                    recommendations: respData.recommendations || null,
+                    metrics: respData.metrics || null // 한글 주석: 백엔드에서 연산한 정량평가 점수 전달 (로컬 장점 병합)
+                  });
+                }
+                setTransformProgress('');
+                setTransformLoading(false);
+                return;
+              } else {
+                setTransformProgress(item.message);
+              }
+            } catch (jsonErr) {
+              console.error("SSE JSON Parse Error:", jsonErr);
+            }
+          }
         }
-      } else {
-        setCurrentError({
-          errorCode: res.errorCode || "PROCESSING_FAILED",
-          message: res.message || "스타일 변환 작업에 실패했습니다."
-        });
       }
     } catch (err) {
       console.error(err);
       setCurrentError({
         errorCode: "SERVER_ERROR",
-        message: `스타일 변환 통신 오류: ${err.message}`
+        message: `스타일 변환 처리 중 오류가 발생했습니다: ${err.message}`
       });
     } finally {
       setTransformLoading(false);
     }
   };
 
-  // =====================================================================
   // [28가지 인테리어 가로 트랙 슬라이딩 슬라이더 핸들러]
-  // =====================================================================
   // 한번에 4개의 카드가 통째로 이동하도록 설정 (28개 스타일 카드 기준 4개씩 순환) [캐러셀 한번에 4개씩 이동 처리]
   const handleNextSlide = () => {
     setStartIndex(prev => (prev + 4) % 28);
@@ -530,10 +568,10 @@ export default function App() {
                     key={style.id} 
                     className="featured-card"
                     onClick={() => {
-                      // 카드 클릭 시 도감 모달을 활성화하고 클릭한 스타일을 세팅 [캐러셀 클릭시 스타일 상세 모달 오픈]
                       setActiveStyleId(style.id);
                       setIsStyleModalOpen(true);
                     }}
+                    style={{ cursor: 'pointer' }}
                   >
                     <div className="featured-card-img-wrapper">
                       {style.imageUrl ? (
@@ -736,11 +774,18 @@ export default function App() {
                     setTransformRawAnswer('');
                     setTransformSummary(null);
                   }}
+                  onResetResult={() => {
+                    setResultData(null);
+                    setTransformResultUrl(null);
+                    setTransformRawAnswer('');
+                    setTransformSummary(null);
+                  }}
                   globalLoading={transformLoading}
                   globalResultImageUrl={transformResultUrl}
                   globalRawAnswer={transformRawAnswer}
                   globalSummaryData={transformSummary}
                   onSubmitTransform={handleTransformSubmitGlobal}
+                  globalProgress={transformProgress}
                 />
               </div>
 
@@ -771,10 +816,9 @@ export default function App() {
 
         {/* [메인에서 가구 카탈로그 제거 - Shop 버튼을 통해 새 창으로 제공됨] */}
 
-        {/* 28가지 인테리어 취향 스타일 도감 섹션 */}
-        <StyleEncyclopedia
+        {/* 스타일 가이드 팝업 상세 모달 */}
+        <StyleDetailModal
           activeId={activeStyleId}
-          setActiveId={setActiveStyleId}
           isModalOpen={isStyleModalOpen}
           setIsModalOpen={setIsStyleModalOpen}
         />
@@ -794,9 +838,9 @@ export default function App() {
           <div style={{
             maxWidth: '1200px',
             margin: '0 auto',
-            padding: '0 10%',
+            padding: '0 40px', /* [수정] 좌우 패딩을 넓혀 가로 공간 확보 */
             display: 'grid',
-            gridTemplateColumns: '2fr 1fr 1fr 1fr 2.5fr',
+            gridTemplateColumns: '2.5fr 1.5fr 1.5fr 1.5fr 3.5fr', /* [수정] 각 열의 너비 비율을 넓혀 긴 텍스트의 줄바꿈 방지 */
             gap: '40px',
             alignItems: 'start'
           }}>
@@ -808,53 +852,54 @@ export default function App() {
               <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.6', margin: '0 0 16px', fontWeight: '500' }}>
                 An AI-powered interior curation platform designed to transform your space with 28 diverse styling guides.
               </p>
-              <p style={{ fontSize: '0.78rem', color: 'var(--text-light)', lineHeight: '1.6', margin: 0 }}>
+              {/* [수정] 존재하지 않는 var(--text-light) 대신 var(--text-muted) 사용해 글씨 시인성 확보 */}
+              <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.6', margin: 0 }}>
                 &copy; 2026 ZIPPT. All rights reserved.
               </p>
             </div>
 
             {/* 2. SERVICES 칼럼 */}
             <div>
-              <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 20px' }}>
+              {/* [수정] whiteSpace nowrap을 주어 제목이 두 줄로 부서지는 현상 차단 */}
+              <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 20px', whiteSpace: 'nowrap' }}>
                 Services
               </h4>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem' }}>
-                <li><a href="#uploader-card" style={{ color: 'var(--text-light)', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => e.target.style.color = 'var(--primary)'} onMouseLeave={(e) => e.target.style.color = 'var(--text-light)'}>AI Transform</a></li>
-                <li><a href="#editor-card" style={{ color: 'var(--text-light)', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => e.target.style.color = 'var(--primary)'} onMouseLeave={(e) => e.target.style.color = 'var(--text-light)'}>Repair Studio</a></li>
-                <li><a href="#style-encyclopedia" style={{ color: 'var(--text-light)', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => e.target.style.color = 'var(--primary)'} onMouseLeave={(e) => e.target.style.color = 'var(--text-light)'}>28 Styles Guide</a></li>
+                <li><a href="#uploader-card" style={{ color: 'var(--text-muted)', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => e.target.style.color = 'var(--primary)'} onMouseLeave={(e) => e.target.style.color = 'var(--text-muted)'}>AI Transform</a></li>
+                <li><a href="#editor-card" style={{ color: 'var(--text-muted)', textDecoration: 'none', transition: 'color 0.2s' }} onMouseEnter={(e) => e.target.style.color = 'var(--primary)'} onMouseLeave={(e) => e.target.style.color = 'var(--text-muted)'}>Repair Studio</a></li>
               </ul>
             </div>
 
             {/* 3. COMPANY 칼럼 */}
             <div>
-              <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 20px' }}>
+              <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 20px', whiteSpace: 'nowrap' }}>
                 Company
               </h4>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem' }}>
-                <li><span style={{ color: 'var(--text-light)', cursor: 'default' }}>About Us</span></li>
-                <li><span style={{ color: 'var(--text-light)', cursor: 'default' }}>Contact</span></li>
-                <li><span style={{ color: 'var(--text-light)', cursor: 'default' }}>FAQs</span></li>
+                <li><span style={{ color: 'var(--text-muted)', cursor: 'default' }}>About Us</span></li>
+                <li><span style={{ color: 'var(--text-muted)', cursor: 'default' }}>Contact</span></li>
+                <li><span style={{ color: 'var(--text-muted)', cursor: 'default' }}>FAQs</span></li>
               </ul>
             </div>
 
             {/* 4. FOLLOW US 칼럼 */}
             <div>
-              <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 20px' }}>
+              <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 20px', whiteSpace: 'nowrap' }}>
                 Follow Us
               </h4>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.85rem' }}>
-                <li><span style={{ color: 'var(--text-light)', cursor: 'default' }}>Instagram</span></li>
-                <li><span style={{ color: 'var(--text-light)', cursor: 'default' }}>Pinterest</span></li>
-                <li><span style={{ color: 'var(--text-light)', cursor: 'default' }}>Facebook</span></li>
+                <li><span style={{ color: 'var(--text-muted)', cursor: 'default' }}>Instagram</span></li>
+                <li><span style={{ color: 'var(--text-muted)', cursor: 'default' }}>Pinterest</span></li>
+                <li><span style={{ color: 'var(--text-muted)', cursor: 'default' }}>Facebook</span></li>
               </ul>
             </div>
 
             {/* 5. NEWSLETTER 칼럼 */}
             <div>
-              <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 20px' }}>
+              <h4 style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 20px', whiteSpace: 'nowrap' }}>
                 Newsletter
               </h4>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-light)', lineHeight: '1.6', margin: '0 0 16px' }}>
+              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.6', margin: '0 0 16px' }}>
                 Subscribe to get updates on new styles and more.
               </p>
               <form onSubmit={(e) => e.preventDefault()} style={{ display: 'flex', gap: '8px' }}>

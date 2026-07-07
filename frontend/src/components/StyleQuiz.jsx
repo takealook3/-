@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { STYLE_DATABASE } from './StyleEncyclopedia';
+import { STYLE_DATABASE } from './StyleDetailModal';
 import { Sparkles, ArrowRight, RefreshCw, Copy, Check } from 'lucide-react';
 
 // 8개 문항 데이터셋 정의 (QUIZ images 내의 15개 파일 매핑)
@@ -299,98 +299,142 @@ export default function StyleQuiz({ onApplyPrompt }) {
   // 2. 결과 출력 화면
   if (showResult && resultStyle) {
     return (
-      <div className="quiz-container" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', width: '100%', maxWidth: '900px', margin: '0 auto' }}>
-        <div className="quiz-result-card glassmorphism animate-fade-in" style={{ padding: '40px', borderRadius: '24px', backgroundColor: '#FFFFFF', border: '1px solid var(--border-color)', boxShadow: '0 20px 48px rgba(43,53,48,0.05)' }}>
+      <div className="quiz-container" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', width: '100%', maxWidth: '960px', margin: '0 auto' }}>
+        <div className="quiz-result-card glassmorphism animate-fade-in" style={{ padding: '48px 40px', borderRadius: '32px', backgroundColor: '#FFFFFF', border: '1px solid rgba(205, 188, 178, 0.3)', boxShadow: '0 30px 70px rgba(46,40,36,0.06)' }}>
           
-          <div className="text-center" style={{ marginBottom: '32px' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: '800', color: 'var(--primary)', background: 'rgba(197, 160, 89, 0.12)', padding: '6px 16px', borderRadius: '30px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Your Styling Match
-            </span>
-            <h2 style={{ fontSize: '2rem', fontWeight: '900', color: 'var(--primary)', marginTop: '16px', letterSpacing: '-0.5px' }}>
-              🎉 {resultStyle.name} 스타일
-            </h2>
-            
-            {/* 성향 배지 태그 리스트 */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '12px' }}>
-              {resultTraits.map((trait, idx) => (
-                <span key={idx} style={{ fontSize: '0.72rem', fontWeight: '700', backgroundColor: '#F5EFEB', color: '#7A6C62', padding: '4px 12px', borderRadius: '30px' }}>
-                  #{trait}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="quiz-result-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', alignItems: 'start' }}>
+          <div className="quiz-result-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '48px', alignItems: 'stretch' }}>
             {/* 좌측: 고해상도 매핑 프리미엄 화보 이미지 */}
-            <div className="quiz-result-image-box" style={{ borderRadius: '16px', overflow: 'hidden', boxShadow: '0 12px 28px rgba(0,0,0,0.08)', position: 'relative', height: '320px' }}>
+            <div className="quiz-result-image-box" style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 20px 48px rgba(0,0,0,0.06)', position: 'relative', minHeight: '480px', height: '100%' }}>
               <img 
                 src={resultStyle.imageUrl} 
                 alt={resultStyle.name} 
                 className="quiz-result-img"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
-              <div className="quiz-result-img-overlay" style={{ position: 'absolute', bottom: '0', left: '0', right: '0', background: 'linear-gradient(transparent, rgba(0,0,0,0.6))', padding: '20px', color: '#fff' }}>
-                <span className="quiz-style-badge" style={{ backgroundColor: 'var(--primary)', padding: '6px 14px', borderRadius: '30px', fontSize: '0.78rem', fontWeight: '800' }}>
-                  {resultStyle.name} Gallery
+              <div className="quiz-result-img-overlay" style={{ position: 'absolute', bottom: '0', left: '0', right: '0', background: 'linear-gradient(transparent, rgba(28,23,20,0.85))', padding: '32px 24px', color: '#fff' }}>
+                <span className="quiz-style-badge" style={{ backgroundColor: 'var(--primary)', color: '#FCFAF7', padding: '8px 18px', borderRadius: '30px', fontSize: '0.8rem', fontWeight: '800', letterSpacing: '0.03em' }}>
+                  {resultStyle.name} Curation
                 </span>
               </div>
             </div>
 
             {/* 우측: 감성 설명 및 프롬프트 연동 섹션 */}
-            <div className="quiz-result-info flex-column" style={{ gap: '20px', height: '100%', justifyContent: 'space-between' }}>
-              
-              {/* 1) 맞춤 설명 가이드 카드 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <div style={{ padding: '20px', background: '#FCFAF7', border: '1px solid var(--border-color)', borderRadius: '16px' }}>
-                  <h4 style={{ margin: '0 0 6px 0', fontSize: '0.88rem', fontWeight: '850', color: 'var(--primary)' }}>✍️ 나만의 스타일 특징</h4>
-                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-main)', lineHeight: '1.6', opacity: 0.9 }}>
-                    {getStyleDescription(resultStyle.name)}
-                  </p>
+            <div className="quiz-result-info" style={{ display: 'flex', flexDirection: 'column', gap: '20px', justifyContent: 'space-between' }}>
+              <div>
+                <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8B7E74', background: 'rgba(139, 126, 116, 0.1)', padding: '6px 18px', borderRadius: '30px', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'inline-block', marginBottom: '8px' }}>
+                  Your Styling Match
+                </span>
+                <h2 style={{ fontSize: '2.2rem', fontWeight: '950', color: 'var(--primary)', marginTop: '4px', marginBottom: '8px', letterSpacing: '-0.8px', fontFamily: 'Outfit, sans-serif' }}>
+                  🎉 {resultStyle.name} 스타일
+                </h2>
+                
+                {/* 성향 배지 태그 리스트 */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+                  {resultTraits.map((trait, idx) => (
+                    <span key={idx} style={{ fontSize: '0.74rem', fontWeight: '700', backgroundColor: '#F5EFEB', color: '#7A6C62', padding: '4px 14px', borderRadius: '30px', border: '1px solid rgba(205, 188, 178, 0.2)' }}>
+                      #{trait}
+                    </span>
+                  ))}
                 </div>
 
-                {/* 2) 추천 마감재 가이드 카드 */}
-                <div style={{ padding: '20px', background: '#FCFAF7', border: '1px solid var(--border-color)', borderRadius: '16px' }}>
-                  <h4 style={{ margin: '0 0 6px 0', fontSize: '0.88rem', fontWeight: '850', color: 'var(--primary)' }}>💡 추천 마감재 & 포인트 데코</h4>
-                  <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-main)', lineHeight: '1.6', opacity: 0.9 }}>
-                    {getStyleMaterialTip(resultStyle.name)}
-                  </p>
+                {/* 1) 맞춤 설명 가이드 카드 & 2) 추천 마감재 가이드 카드 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ padding: '22px', background: 'rgba(252, 250, 247, 0.8)', border: '1px solid rgba(205, 188, 178, 0.4)', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.01)' }}>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: '900', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>✍️</span> 나만의 스타일 특징
+                    </h4>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.65', opacity: 0.9 }}>
+                      {getStyleDescription(resultStyle.name)}
+                    </p>
+                  </div>
+
+                  <div style={{ padding: '22px', background: 'rgba(252, 250, 247, 0.8)', border: '1px solid rgba(205, 188, 178, 0.4)', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.01)' }}>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: '900', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>💡</span> 추천 마감재 & 포인트 데코
+                    </h4>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.65', opacity: 0.9 }}>
+                      {getStyleMaterialTip(resultStyle.name)}
+                    </p>
+                  </div>
                 </div>
               </div>
 
               {/* 영문 프롬프트 제공 박스 */}
-              <div className="prompt-output-box" style={{ background: 'rgba(197, 160, 89, 0.03)', border: '1px dashed #CDBCB2', borderRadius: '16px', padding: '16px 20px' }}>
-                <label style={{ fontSize: '0.74rem', fontWeight: '850', color: 'var(--primary)', display: 'block', marginBottom: '8px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              <div className="prompt-output-box" style={{ background: '#FAF8F5', border: '1px solid rgba(205, 188, 178, 0.5)', borderRadius: '20px', padding: '18px 24px', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.01)' }}>
+                <label style={{ fontSize: '0.74rem', fontWeight: '850', color: '#8B7E74', display: 'block', marginBottom: '8px', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                   Generated AI Remodeling Keywords
                 </label>
-                <div className="prompt-text-field" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
-                  <span className="prompt-text-content" style={{ fontSize: '0.82rem', color: 'var(--text-main)', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div className="prompt-text-field" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                  {/* [수정] 텍스트가 강제로 가로로 늘어나 화면을 뚫고 나가던 whiteSpace: 'nowrap' 제거 */}
+                  {/* index.css의 .prompt-text-content 속성(pre-wrap, break-word)이 자연스럽게 적용되어 자동 줄바꿈됩니다. */}
+                  <span className="prompt-text-content" style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: '700' }}>
                     {generatedPrompt}
                   </span>
                   <button 
                     onClick={handleCopyPrompt} 
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-muted)', padding: '4px' }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--primary)', padding: '6px', transition: 'opacity 0.2s' }}
                     title="프롬프트 복사"
+                    onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
+                    onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                   >
-                    {copied ? <Check style={{ color: '#16a34a' }} size={16} /> : <Copy size={16} />}
+                    {copied ? <Check style={{ color: '#16a34a' }} size={18} /> : <Copy size={18} />}
                   </button>
                 </div>
               </div>
 
               {/* 하단 제어 액션들 */}
-              <div style={{ display: 'flex', gap: '14px', marginTop: '8px' }}>
+              <div style={{ display: 'flex', gap: '16px', marginTop: '4px' }}>
                 <button 
                   onClick={() => onApplyPrompt(generatedPrompt)} 
                   className="btn btn-primary"
-                  style={{ flex: 1, padding: '14px 20px', fontSize: '0.85rem', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', borderRadius: '12px', border: 'none', cursor: 'pointer', transition: 'all 0.25s' }}
+                  style={{ 
+                    flex: 1, 
+                    padding: '16px 24px', 
+                    fontSize: '0.9rem', 
+                    fontWeight: '800', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    gap: '8px', 
+                    borderRadius: '16px', 
+                    border: 'none', 
+                    cursor: 'pointer', 
+                    transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+                    boxShadow: '0 8px 24px rgba(43, 53, 48, 0.15)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 12px 30px rgba(43, 53, 48, 0.25)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(43, 53, 48, 0.15)';
+                  }}
                 >
-                  이 스타일로 AI 리모델링 해보기 <ArrowRight size={16} />
+                  이 스타일로 AI 리모델링 해보기 <ArrowRight size={18} />
                 </button>
                 <button 
                   onClick={handleRestart} 
                   className="btn btn-secondary"
-                  style={{ padding: '14px 20px', fontSize: '0.85rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '12px', cursor: 'pointer', transition: 'all 0.25s' }}
+                  style={{ 
+                    padding: '16px 24px', 
+                    fontSize: '0.9rem', 
+                    fontWeight: '800', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px', 
+                    borderRadius: '16px', 
+                    cursor: 'pointer', 
+                    transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)' 
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
                 >
-                  <RefreshCw size={16} /> 다시 하기
+                  <RefreshCw size={18} /> 다시 하기
                 </button>
               </div>
             </div>

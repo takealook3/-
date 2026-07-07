@@ -23,7 +23,12 @@ if defined COMFYUI_PATH (
 )
 
 echo 1. FastAPI 백엔드 서버 구동 중... (포트 8000)
-start "FastAPI Backend" cmd /k "python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload"
+:: 한글 주석: 가상환경(venv)이 존재하면 가상환경 파이썬으로, 없으면 일반 파이썬으로 백엔드 서버를 구동하도록 두 버전을 합침
+if exist ".\venv\Scripts\python.exe" (
+    start "FastAPI Backend" cmd /k ".\venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload"
+) else (
+    start "FastAPI Backend" cmd /k "python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload"
+)
 echo 2. React (Vite) 프론트엔드 개발 서버 구동 중... (포트 5173)
 start "React Frontend" cmd /k "cd frontend && npm.cmd run dev"
 echo 3. ComfyUI AI 가속 서버 구동 중... (포트 8188)

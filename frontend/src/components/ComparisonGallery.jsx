@@ -267,90 +267,30 @@ export default function ComparisonGallery({
             {/* 2. 자재 추천 */}
             <div style={{ background: 'var(--bg-card-inner)', padding: '18px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
               <div style={{ fontWeight: '850', fontSize: '0.88rem', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px', fontFamily: 'Outfit, sans-serif' }}>
-                🪵 자재 추천
+                자재 추천
               </div>
               {resultData.recommendations.materials && resultData.recommendations.materials.length > 0 ? (
-                <ul style={{ paddingLeft: '16px', margin: 0, fontSize: '0.82rem', color: 'var(--text-main)', display: 'flex', flexDirection: 'column', gap: '6px', lineHeight: '1.5' }}>
-                  {summarizeList(resultData.recommendations.materials).map((val, i) => <li key={i}>{val}</li>)}
-                </ul>
+                (() => {
+                  const cleanText = summarizeList(resultData.recommendations.materials)
+                    .map(val => {
+                      if (!val) return "";
+                      const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F1E0}-\u{1F1FF}]/gu;
+                      return val
+                        .replace(emojiRegex, '')
+                        .replace(/^[-*•\s\d.]+\s*/, '')
+                        .trim();
+                    })
+                    .filter(Boolean)
+                    .join(" ");
+                  return (
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-main)', lineHeight: '1.6', textAlign: 'left' }}>
+                      {cleanText}
+                    </p>
+                  );
+                })()
               ) : (
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>바닥재로 원목 마루나 포세린 타일을 사용하여 공간감의 톤앤매너를 유지하세요.</div>
               )}
-            </div>
-
-            {/* 3. 추천 가구 및 스타일링 제안 (RAG 스타일 매칭 이미지 포함) */}
-            <div style={{ background: 'var(--bg-card-inner)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-color)', gridColumn: 'span 2' }}>
-              <div style={{ fontWeight: '850', fontSize: '0.9rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontFamily: 'Outfit, sans-serif' }}>
-                🛋️ 추천 가구 및 스타일링 제안
-              </div>
-
-              {/* RAG 실시간 가구 및 스타일링 조언 텍스트 출력 [가구 조언 RAG 목록] */}
-              {resultData.recommendations.furniture && resultData.recommendations.furniture.length > 0 && (
-                <div style={{ 
-                  marginBottom: '20px', 
-                  backgroundColor: '#FCFAF7', 
-                  padding: '16px', 
-                  borderRadius: '10px', 
-                  border: '1px solid #CDBCB2',
-                  borderLeft: '5px solid var(--primary)', 
-                  fontSize: '0.82rem', 
-                  color: 'var(--text-main)', 
-                  lineHeight: '1.6',
-                  textAlign: 'left'
-                }}>
-                  <strong style={{ fontSize: '0.85rem', color: 'var(--primary)' }}>💡 AI 맞춤 스타일링 팁:</strong>
-                  <ul style={{ paddingLeft: '16px', margin: '8px 0 0 0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {summarizeList(resultData.recommendations.furniture).map((val, i) => <li key={i}>{val}</li>)}
-                  </ul>
-                </div>
-              )}
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                {matchedFurniture.map((item, idx) => (
-                  <a 
-                    key={idx} 
-                    href={item.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ 
-                      display: 'flex', 
-                      background: '#FCFAF7', 
-                      borderRadius: '10px', 
-                      border: '1px solid var(--border-color)',
-                      overflow: 'hidden',
-                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
-                      textDecoration: 'none',
-                      color: 'inherit',
-                      cursor: 'pointer',
-                      transition: 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease, box-shadow 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-3px)';
-                      e.currentTarget.style.borderColor = 'var(--primary)';
-                      e.currentTarget.style.boxShadow = '0 8px 20px rgba(43, 53, 48, 0.08)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.borderColor = 'var(--border-color)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.03)';
-                    }}
-                  >
-                    <img 
-                      src={item.image} 
-                      alt={item.name} 
-                      style={{ width: '100px', height: '100px', objectFit: 'cover', flexShrink: 0, borderRight: '1px solid var(--border-color)' }}
-                    />
-                    <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', justifyContent: 'center', textAlign: 'left' }}>
-                      <div style={{ fontSize: '0.82rem', fontWeight: '800', color: 'var(--primary)', marginBottom: '4px', fontFamily: 'Outfit, sans-serif' }}>
-                        {item.name}
-                      </div>
-                      <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                        {item.desc}
-                      </div>
-                    </div>
-                  </a>
-                ))}
-              </div>
             </div>
 
           </div>
