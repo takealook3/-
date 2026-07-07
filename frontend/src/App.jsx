@@ -379,6 +379,8 @@ export default function App() {
                   });
                 }
                 setTransformProgress('');
+                setTransformLoading(false);
+                return;
               } else {
                 setTransformProgress(item.message);
               }
