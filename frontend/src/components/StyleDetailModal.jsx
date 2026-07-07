@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import stylesDb from './styles_db.json'; // 28가지 DB 한글 원본 스타일 DB 탑재
 
-// 3가지 공간 카테고리 아이콘 정의 — 감성 가구 일러스트 스타일 SVG (거실 추가, 주방/화장실만 유지)
+// 3가지 공간 카테고리 아이콘 정의 — 감성 가구 일러스트 SVG (거실 추가, 주방/화장실만 유지)
 const CATEGORY_ICONS = [
   {
     key: '거실',
@@ -64,7 +64,8 @@ const HIGH_RES_FALLBACK_IMAGES = {
   "에스닉": "https://images.unsplash.com/photo-1533090161767-e6ffed986c88?auto=format&fit=crop&w=1000&q=80",
   "미드센추리 모던": "https://images.unsplash.com/photo-1538688525198-9b88f6f53126?auto=format&fit=crop&w=1000&q=80",
   "컨템포러리": "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1000&q=80",
-  "러스틱": "https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=1000&q=80",
+  /* [수정] 기존 에코백 가방 이미지 주소를 실제 아늑한 원목 러스틱 거실 화보 주소로 교체 */
+  "러스틱": "https://images.unsplash.com/photo-1593696140826-c58b021acf8b?auto=format&fit=crop&w=1000&q=80",
   "아트데코": "https://images.unsplash.com/photo-1506812779316-934cef51b42e?auto=format&fit=crop&w=1000&q=80",
   "셔비 시크": "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=1000&q=80",
   "어반 모던": "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1000&q=80",
@@ -98,107 +99,76 @@ export const STYLE_DATABASE = stylesDb.map(item => ({
   imageUrl: getHighResImageUrl(item.name, item.imageUrl)
 }));
 
-export default function StyleEncyclopedia({ activeId, setActiveId, isModalOpen, setIsModalOpen }) {
-  const [selectedCategory, setSelectedCategory] = useState('거실'); // 선택된 카테고리 필터 (기본값: 거실) [초기 카테고리 거실 설정]
+export default function StyleDetailModal({ activeId, isModalOpen, setIsModalOpen }) {
+  const [selectedCategory, setSelectedCategory] = useState('거실'); // 선택된 카테고리 필터 (기본값: 거실)
+
+  if (!isModalOpen) return null;
 
   const activeStyle = STYLE_DATABASE.find(item => item.id === activeId) || STYLE_DATABASE[0];
 
-  // 사용자가 도감 하단 태그를 직접 클릭했을 때의 핸들러
-  const handleTabSelect = (id) => {
-    setActiveId(id);      // 부모 상태에 선택된 스타일 ID 전달
-    if (setIsModalOpen) {
-      setIsModalOpen(true); // [스타일 도감 탭 클릭 시 상세 모달 오픈]
-    }
-  };
-
   return (
-    <section id="style-encyclopedia" className="style-encyclopedia-section" style={{
-      width: '100vw',
-      marginLeft: 'calc(-50vw + 50%)',
-      marginRight: 'calc(-50vw + 50%)',
-      backgroundColor: '#FCFAF7',
-      padding: '80px 10%',
-      borderTop: '1px solid var(--border-color)',
-      fontFamily: 'Outfit, sans-serif',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '40px'
-    }}>
-      
-      {/* 타이틀 헤더 */}
-      <div style={{ textAlign: 'center' }}>
-        <span style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--accent)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-          📖 Style Encyclopedia
-        </span>
-        <h2 style={{ fontSize: '2.2rem', fontWeight: '800', color: 'var(--primary)', marginTop: '6px', fontFamily: 'Outfit, sans-serif' }}>
-          28가지 인테리어 취향 스타일 도감
-        </h2>
-      </div>
-
-      {/* ── 2분할 럭셔리 매칭 레이아웃 상세 보기 모달 ── */}
-      {isModalOpen && (
-        <div 
-          onClick={() => setIsModalOpen(false)} /* [배경 클릭 시 모달 닫기] */
+    <div 
+      onClick={() => setIsModalOpen(false)} /* [배경 클릭 시 모달 닫기] */
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(28, 23, 20, 0.6)', /* [어두운 브라운 딤 처리] */
+        backdropFilter: 'blur(8px)', /* [배경 블러 처리] */
+        zIndex: 100000, /* [최상단 팝업 배치] */
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()} /* [카드 내부 클릭 시 닫힘 방지] */
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '4.5fr 5.5fr', // 시안 비율인 45% : 55% 황금 분할
+          border: '1px solid var(--border-color)',
+          borderRadius: '24px',
+          overflow: 'hidden',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.15)',
+          width: '900px', /* [모달 창 크기 고정] */
+          height: '520px', 
+          backgroundColor: '#FCFAF7',
+          position: 'relative',
+          animation: 'fadeInEffect 0.3s ease-out'
+        }}
+      >
+        {/* 우측 상단 모달 닫기 버튼 [모달 닫기 버튼] */}
+        <button
+          onClick={() => setIsModalOpen(false)}
           style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
-            backgroundColor: 'rgba(28, 23, 20, 0.6)', /* [어두운 브라운 딤 처리] */
-            backdropFilter: 'blur(8px)', /* [배경 블러 처리] */
-            zIndex: 100000, /* [최상단 팝업 배치] */
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(255, 255, 255, 0.8)',
+            border: '1px solid #CDBCB2',
+            color: '#2A2521',
+            fontSize: '1rem',
+            fontWeight: 'bold',
+            cursor: 'pointer',
             display: 'flex',
             justifyContent: 'center',
-            alignItems: 'center'
+            alignItems: 'center',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+            zIndex: 10,
+            transition: 'background-color 0.2s'
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EAE5DF'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.8)'; }}
+          title="닫기"
         >
-          <div 
-            onClick={(e) => e.stopPropagation()} /* [카드 내부 클릭 시 닫힘 방지] */
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '4.5fr 5.5fr', // 시안 비율인 45% : 55% 황금 분할
-              border: '1px solid var(--border-color)',
-              borderRadius: '24px',
-              overflow: 'hidden',
-              boxShadow: '0 24px 64px rgba(0,0,0,0.15)',
-              width: '900px', /* [모달 창 크기 고정] */
-              height: '520px', 
-              backgroundColor: '#FCFAF7',
-              position: 'relative',
-              animation: 'fadeInEffect 0.3s ease-out'
-            }}
-          >
-            {/* 우측 상단 모달 닫기 버튼 [모달 닫기 버튼] */}
-            <button
-              onClick={() => setIsModalOpen(false)}
-              style={{
-                position: 'absolute',
-                top: '16px',
-                right: '16px',
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                border: '1px solid #CDBCB2',
-                color: '#2A2521',
-                fontSize: '1rem',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                zIndex: 10,
-                transition: 'background-color 0.2s'
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#EAE5DF'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.8)'; }}
-              title="닫기"
-            >
-              ✕
-            </button>
-        
+          ✕
+        </button>
+    
         {/* 1. 좌측 웜 샌드 텍스트 패널 */}
         <div style={{
           backgroundColor: '#F1EAE4', // 시안의 부드러운 오트밀 베이지색 재현
@@ -210,8 +180,6 @@ export default function StyleEncyclopedia({ activeId, setActiveId, isModalOpen, 
           position: 'relative',
           height: '100%'
         }}>
-
-
           <div>
             <span style={{ fontSize: '0.8rem', fontWeight: '800', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
               Style No. {activeStyle.id}
@@ -246,7 +214,7 @@ export default function StyleEncyclopedia({ activeId, setActiveId, isModalOpen, 
             </span>
           </div>
 
-          {/* ── 공간 카테고리 아이콘 (일반 레이아웃 배치로 겹침 현상 완전 해결) [공간 카테고리 래퍼] ── */}
+          {/* ── 공간 카테고리 아이콘 ── */}
           <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -264,7 +232,7 @@ export default function StyleEncyclopedia({ activeId, setActiveId, isModalOpen, 
             }}>공간 카테고리</span>
             <div style={{ display: 'flex', gap: '12px' }}>
               {CATEGORY_ICONS.map(cat => {
-                // 거실은 항상 참이며, 나머지는 기존 카테고리 데이터 체크 [거실 탭 항상 true 지정]
+                // 거실은 항상 참이며, 나머지는 기존 카테고리 데이터 체크
                 const hasCategory = cat.key === '거실' ? true : (activeStyle.categories || []).includes(cat.key);
                 // 현재 선택된 카테고리와 일치하는지
                 const isSelected = selectedCategory === cat.key;
@@ -347,7 +315,7 @@ export default function StyleEncyclopedia({ activeId, setActiveId, isModalOpen, 
 
             return displayUrl ? (
               <img
-                key={`${activeStyle.id}_${selectedCategory || 'default'}`} // key를 변경하여 React가 새로운 컴포넌트로 인식해 Fade 효과 발동
+                key={`${activeStyle.id}_${selectedCategory || 'default'}`} // key를 변경하여 React가 새로운 컴포넌트나 Fade 효과 인식
                 src={displayUrl}
                 alt={activeStyle.name}
                 style={{
@@ -375,60 +343,5 @@ export default function StyleEncyclopedia({ activeId, setActiveId, isModalOpen, 
         </div>
       </div>
     </div>
-  )}
-
-      {/* 하단 28가지 스타일 태그 네비게이터 (그리드 정렬 완료) */}
-      <div>
-        <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-light)', fontWeight: '600' }}>
-            원하시는 스타일을 클릭해 보세요. 오토플레이가 멈추고 해당 스타일이 고정됩니다.
-          </span>
-        </div>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(7, 1fr)', // 7열 고정하여 4줄로 칼같이 칸 맞춤
-          gap: '10px',
-          padding: '16px',
-          border: '1px solid var(--border-color)',
-          borderRadius: '20px',
-          backgroundColor: '#FCFAF7',
-          boxShadow: '0 8px 24px rgba(43,53,48,0.02)'
-        }}>
-          {STYLE_DATABASE.map(item => (
-            <button
-              key={item.id}
-              onClick={() => handleTabSelect(item.id)}
-              style={{
-                width: '100%',
-                padding: '10px 0',
-                borderRadius: '30px',
-                border: activeId === item.id ? 'none' : '1px solid var(--border-color)',
-                backgroundColor: activeId === item.id ? 'var(--primary)' : '#FCFAF7',
-                color: activeId === item.id ? '#FCFAF7' : 'var(--text-main)',
-                fontSize: '0.85rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.25s ease',
-                textAlign: 'center'
-              }}
-              onMouseEnter={(e) => {
-                if (activeId !== item.id) {
-                  e.currentTarget.style.backgroundColor = 'var(--bg-card-inner)';
-                  e.currentTarget.style.borderColor = 'var(--primary)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeId !== item.id) {
-                  e.currentTarget.style.backgroundColor = '#FCFAF7';
-                  e.currentTarget.style.borderColor = 'var(--border-color)';
-                }
-              }}
-            >
-              {String(item.id).padStart(2, '0')}. {item.name} {/* [스타일 번호 01. 형식으로 출력] */}
-            </button>
-          ))}
-        </div>
-      </div>
-    </section>
   );
 }

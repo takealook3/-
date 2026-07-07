@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { STYLE_DATABASE } from './StyleEncyclopedia';
+import { STYLE_DATABASE } from './StyleDetailModal';
 import { Sparkles, ArrowRight, RefreshCw, Copy, Check } from 'lucide-react';
 
 // 8개 문항 데이터셋 정의 (QUIZ images 내의 15개 파일 매핑)
@@ -302,34 +302,16 @@ export default function StyleQuiz({ onApplyPrompt }) {
       <div className="quiz-container" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif', width: '100%', maxWidth: '960px', margin: '0 auto' }}>
         <div className="quiz-result-card glassmorphism animate-fade-in" style={{ padding: '48px 40px', borderRadius: '32px', backgroundColor: '#FFFFFF', border: '1px solid rgba(205, 188, 178, 0.3)', boxShadow: '0 30px 70px rgba(46,40,36,0.06)' }}>
           
-          <div className="text-center" style={{ marginBottom: '36px' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8B7E74', background: 'rgba(139, 126, 116, 0.1)', padding: '6px 18px', borderRadius: '30px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Your Styling Match
-            </span>
-            <h2 style={{ fontSize: '2.4rem', fontWeight: '950', color: 'var(--primary)', marginTop: '16px', letterSpacing: '-0.8px', fontFamily: 'Outfit, sans-serif' }}>
-              🎉 {resultStyle.name} 스타일
-            </h2>
-            
-            {/* 성향 배지 태그 리스트 */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '14px' }}>
-              {resultTraits.map((trait, idx) => (
-                <span key={idx} style={{ fontSize: '0.74rem', fontWeight: '700', backgroundColor: '#F5EFEB', color: '#7A6C62', padding: '4px 14px', borderRadius: '30px', border: '1px solid rgba(205, 188, 178, 0.2)' }}>
-                  #{trait}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="quiz-result-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 1.1fr', gap: '40px', alignItems: 'stretch' }}>
+          <div className="quiz-result-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '48px', alignItems: 'stretch' }}>
             {/* 좌측: 고해상도 매핑 프리미엄 화보 이미지 */}
-            <div className="quiz-result-image-box" style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 20px 48px rgba(0,0,0,0.06)', position: 'relative', minHeight: '420px', height: '100%' }}>
+            <div className="quiz-result-image-box" style={{ borderRadius: '24px', overflow: 'hidden', boxShadow: '0 20px 48px rgba(0,0,0,0.06)', position: 'relative', minHeight: '480px', height: '100%' }}>
               <img 
                 src={resultStyle.imageUrl} 
                 alt={resultStyle.name} 
                 className="quiz-result-img"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.5s ease' }}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
-              <div className="quiz-result-img-overlay" style={{ position: 'absolute', bottom: '0', left: '0', right: '0', background: 'linear-gradient(transparent, rgba(28,23,20,0.75))', padding: '24px', color: '#fff' }}>
+              <div className="quiz-result-img-overlay" style={{ position: 'absolute', bottom: '0', left: '0', right: '0', background: 'linear-gradient(transparent, rgba(28,23,20,0.85))', padding: '32px 24px', color: '#fff' }}>
                 <span className="quiz-style-badge" style={{ backgroundColor: 'var(--primary)', color: '#FCFAF7', padding: '8px 18px', borderRadius: '30px', fontSize: '0.8rem', fontWeight: '800', letterSpacing: '0.03em' }}>
                   {resultStyle.name} Curation
                 </span>
@@ -337,26 +319,43 @@ export default function StyleQuiz({ onApplyPrompt }) {
             </div>
 
             {/* 우측: 감성 설명 및 프롬프트 연동 섹션 */}
-            <div className="quiz-result-info" style={{ display: 'flex', flexDirection: 'column', gap: '22px', justifyContent: 'space-between' }}>
-              
-              {/* 1) 맞춤 설명 가이드 카드 & 2) 추천 마감재 가이드 카드 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ padding: '22px', background: 'rgba(252, 250, 247, 0.8)', border: '1px solid rgba(205, 188, 178, 0.4)', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.01)' }}>
-                  <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: '900', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>✍️</span> 나만의 스타일 특징
-                  </h4>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.65', opacity: 0.9 }}>
-                    {getStyleDescription(resultStyle.name)}
-                  </p>
+            <div className="quiz-result-info" style={{ display: 'flex', flexDirection: 'column', gap: '20px', justifyContent: 'space-between' }}>
+              <div>
+                <span style={{ fontSize: '0.78rem', fontWeight: '800', color: '#8B7E74', background: 'rgba(139, 126, 116, 0.1)', padding: '6px 18px', borderRadius: '30px', textTransform: 'uppercase', letterSpacing: '0.08em', display: 'inline-block', marginBottom: '8px' }}>
+                  Your Styling Match
+                </span>
+                <h2 style={{ fontSize: '2.2rem', fontWeight: '950', color: 'var(--primary)', marginTop: '4px', marginBottom: '8px', letterSpacing: '-0.8px', fontFamily: 'Outfit, sans-serif' }}>
+                  🎉 {resultStyle.name} 스타일
+                </h2>
+                
+                {/* 성향 배지 태그 리스트 */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+                  {resultTraits.map((trait, idx) => (
+                    <span key={idx} style={{ fontSize: '0.74rem', fontWeight: '700', backgroundColor: '#F5EFEB', color: '#7A6C62', padding: '4px 14px', borderRadius: '30px', border: '1px solid rgba(205, 188, 178, 0.2)' }}>
+                      #{trait}
+                    </span>
+                  ))}
                 </div>
 
-                <div style={{ padding: '22px', background: 'rgba(252, 250, 247, 0.8)', border: '1px solid rgba(205, 188, 178, 0.4)', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.01)' }}>
-                  <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: '900', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span>💡</span> 추천 마감재 & 포인트 데코
-                  </h4>
-                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.65', opacity: 0.9 }}>
-                    {getStyleMaterialTip(resultStyle.name)}
-                  </p>
+                {/* 1) 맞춤 설명 가이드 카드 & 2) 추천 마감재 가이드 카드 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ padding: '22px', background: 'rgba(252, 250, 247, 0.8)', border: '1px solid rgba(205, 188, 178, 0.4)', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.01)' }}>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: '900', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>✍️</span> 나만의 스타일 특징
+                    </h4>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.65', opacity: 0.9 }}>
+                      {getStyleDescription(resultStyle.name)}
+                    </p>
+                  </div>
+
+                  <div style={{ padding: '22px', background: 'rgba(252, 250, 247, 0.8)', border: '1px solid rgba(205, 188, 178, 0.4)', borderRadius: '20px', boxShadow: '0 4px 15px rgba(0,0,0,0.01)' }}>
+                    <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', fontWeight: '900', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>💡</span> 추천 마감재 & 포인트 데코
+                    </h4>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.65', opacity: 0.9 }}>
+                      {getStyleMaterialTip(resultStyle.name)}
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -366,7 +365,9 @@ export default function StyleQuiz({ onApplyPrompt }) {
                   Generated AI Remodeling Keywords
                 </label>
                 <div className="prompt-text-field" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                  <span className="prompt-text-content" style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: '700', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {/* [수정] 텍스트가 강제로 가로로 늘어나 화면을 뚫고 나가던 whiteSpace: 'nowrap' 제거 */}
+                  {/* index.css의 .prompt-text-content 속성(pre-wrap, break-word)이 자연스럽게 적용되어 자동 줄바꿈됩니다. */}
+                  <span className="prompt-text-content" style={{ fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: '700' }}>
                     {generatedPrompt}
                   </span>
                   <button 
