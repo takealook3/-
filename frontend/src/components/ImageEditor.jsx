@@ -887,6 +887,42 @@ export default function ImageEditor({
                           <span style={{ fontSize: '0.62rem', color: '#1E40AF', background: '#EFF6FF', padding: '2px 6px', borderRadius: '4px', fontWeight: '400', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', whiteSpace: 'nowrap' }}>
                             유사도 {Math.round(item.similarity * 100)}%
                           </span>
+                          {item.purchase_link && (
+                            <a 
+                              href={item.purchase_link} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              onClick={(e) => e.stopPropagation()} 
+                              style={{ 
+                                fontSize: '0.6rem', 
+                                color: '#1E40AF', 
+                                background: '#E0F2FE', 
+                                border: '1px solid #BAE6FD',
+                                padding: '2px 6px', 
+                                borderRadius: '4px', 
+                                fontWeight: '600', 
+                                textDecoration: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                transition: 'all 0.2s ease',
+                                cursor: 'pointer',
+                                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = '#0284C7';
+                                e.currentTarget.style.color = '#FFFFFF';
+                                e.currentTarget.style.borderColor = '#0284C7';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = '#E0F2FE';
+                                e.currentTarget.style.color = '#1E40AF';
+                                e.currentTarget.style.borderColor = '#BAE6FD';
+                              }}
+                            >
+                              구매 링크 🔗
+                            </a>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -977,6 +1013,42 @@ export default function ImageEditor({
                           <span style={{ fontSize: '0.62rem', color: '#1E40AF', background: '#EFF6FF', padding: '2px 6px', borderRadius: '4px', fontWeight: '400', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', whiteSpace: 'nowrap' }}>
                             유사도 {Math.round(item.similarity * 100)}%
                           </span>
+                          {item.purchase_link && (
+                            <a 
+                              href={item.purchase_link} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              onClick={(e) => e.stopPropagation()} 
+                              style={{ 
+                                fontSize: '0.6rem', 
+                                color: '#1E40AF', 
+                                background: '#E0F2FE', 
+                                border: '1px solid #BAE6FD',
+                                padding: '2px 6px', 
+                                borderRadius: '4px', 
+                                fontWeight: '600', 
+                                textDecoration: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                transition: 'all 0.2s ease',
+                                cursor: 'pointer',
+                                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = '#0284C7';
+                                e.currentTarget.style.color = '#FFFFFF';
+                                e.currentTarget.style.borderColor = '#0284C7';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = '#E0F2FE';
+                                e.currentTarget.style.color = '#1E40AF';
+                                e.currentTarget.style.borderColor = '#BAE6FD';
+                              }}
+                            >
+                              구매 링크 🔗
+                            </a>
+                          )}
                         </div>
                       </div>
                     </div>

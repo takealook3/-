@@ -30,12 +30,29 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.env"))
 
 style_image_map = {}
 pyeong_style_map = {}
+STYLE_DETAILS_LIST = []
+
+def clean_image_url(raw_val: str) -> str:
+    if not raw_val:
+        return ""
+    import re
+    match = re.search(r'(https?://[^\s"]+)', raw_val)
+    if match:
+        url = match.group(1)
+        if url.endswith(')"') or url.endswith('")'):
+            url = url[:-2]
+        elif url.endswith(')') or url.endswith('"'):
+            url = url[:-1]
+        return url
+    return raw_val.strip()
 
 def build_db_metadata_maps():
     import csv, re
-    global style_image_map, pyeong_style_map
+    global style_image_map, pyeong_style_map, STYLE_DETAILS_LIST
     db1_path = os.path.join(PROJECT_ROOT, "backend", "DB1.csv")
     db2_path = os.path.join(PROJECT_ROOT, "backend", "DB2.csv")
+    
+    STYLE_DETAILS_LIST = []
     
     if os.path.exists(db1_path):
         try:
@@ -47,14 +64,38 @@ def build_db_metadata_maps():
                         continue
                     style_ko = row[1].strip()
                     image_raw = row[6].strip()
-                    image_url = ""
-                    if image_raw:
-                        match = re.search(r'"(https?://[^"]+)"', image_raw)
-                        if match:
-                            image_url = match.group(1)
+                    image_url = clean_image_url(image_raw)
+                    
                     if style_ko and image_url:
                         style_image_map[style_ko] = image_url
-            print(f"📊 [DB Metadata Map] DB1 스타일 이미지 맵 로드 성공: {len(style_image_map)}개 스타일 등록")
+                        
+                    # 벽지, 바닥재, 특징, 가구 이미지 파싱 수집
+                    features = []
+                    for f_idx in [3, 4, 5]:
+                        if f_idx < len(row) and row[f_idx].strip():
+                            features.append(row[f_idx].strip())
+                            
+                    wallpaper_name = row[14].strip() if len(row) > 14 else ""
+                    wallpaper_img = clean_image_url(row[15]) if len(row) > 15 else ""
+                    floor_name = row[16].strip() if len(row) > 16 else ""
+                    floor_img = clean_image_url(row[17]) if len(row) > 17 else ""
+                    
+                    sofa_img = clean_image_url(row[9]) if len(row) > 9 else ""
+                    bed_img = clean_image_url(row[10]) if len(row) > 10 else ""
+                    objet_img = clean_image_url(row[11]) if len(row) > 11 else ""
+                    
+                    STYLE_DETAILS_LIST.append({
+                        "style_name": style_ko,
+                        "features": features,
+                        "wallpaper_name": wallpaper_name,
+                        "wallpaper_image_url": wallpaper_img,
+                        "floor_name": floor_name,
+                        "floor_image_url": floor_img,
+                        "sofa_image_url": sofa_img,
+                        "bed_image_url": bed_img,
+                        "objet_image_url": objet_img
+                    })
+            print(f"📊 [DB Metadata Map] DB1 스타일 이미지 및 세부 자재 맵 로드 성공: {len(STYLE_DETAILS_LIST)}개 스타일 캐싱")
         except Exception as e:
             print(f"⚠️ [DB Metadata Map] DB1.csv 파싱 오류: {e}")
             
@@ -152,7 +193,8 @@ from schemas import (
     ImageGenerateRequest, ImageGenerateResponse,
     ChatMessageRequest, ChatMessageResponse,
     ImageEditRequest, ImageEditResponse,
-    SessionHistoryResponse, ProductItem, ProductSearchResponse, CropEmbeddingResponse
+    SessionHistoryResponse, ProductItem, ProductSearchResponse, CropEmbeddingResponse,
+    StyleRecommendationRequest, StyleRecommendationResponse, StyleRecommendationItem
 )
 
 # [정량평가 서비스 임포트]
@@ -1318,11 +1360,9 @@ async def upload_image(
 # =====================================================================
 # [3번 창구] 인테리어 이미지 변환 API (POST /api/image/generate)
 # =====================================================================
-def get_interior_recommendations(style_key: str) -> dict:
+def get_interior_recommendations(style_key: str, prompt: str = "") -> dict:
     import csv
     db1_path = os.path.join(PROJECT_ROOT, "backend", "DB1.csv")
-    wallpaper_list = []
-    material_list = []
     
     style_map = {
         "modern": "모던",
@@ -1331,8 +1371,59 @@ def get_interior_recommendations(style_key: str) -> dict:
         "vintage": "빈티지",
         "scandinavian": "북유럽"
     }
-    target_ko = style_map.get(style_key.lower(), style_key)
     
+    # 1. 프롬프트와 style_key 통합 분석하여 가장 정확한 한글 타겟 스타일 감지
+    combined = f"{style_key} {prompt}".lower().replace(" ", "")
+    target_ko = "모던" # 기본값
+    
+    if "미니멀" in combined or "minimal" in combined:
+        target_ko = "미니멀"
+    elif "북유럽" in combined or "scandinavian" in combined or "스칸디" in combined:
+        target_ko = "북유럽"
+    elif "내추럴" in combined or "네추럴" in combined or "natural" in combined or "우드" in combined:
+        target_ko = "내추럴"
+    elif "다크모던" in combined or "darkmodern" in combined or "어두운모던" in combined:
+        target_ko = "다크 모던"
+    elif "러스틱" in combined or "rustic" in combined:
+        target_ko = "러스틱"
+    elif "럭셔리" in combined or "luxury" in combined:
+        target_ko = "럭셔리"
+    elif "미드센추리" in combined or "midcentury" in combined:
+        target_ko = "미드센추리 모던"
+    elif "바우하우스" in combined or "bauhaus" in combined:
+        target_ko = "바우하우스"
+    elif "보헤미안" in combined or "bohemian" in combined:
+        target_ko = "보헤미안"
+    elif "빈티지" in combined or "vintage" in combined:
+        target_ko = "빈티지"
+    elif "클래식" in combined or "classic" in combined:
+        target_ko = "클래식"
+    elif "할리우드" in combined or "hollywood" in combined:
+        target_ko = "할리우드 글램"
+    elif "프렌치" in combined or "french" in combined:
+        target_ko = "프렌치"
+    elif "하이테크" in combined or "hightech" in combined:
+        target_ko = "하이테크"
+    elif "인더스트리얼" in combined or "industrial" in combined:
+        target_ko = "인더스트리얼"
+    elif "재팬디" in combined or "japandi" in combined:
+        target_ko = "재팬디"
+    elif "젠" in combined or "zen" in combined:
+        target_ko = "젠"
+    elif "코스탈" in combined or "coastal" in combined:
+        target_ko = "코스탈"
+    elif "트로피컬" in combined or "tropical" in combined:
+        target_ko = "트로피컬"
+    elif "펑키" in combined or "funky" in combined:
+        target_ko = "펑키"
+    elif "어반정글" in combined or "urbanjungle" in combined or "식물" in combined:
+        target_ko = "어반 정글"
+    else:
+        target_ko = style_map.get(style_key.lower(), style_key)
+
+    matched_row = None
+    fallback_row = None
+
     if os.path.exists(db1_path):
         try:
             with open(db1_path, "r", encoding="utf-8") as f:
@@ -1343,31 +1434,48 @@ def get_interior_recommendations(style_key: str) -> dict:
                         continue
                     style_ko = row[1].strip()
                     style_en = row[2].strip()
-                    if target_ko in style_ko or style_key.lower() in style_en.lower():
-                        wp = row[14].strip()
-                        fl = row[16].strip()
-                        feat1 = row[3].strip() if len(row) > 3 else ""
-                        feat2 = row[4].strip() if len(row) > 4 else ""
-                        if wp and wp not in wallpaper_list:
-                            wallpaper_list.append(wp)
-                        if fl and fl not in material_list:
-                            material_list.append(fl)
-                        if feat1 and feat1 not in material_list:
-                            material_list.append(feat1)
-                        if feat2 and feat2 not in material_list:
-                            material_list.append(feat2)
+                    
+                    # 2-1. 완전 일치 (Exact Match) 판별
+                    if style_ko == target_ko or style_en.lower() == target_ko.lower():
+                        matched_row = row
+                        break
+                    
+                    # 2-2. 부분 일치 (Partial Match) 판별 - 차선책 보관
+                    if target_ko in style_ko or target_ko.lower() in style_en.lower():
+                        if not fallback_row:
+                            fallback_row = row
+                            
+                    # 기본 모던(또는 첫 행)을 최후의 수단으로 보관
+                    if style_ko == "모던" and not fallback_row:
+                        fallback_row = row
         except Exception as e:
             print(f"⚠️ [recommendations DB Query Error] {e}")
-            
-    # 매칭 실패 시 기본 폴백 제공
-    if not wallpaper_list:
-        wallpaper_list = ["친환경 고급 실크 벽지", "화사하고 넓어 보이는 뉴트럴 아이보리 벽지"]
-    if not material_list:
-        material_list = ["강마루 원목 바닥재", "소음을 줄여주는 친환경 포세린 타일 바닥"]
+
+    # 최종 타겟 행 선정
+    final_row = matched_row if matched_row else fallback_row
+
+    if final_row:
+        style_name_ko = final_row[1].strip()
+        wp_name = final_row[14].strip()
+        wp_img = clean_image_url(final_row[15])
+        fl_name = final_row[16].strip()
+        fl_img = clean_image_url(final_row[17])
         
+        print(f"🎯 [Style Recommendation Match] 매칭 성공! 스타일: {style_name_ko} | 벽지: {wp_name} | 바닥: {fl_name}")
+        
+        return {
+            "wallpaper": [wp_name] if wp_name else ["친환경 고급 실크 벽지"],
+            "materials": [fl_name] if fl_name else ["강마루 원목 바닥재"],
+            "wallpaper_image_url": wp_img or "https://images.unsplash.com/photo-1615529182904-14819c35db37?w=500",
+            "floor_image_url": fl_img or "https://images.unsplash.com/photo-1581858726788-75bc0f6a952d?w=500"
+        }
+        
+    # 만약에 파일 조회에 아예 실패한 최후의 가드 폴백
     return {
-        "wallpaper": wallpaper_list,
-        "materials": material_list
+        "wallpaper": ["친환경 고급 실크 벽지", "화사하고 넓어 보이는 뉴트럴 아이보리 벽지"],
+        "materials": ["강마루 원목 바닥재", "소음을 줄여주는 친환경 포세린 타일 바닥"],
+        "wallpaper_image_url": "https://images.unsplash.com/photo-1615529182904-14819c35db37?w=500",
+        "floor_image_url": "https://images.unsplash.com/photo-1581858726788-75bc0f6a952d?w=500"
     }
 
 
@@ -1393,7 +1501,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
                 metrics_data = {"error": str(eval_err)}
 
         session_data = get_or_create_session(session_id)
-        recommendations_data = get_interior_recommendations(style)
+        recommendations_data = get_interior_recommendations(style, prompt)
         session_data["generations"].append({
             "type": "interior_transform",
             "task_id": task_id,
@@ -1526,7 +1634,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
             metrics_data = {"error": str(eval_err)}
 
     session_data = get_or_create_session(session_id)
-    recommendations_data = get_interior_recommendations(style)
+    recommendations_data = get_interior_recommendations(style, prompt)
     session_data["generations"].append({
         "type": "interior_transform",
         "result_id": result_id,
@@ -1588,7 +1696,7 @@ def translate_prompt_to_english_strict(prompt: str) -> tuple[str, bool]:
             )
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(rag_llm.invoke, [HumanMessage(content=system_prompt)])
-                response = future.result(timeout=4.0)
+                response = future.result(timeout=12.0)
             translated = response.content.strip().replace('"', '').replace("'", "")
             translation_cache[prompt] = translated
             return translated, False
@@ -1708,7 +1816,7 @@ async def generate_interior_image_stream(request: Request):
                 result_id = f"result_{uuid.uuid4().hex[:6]}"
                 
                 if not image_id:
-                    recommendations_data = get_interior_recommendations(style)
+                    recommendations_data = get_interior_recommendations(style, prompt)
                     status_callback("completed", "인테리어 이미지 생성이 완료되었습니다.", {
                         "result_id": result_id,
                         "session_id": session_id,
@@ -1783,7 +1891,7 @@ async def generate_interior_image_stream(request: Request):
                         )
                         execution_mode = "mock_fallback"
                     
-                recommendations_data = get_interior_recommendations(style)
+                recommendations_data = get_interior_recommendations(style, prompt)
                 res_data = {
                     "result_id": result_id,
                     "session_id": session_id,
@@ -3246,7 +3354,7 @@ def search_similar_products(payload: Dict[str, Any]):
                             # 3-3. Chroma DB 쿼리 실행
                             query_args = {
                                 "query_embeddings": [crop_embedding],
-                                "n_results": 6
+                                "n_results": 3
                             }
                             # 카테고리가 분류되면 where 필터 적용
                             if detected_category:
@@ -3306,30 +3414,57 @@ def search_similar_products(payload: Dict[str, Any]):
         print("⚠️ [Product Search] Chroma DB 매칭 실패 또는 데이터 부재로 4단계 CSV Fallback DB 가동합니다.")
         prompt = (payload.get("prompt") or "").lower()
         selected_obj = (payload.get("selected_object") or "").lower()
-        combined_query = f"{prompt} {selected_obj}"
         
-        target_category = "sofa"
-        if any(x in combined_query for x in ["침대", "bed", "sleep", "이불", "매트리스"]):
-            target_category = "bed"
-        elif any(x in combined_query for x in ["테이블", "식탁", "책상", "desk", "table", "식사"]):
-            target_category = "table"
-        elif any(x in combined_query for x in ["의자", "체어", "chair", "스툴"]):
-            target_category = "chair"
-        elif any(x in combined_query for x in ["조명", "스탠드", "light", "lamp", "불빛", "스폿"]):
-            target_category = "lighting"
-        elif any(x in combined_query for x in ["화분", "식물", "plant", "flowerpot", "tree"]):
-            target_category = "plant"
-
-        cat_keywords = {
-            "sofa": ["소파", "쇼파"],
-            "bed": ["침대", "매트리스"],
-            "table": ["식탁", "테이블", "책상"],
-            "chair": ["의자", "체어", "스툴"],
-            "lighting": ["조명", "스탠드", "램프"],
-            "plant": ["식물", "화분", "조화"]
-        }
-        
-        keywords = cat_keywords.get(target_category, ["소파"])
+        # 4-1. Gemini Vision을 통해 이미지 가구 카테고리 실시간 감지
+        detected_category = None
+        if cropped_img_path and os.path.exists(cropped_img_path):
+            try:
+                detected_category = classify_furniture_category_with_gemini(cropped_img_path)
+                print(f"👁️ [Product Search Fallback] Gemini Vision 카테고리 판독 결과: {detected_category}")
+            except Exception as gemini_err:
+                print(f"⚠️ [Product Search Fallback] Gemini Vision 판독 실패: {gemini_err}")
+                
+        # 4-2. 매칭 키워드 리스트 도출
+        keywords = []
+        if detected_category:
+            target_category = detected_category
+            keywords = [detected_category]
+            if "/" in detected_category:
+                keywords = [x.strip() for x in detected_category.split("/")]
+                
+            if "테이블" in detected_category:
+                keywords.extend(["식탁", "책상"])
+            elif "의자" in detected_category:
+                keywords.extend(["체어", "스툴"])
+            elif "소파" in detected_category:
+                keywords.extend(["쇼파"])
+            elif "스탠드" in detected_category:
+                keywords.extend(["조명", "램프"])
+        else:
+            combined_query = f"{prompt} {selected_obj}"
+            target_category = "sofa"
+            if any(x in combined_query for x in ["침대", "bed", "sleep", "이불", "매트리스"]):
+                target_category = "bed"
+            elif any(x in combined_query for x in ["테이블", "식탁", "책상", "desk", "table", "식사", "탁자", "티테이블"]):
+                target_category = "table"
+            elif any(x in combined_query for x in ["의자", "체어", "chair", "스툴"]):
+                target_category = "chair"
+            elif any(x in combined_query for x in ["조명", "스탠드", "light", "lamp", "불빛", "스폿"]):
+                target_category = "lighting"
+            elif any(x in combined_query for x in ["화분", "식물", "plant", "flowerpot", "tree"]):
+                target_category = "plant"
+                
+            cat_keywords = {
+                "sofa": ["소파", "쇼파"],
+                "bed": ["침대", "매트리스"],
+                "table": ["식탁", "테이블", "책상"],
+                "chair": ["의자", "체어", "스툴"],
+                "lighting": ["조명", "스탠드", "램프"],
+                "plant": ["식물", "화분", "조화"]
+            }
+            keywords = cat_keywords.get(target_category, ["소파"])
+            
+        print(f"🔍 [Product Search Fallback] 최종 가구 필터링 키워드: {keywords}")
         
         filtered_items = []
         if CSV_ITEMS:
@@ -3354,7 +3489,7 @@ def search_similar_products(payload: Dict[str, Any]):
             
         if filtered_items:
             import random
-            sample_size = min(len(filtered_items), 5)
+            sample_size = min(len(filtered_items), 3)
             chosen_items = random.sample(filtered_items, sample_size)
             
             for idx, item in enumerate(chosen_items):
@@ -3372,7 +3507,7 @@ def search_similar_products(payload: Dict[str, Any]):
                         product_name=item.get("product_name") or "매칭 가구 상품",
                         price=price_val,
                         image_url=item.get("image_url") or "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
-                        purchase_link="",  # 사용자의 요구에 따라 구매 링크 제거
+                        purchase_link=item.get("link") or "",  # 데이터베이스 내의 실제 판매 페이지 링크 주소 연결
                         similarity=sim_val
                     )
                 )
@@ -3727,6 +3862,62 @@ def search_similar_products_legacy(payload: Dict[str, Any]):
         success=True,
         data=ProductSearchResponse(products=products),
         message="유사 가구 상품 추천 결과입니다."
+    )
+
+
+# =====================================================================
+# [NEW API 11 창구] 스타일 기반 가구/벽지/바닥재 추천 API (POST /api/styles/recommend)
+# =====================================================================
+@app.post("/api/styles/recommend", response_model=SuccessResponse[StyleRecommendationResponse])
+def recommend_interior_styles(req: StyleRecommendationRequest):
+    """
+    [스타일 기반 자재 및 가구 맞춤 추천]
+    사용자의 분위기 변환 프롬프트를 분석하여 어울리는 인테리어 스타일(예: 북유럽, 모던 등)을 분류하고,
+    DB1.csv에서 해당하는 벽지명/사진, 바닥재명/사진 및 가구 참고사진 목록을 추천 리스트로 반환합니다.
+    """
+    prompt = req.prompt.lower()
+    matched_styles = []
+    
+    # 1. 스타일 리스트 순회 매칭
+    for item in STYLE_DETAILS_LIST:
+        sname = item["style_name"]
+        if sname in req.prompt or sname.replace(" ", "") in req.prompt.replace(" ", ""):
+            matched_styles.append(item)
+
+    # 만약 매칭된 스타일이 전혀 없으면 디폴트로 대중적인 3개 스타일 제공 (모던, 북유럽, 내추럴)
+    if not matched_styles:
+        default_names = ["모던", "북유럽", "내추럴"]
+        for item in STYLE_DETAILS_LIST:
+            if item["style_name"] in default_names:
+                matched_styles.append(item)
+                
+    # 최대 3개까지 스타일 추천 제한
+    matched_styles = matched_styles[:3]
+    
+    # 만약에 STYLE_DETAILS_LIST가 비어있을 경우 예외 방어
+    if not matched_styles and STYLE_DETAILS_LIST:
+        matched_styles = STYLE_DETAILS_LIST[:3]
+        
+    recommendations = []
+    for s in matched_styles:
+        recommendations.append(
+            StyleRecommendationItem(
+                style_name=s["style_name"],
+                wallpaper_name=s["wallpaper_name"] or "기본 실크 벽지",
+                wallpaper_image_url=s["wallpaper_image_url"] or "https://images.unsplash.com/photo-1615529182904-14819c35db37?w=500",
+                floor_name=s["floor_name"] or "기본 강화마루 바닥재",
+                floor_image_url=s["floor_image_url"] or "https://images.unsplash.com/photo-1581858726788-75bc0f6a952d?w=500",
+                sofa_image_url=s["sofa_image_url"] or None,
+                bed_image_url=s["bed_image_url"] or None,
+                objet_image_url=s["objet_image_url"] or None,
+                features=s["features"]
+            )
+        )
+        
+    return SuccessResponse(
+        success=True,
+        data=StyleRecommendationResponse(recommendations=recommendations),
+        message="프롬프트 분위기에 어울리는 추천 스타일 자재 리스트입니다."
     )
 
 

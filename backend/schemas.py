@@ -797,3 +797,27 @@ class CropEmbeddingResponse(BaseModel):
     status_steps: List[str] = Field([], description="CLIP 분석 처리 단계 리스트")
 
 
+# =====================================================================
+# [NEW API 11 규격] 추천 스타일 기반 가구/벽지/바닥재 추천 양식 (POST /api/styles/recommend)
+# =====================================================================
+
+class StyleRecommendationItem(BaseModel):
+    style_name: str = Field(..., description="추천 스타일명 (한글)")
+    wallpaper_name: str = Field(..., description="추천 벽지명")
+    wallpaper_image_url: str = Field(..., description="벽지 참고사진 URL")
+    floor_name: str = Field(..., description="추천 바닥재명")
+    floor_image_url: str = Field(..., description="바닥재 참고사진 URL")
+    sofa_image_url: Optional[str] = Field(None, description="소파 참고사진 URL")
+    bed_image_url: Optional[str] = Field(None, description="침대 참고사진 URL")
+    objet_image_url: Optional[str] = Field(None, description="오브제 참고사진 URL")
+    features: List[str] = Field(default=[], description="스타일 특징 리스트")
+
+
+class StyleRecommendationRequest(BaseModel):
+    prompt: str = Field(..., description="사용자가 입력한 스타일 변환 프롬프트")
+
+
+class StyleRecommendationResponse(BaseModel):
+    recommendations: List[StyleRecommendationItem] = Field(..., description="추천 스타일 리스트")
+
+

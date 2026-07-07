@@ -325,3 +325,37 @@ export async function embedCropImage({ imageId, maskPixels }) {
     };
   }
 }
+
+/**
+ * 11번 창구: 스타일 맞춤 자재 및 가구 추천 (POST /api/styles/recommend)
+ * @param {string} prompt - 사용자가 입력한 스타일 변환 프롬프트
+ */
+export async function recommendStyles(prompt) {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/styles/recommend`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        errorCode: data.error_code || "RECOMMEND_FAILED",
+        message: data.message || "스타일 추천 데이터를 가져오는 데 실패했습니다."
+      };
+    }
+    return data;
+  } catch (error) {
+    return {
+      success: false,
+      errorCode: "SERVER_CONNECTION_FAILED",
+      message: `서버 통신 실패: ${error.message}`
+    };
+  }
+}

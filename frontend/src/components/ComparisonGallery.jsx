@@ -250,24 +250,48 @@ export default function ComparisonGallery({
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
             
             {/* 1. 벽지 추천 */}
-            <div style={{ background: 'var(--bg-card-inner)', padding: '18px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
-              <div style={{ fontWeight: '850', fontSize: '0.88rem', color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px', fontFamily: 'Outfit, sans-serif' }}>
+            <div style={{ background: 'var(--bg-card-inner)', padding: '18px', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontWeight: '850', fontSize: '0.88rem', color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px', fontFamily: 'Outfit, sans-serif' }}>
                 🧱 벽지 추천
               </div>
+              
+              {/* 벽지 실물 참고사진 (크고 정갈하게 렌더링) */}
+              {resultData.recommendations.wallpaper_image_url && (
+                <div style={{ width: '100%', height: '200px', borderRadius: '8px', overflow: 'hidden', marginBottom: '12px', border: '1px solid var(--border-color)', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+                  <img 
+                    src={resultData.recommendations.wallpaper_image_url} 
+                    alt="추천 벽지 참고사진" 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} 
+                  />
+                </div>
+              )}
+
               {resultData.recommendations.wallpaper && resultData.recommendations.wallpaper.length > 0 ? (
-                <ul style={{ paddingLeft: '16px', margin: 0, fontSize: '0.82rem', color: 'var(--text-main)', display: 'flex', flexDirection: 'column', gap: '6px', lineHeight: '1.5' }}>
+                <ul style={{ paddingLeft: '16px', margin: 0, fontSize: '0.82rem', color: 'var(--text-main)', display: 'flex', flexDirection: 'column', gap: '6px', lineHeight: '1.5', textAlign: 'left' }}>
                   {summarizeList(resultData.recommendations.wallpaper).map((val, i) => <li key={i}>{val}</li>)}
                 </ul>
               ) : (
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>변환 스타일링 가이드에 기반하여 밝은 톤의 벽지 밸런스를 조율하는 것을 권장합니다.</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'left' }}>변환 스타일링 가이드에 기반하여 밝은 톤의 벽지 밸런스를 조율하는 것을 권장합니다.</div>
               )}
             </div>
 
             {/* 2. 자재 추천 */}
-            <div style={{ background: 'var(--bg-card-inner)', padding: '18px', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
-              <div style={{ fontWeight: '850', fontSize: '0.88rem', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px', fontFamily: 'Outfit, sans-serif' }}>
+            <div style={{ background: 'var(--bg-card-inner)', padding: '18px', borderRadius: '10px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontWeight: '850', fontSize: '0.88rem', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px', fontFamily: 'Outfit, sans-serif' }}>
                 자재 추천
               </div>
+              
+              {/* 바닥재 실물 참고사진 (크고 정갈하게 렌더링) */}
+              {resultData.recommendations.floor_image_url && (
+                <div style={{ width: '100%', height: '200px', borderRadius: '8px', overflow: 'hidden', marginBottom: '12px', border: '1px solid var(--border-color)', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+                  <img 
+                    src={resultData.recommendations.floor_image_url} 
+                    alt="추천 바닥재 참고사진" 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} 
+                  />
+                </div>
+              )}
+
               {resultData.recommendations.materials && resultData.recommendations.materials.length > 0 ? (
                 (() => {
                   const cleanText = summarizeList(resultData.recommendations.materials)
@@ -288,7 +312,7 @@ export default function ComparisonGallery({
                   );
                 })()
               ) : (
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>바닥재로 원목 마루나 포세린 타일을 사용하여 공간감의 톤앤매너를 유지하세요.</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'left' }}>바닥재로 원목 마루나 포세린 타일을 사용하여 공간감의 톤앤매너를 유지하세요.</div>
               )}
             </div>
 
