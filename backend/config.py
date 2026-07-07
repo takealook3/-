@@ -14,7 +14,7 @@ DB_DIR = os.path.join(BASE_DIR, "chroma_db")
 COLLECTION_LAW       = "interior_law_standard"  # 실내건축 기준 고시 법령
 COLLECTION_CHECKLIST = "interior_checklist"     # 인테리어 공정별 체크리스트
 COLLECTION_KNOWLEDGE = "interior_knowledge"     # 시공 순서 및 FAQ 지식 데이터
-COLLECTION_FURNITURE = "furniture_images"      # 가구 이미지 임베딩 데이터
+COLLECTION_FURNITURE = "furniture_collection"    # 수집 가구 임베딩 & 메타데이터 컬렉션
 
 # 컬렉션별 BM25 인덱스 캐시 직렬화 파일(.pkl) 저장 절대경로
 BM25_LAW_PATH       = os.path.join(BASE_DIR, "bm25_law.pkl")
