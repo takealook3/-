@@ -120,8 +120,15 @@ export default function App() {
   const [imageId, setImageId] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [originalImageUrl, setOriginalImageUrl] = useState(null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState(null); // 태초 원본 이미지 백업용 (비교 쇼룸 Before 복원)
   const [resultData, setResultData] = useState(null);
   const [studioTab, setStudioTab] = useState('upload'); // 'upload' | 'repair' (통합 탭 상태)
+
+  // [공통 마스크 영역 좌표 상태 부모 끌어올리기] 스타일 변환과 부분 가구 교체 탭 간 동일 좌표 동기화 유지 보장
+  const [bboxNormA, setBboxNormA] = useState(null);
+  const [maskPixelsA, setMaskPixelsA] = useState(null);
+  const [bboxNormB, setBboxNormB] = useState(null);
+  const [maskPixelsB, setMaskPixelsB] = useState(null);
 
   const [currentError, setCurrentError] = useState(null);
   const [showSessionModal, setShowSessionModal] = useState(false);
@@ -254,13 +261,26 @@ export default function App() {
     setImageId(data.imageId);
     setSessionId(data.sessionId);
     setOriginalImageUrl(data.originalImageUrl);
+    setUploadedImageUrl(data.originalImageUrl); // 태초 원본 박제
     setResultData(null);
     setCurrentError(null);
+    // 사진 변경 시 이전 드래그 마스크 영역 전체 청소
+    setBboxNormA(null);
+    setMaskPixelsA(null);
+    setBboxNormB(null);
+    setMaskPixelsB(null);
   };
 
   const handleGenerateSuccess = (data) => {
     setResultData(data);
     setCurrentError(null);
+    // 이미지 변환 성공 시, 결과 이미지를 다음 편집의 입력 이미지로 자동 피딩 (Chaining 기동)
+    if (data.resultImageUrl) {
+      setOriginalImageUrl(data.resultImageUrl);
+    }
+    if (data.resultId) {
+      setImageId(data.resultId);
+    }
   };
 
   // AI 응답 텍스트를 분석하여 벽지, 자재, 스타일링으로 요약 분류하는 파서 헬퍼
@@ -684,62 +704,62 @@ export default function App() {
             <h2 className="featured-title" style={{ color: '#FCFAF7' }}>Transform Your Space</h2>
           </div>
 
-          {/* 애플 세그먼트 스타일의 미니멀 탭 컨트롤러 */}
+          {/* 눈에 훨씬 잘 띄는 하이 콘트라스트 명품 밤색/골드 세그먼트 탭 컨트롤러 */}
           <div style={{ 
             display: 'flex', 
-            background: 'rgba(0, 0, 0, 0.03)', // 은은하고 반투명한 애플식 배경
-            padding: '5px', 
-            borderRadius: '14px', 
-            border: '1px solid var(--border-color)', 
+            background: '#1C1714', 
+            padding: '6px', 
+            borderRadius: '16px', 
+            border: '2px solid var(--accent)', 
             width: '100%', 
-            maxWidth: '600px', 
-            gap: '6px',
+            maxWidth: '640px', 
+            gap: '8px',
             alignSelf: 'center', 
-            marginBottom: '12px', 
-            boxShadow: '0 4px 15px rgba(0,0,0,0.03)',
-            fontFamily: 'Outfit, sans-serif'
+            marginBottom: '20px', 
+            boxShadow: '0 8px 30px rgba(0,0,0,0.18)',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
           }}>
             <button
               onClick={() => setStudioTab('upload')}
               style={{
                 flex: 1,
                 textAlign: 'center',
-                padding: '10px 0',
-                borderRadius: '10px',
+                padding: '12px 0',
+                borderRadius: '12px',
                 border: 'none',
-                fontWeight: '700',
-                fontSize: '0.9rem',
+                fontWeight: '800',
+                fontSize: '1.02rem',
+                letterSpacing: '0.02em',
                 cursor: 'pointer',
                 transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                // 선택 시 입체감 있는 흰색 카드 효과 적용
-                background: studioTab === 'upload' ? 'var(--bg-card)' : 'transparent',
-                color: studioTab === 'upload' ? 'var(--primary)' : 'var(--text-muted)',
-                boxShadow: studioTab === 'upload' ? '0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)' : 'none',
-                transform: studioTab === 'upload' ? 'translateY(-0.5px)' : 'none',
+                background: studioTab === 'upload' ? 'var(--accent)' : 'transparent',
+                color: studioTab === 'upload' ? '#1C1714' : '#C7B7AE',
+                boxShadow: studioTab === 'upload' ? '0 4px 16px rgba(199, 153, 114, 0.35)' : 'none',
+                transform: studioTab === 'upload' ? 'translateY(-1px)' : 'none',
               }}
             >
-              {imageId ? "🎨 스타일 변환" : "📸 사진 업로드"}
+              {imageId ? "🎨 스타일 변환 (전체 리모델링)" : "📸 사진 업로드"}
             </button>
             <button
               onClick={() => setStudioTab('repair')}
               style={{
                 flex: 1,
                 textAlign: 'center',
-                padding: '10px 0',
-                borderRadius: '10px',
+                padding: '12px 0',
+                borderRadius: '12px',
                 border: 'none',
-                fontWeight: '700',
-                fontSize: '0.9rem',
+                fontWeight: '800',
+                fontSize: '1.02rem',
+                letterSpacing: '0.02em',
                 cursor: 'pointer',
                 transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                // 선택 시 입체감 있는 흰색 카드 효과 적용
-                background: studioTab === 'repair' ? 'var(--bg-card)' : 'transparent',
-                color: studioTab === 'repair' ? 'var(--primary)' : 'var(--text-muted)',
-                boxShadow: studioTab === 'repair' ? '0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0,0,0,0.02)' : 'none',
-                transform: studioTab === 'repair' ? 'translateY(-0.5px)' : 'none',
+                background: studioTab === 'repair' ? 'var(--accent)' : 'transparent',
+                color: studioTab === 'repair' ? '#1C1714' : '#C7B7AE',
+                boxShadow: studioTab === 'repair' ? '0 4px 16px rgba(199, 153, 114, 0.35)' : 'none',
+                transform: studioTab === 'repair' ? 'translateY(-1px)' : 'none',
               }}
             >
-              🛠️ 부분 가구 교체
+              🛠️ 부분 가구 교체 (정밀 수선)
             </button>
           </div>
 
@@ -766,13 +786,20 @@ export default function App() {
                   onError={setCurrentError}
                   pendingPrompt={quizPendingPrompt}
                   setPendingPrompt={setQuizPendingPrompt}
+                  bboxNormA={bboxNormA}
+                  bboxNormB={bboxNormB}
                   onResetImage={() => {
                     setImageId(null);
                     setOriginalImageUrl(null);
+                    setUploadedImageUrl(null);
                     setResultData(null);
                     setTransformResultUrl(null);
                     setTransformRawAnswer('');
                     setTransformSummary(null);
+                    setBboxNormA(null);
+                    setMaskPixelsA(null);
+                    setBboxNormB(null);
+                    setMaskPixelsB(null);
                   }}
                   onResetResult={() => {
                     setResultData(null);
@@ -786,6 +813,7 @@ export default function App() {
                   globalSummaryData={transformSummary}
                   onSubmitTransform={handleTransformSubmitGlobal}
                   globalProgress={transformProgress}
+                  onSwitchTab={(tab) => setStudioTab(tab)}
                 />
               </div>
 
@@ -797,6 +825,27 @@ export default function App() {
                   originalImageUrl={originalImageUrl}
                   onGenerateSuccess={handleGenerateSuccess}
                   onError={setCurrentError}
+                  bboxNormA={bboxNormA}
+                  setBboxNormA={setBboxNormA}
+                  maskPixelsA={maskPixelsA}
+                  setMaskPixelsA={setMaskPixelsA}
+                  bboxNormB={bboxNormB}
+                  setBboxNormB={setBboxNormB}
+                  maskPixelsB={maskPixelsB}
+                  setMaskPixelsB={setMaskPixelsB}
+                  onResetImage={() => {
+                    setImageId(null);
+                    setOriginalImageUrl(null);
+                    setUploadedImageUrl(null);
+                    setResultData(null);
+                    setTransformResultUrl(null);
+                    setTransformRawAnswer('');
+                    setTransformSummary(null);
+                    setBboxNormA(null);
+                    setMaskPixelsA(null);
+                    setBboxNormB(null);
+                    setMaskPixelsB(null);
+                  }}
                 />
               </div>
             </div>
@@ -807,7 +856,7 @@ export default function App() {
         {resultData && (
           <div id="gallery-card">
             <ComparisonGallery
-              originalImageUrl={originalImageUrl}
+              originalImageUrl={uploadedImageUrl}
               resultData={resultData}
               onError={setCurrentError}
             />

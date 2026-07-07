@@ -1318,6 +1318,59 @@ async def upload_image(
 # =====================================================================
 # [3번 창구] 인테리어 이미지 변환 API (POST /api/image/generate)
 # =====================================================================
+def get_interior_recommendations(style_key: str) -> dict:
+    import csv
+    db1_path = os.path.join(PROJECT_ROOT, "backend", "DB1.csv")
+    wallpaper_list = []
+    material_list = []
+    
+    style_map = {
+        "modern": "모던",
+        "minimal": "미니멀",
+        "natural": "내추럴",
+        "vintage": "빈티지",
+        "scandinavian": "북유럽"
+    }
+    target_ko = style_map.get(style_key.lower(), style_key)
+    
+    if os.path.exists(db1_path):
+        try:
+            with open(db1_path, "r", encoding="utf-8") as f:
+                reader = csv.reader(f)
+                next(reader)
+                for row in reader:
+                    if not row or len(row) < 17:
+                        continue
+                    style_ko = row[1].strip()
+                    style_en = row[2].strip()
+                    if target_ko in style_ko or style_key.lower() in style_en.lower():
+                        wp = row[14].strip()
+                        fl = row[16].strip()
+                        feat1 = row[3].strip() if len(row) > 3 else ""
+                        feat2 = row[4].strip() if len(row) > 4 else ""
+                        if wp and wp not in wallpaper_list:
+                            wallpaper_list.append(wp)
+                        if fl and fl not in material_list:
+                            material_list.append(fl)
+                        if feat1 and feat1 not in material_list:
+                            material_list.append(feat1)
+                        if feat2 and feat2 not in material_list:
+                            material_list.append(feat2)
+        except Exception as e:
+            print(f"⚠️ [recommendations DB Query Error] {e}")
+            
+    # 매칭 실패 시 기본 폴백 제공
+    if not wallpaper_list:
+        wallpaper_list = ["친환경 고급 실크 벽지", "화사하고 넓어 보이는 뉴트럴 아이보리 벽지"]
+    if not material_list:
+        material_list = ["강마루 원목 바닥재", "소음을 줄여주는 친환경 포세린 타일 바닥"]
+        
+    return {
+        "wallpaper": wallpaper_list,
+        "materials": material_list
+    }
+
+
 def internal_generate_interior_image(image_id: str, session_id: str, style: str, prompt: str) -> dict:
     """인테리어 이미지 변환 처리를 수행하는 공통 핵심 비즈니스 로직 함수입니다."""
     start_time = time.time()
@@ -1340,6 +1393,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
                 metrics_data = {"error": str(eval_err)}
 
         session_data = get_or_create_session(session_id)
+        recommendations_data = get_interior_recommendations(style)
         session_data["generations"].append({
             "type": "interior_transform",
             "task_id": task_id,
@@ -1349,6 +1403,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
             "style": style,
             "prompt": prompt,
             "metrics": metrics_data,
+            "recommendations": recommendations_data,
             "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         })
         session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -1364,6 +1419,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
             "processing_time": 0.42,
             "status": "completed",
             "metrics": metrics_data,
+            "recommendations": recommendations_data,
             "is_t2i": True
         }
 
@@ -1408,6 +1464,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
         
     if real_filename:
         result_filename = real_filename
+        result_id = os.path.splitext(real_filename)[0]
         result_url = f"/static/results/{result_filename}"
         workflow_info["execution_mode"] = "real_comfyui"
     else:
@@ -1469,6 +1526,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
             metrics_data = {"error": str(eval_err)}
 
     session_data = get_or_create_session(session_id)
+    recommendations_data = get_interior_recommendations(style)
     session_data["generations"].append({
         "type": "interior_transform",
         "result_id": result_id,
@@ -1478,6 +1536,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
         "prompt": prompt,
         "workflow": workflow_info,
         "metrics": metrics_data,
+        "recommendations": recommendations_data,
         "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     })
     session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -1493,6 +1552,7 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
         "status": "completed",
         "workflow": workflow_info,
         "metrics": metrics_data,
+        "recommendations": recommendations_data,
         "is_t2i": False
     }
 
@@ -1648,6 +1708,7 @@ async def generate_interior_image_stream(request: Request):
                 result_id = f"result_{uuid.uuid4().hex[:6]}"
                 
                 if not image_id:
+                    recommendations_data = get_interior_recommendations(style)
                     status_callback("completed", "인테리어 이미지 생성이 완료되었습니다.", {
                         "result_id": result_id,
                         "session_id": session_id,
@@ -1656,6 +1717,7 @@ async def generate_interior_image_stream(request: Request):
                         "style": style,
                         "prompt": prompt,
                         "status": "completed",
+                        "recommendations": recommendations_data,
                         "is_t2i": True
                     })
                     return
@@ -1721,6 +1783,7 @@ async def generate_interior_image_stream(request: Request):
                         )
                         execution_mode = "mock_fallback"
                     
+                recommendations_data = get_interior_recommendations(style)
                 res_data = {
                     "result_id": result_id,
                     "session_id": session_id,
@@ -1730,6 +1793,7 @@ async def generate_interior_image_stream(request: Request):
                     "prompt": prompt,
                     "status": "completed",
                     "is_t2i": False,
+                    "recommendations": recommendations_data,
                     "workflow": {
                         "execution_mode": execution_mode,
                         "comfyui_status": "online" if comfy_online else "offline"
@@ -1744,6 +1808,7 @@ async def generate_interior_image_stream(request: Request):
                     "result_image_url": result_url,
                     "style": style,
                     "prompt": prompt,
+                    "recommendations": recommendations_data,
                     "created_at": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
                 })
                 session_data["updated_at"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -2584,6 +2649,7 @@ def edit_image(req: ImageEditRequest):
                 traceback.print_exc()
                 
         result_url = f"/static/results/{real_filename}"
+        edit_id = os.path.splitext(real_filename)[0]
         if "execution_mode" not in workflow_info:
             workflow_info["execution_mode"] = "real_comfyui"
     else:
@@ -3213,7 +3279,7 @@ def search_similar_products(payload: Dict[str, Any]):
                                             product_name=meta.get("product_name") or "매칭 가구 상품",
                                             price=meta.get("price") or "가격 정보 없음",
                                             image_url=meta.get("image_url") or "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
-                                            purchase_link="",  # 사용자의 요구에 따라 구매 링크 제거
+                                            purchase_link=meta.get("link") or "",
                                             similarity=sim_val
                                         )
                                     )

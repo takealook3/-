@@ -19,7 +19,10 @@ export default function StyleTransformer({
   globalRawAnswer,
   globalSummaryData,
   onSubmitTransform,
-  globalProgress
+  globalProgress,
+  bboxNormA,
+  bboxNormB,
+  onSwitchTab
 }) {
   const [prompt, setPrompt] = useState('밝고 미니멀한 거실로 바꿔줘');
 
@@ -104,39 +107,89 @@ export default function StyleTransformer({
   ];
 
   return (
-    <div className="card" style={{ border: '1px solid var(--border-color)', fontFamily: 'Outfit, sans-serif' }}>
-      {/* 상단 타이틀 바 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div className="card-title" style={{ fontSize: '1.35rem', fontWeight: '800', fontFamily: 'Outfit, sans-serif', color: 'var(--primary)', margin: 0, letterSpacing: '-0.02em' }}>
-          스타일 변환
-        </div>
+    <div className="card" style={{ border: '1px solid var(--border-color)', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', padding: '28px' }}>
+      {/* 상단 타이틀 바 - 대제목 제거 및 사진 변경 버튼 우측 단독 배치 */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '24px' }}>
         <button
           onClick={onResetImage}
           className="btn btn-secondary"
-          style={{ fontSize: '0.8rem', padding: '6px 14px', borderRadius: '20px', fontFamily: 'Outfit, sans-serif' }}
+          style={{ fontSize: '0.8rem', padding: '6px 14px', borderRadius: '20px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}
         >
           다른 사진으로 변경
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '28px', alignItems: 'stretch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.48fr 1fr', gap: '24px', alignItems: 'start' }}>
         
         {/* 좌측: 리모델링 이미지 쇼룸 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div className="preview-box" style={{ 
-            height: '340px', 
             position: 'relative', 
             overflow: 'hidden', 
-            borderRadius: '20px', 
+            borderRadius: '16px', 
             background: '#0f172a',
             border: resultImageUrl ? '2px solid var(--accent)' : '1px solid var(--border-color)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)'
+            boxShadow: '0 12px 36px rgba(0, 0, 0, 0.08)',
+            width: '100%',
+            height: 'auto'
           }}>
             <img 
               src={resultImageUrl || getFullUrl(originalImageUrl)} 
               alt="인테리어 전후 비교" 
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              style={{ width: '100%', height: 'auto', display: 'block' }}
             />
+            
+            {/* 1차 마스크 영역 박스 (동일 좌표 렌더링 유지) */}
+            {bboxNormA && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${bboxNormA.x1 * 100}%`,
+                  top: `${bboxNormA.y1 * 100}%`,
+                  width: `${(bboxNormA.x2 - bboxNormA.x1) * 100}%`,
+                  height: `${(bboxNormA.y2 - bboxNormA.y1) * 100}%`,
+                  border: '3px solid #3B82F6',
+                  borderRadius: '50%',
+                  background: 'rgba(59, 130, 246, 0.15)',
+                  boxShadow: '0 0 16px rgba(59, 130, 246, 0.5)',
+                  pointerEvents: 'none'
+                }}
+              >
+                <span style={{ 
+                  position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', 
+                  background: '#3B82F6', color: '#FCFAF7', fontSize: '0.7rem', fontWeight: '800', 
+                  padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' 
+                }}>
+                  가구 A (지정됨)
+                </span>
+              </div>
+            )}
+            
+            {/* 2차 마스크 영역 박스 (동일 좌표 렌더링 유지) */}
+            {bboxNormB && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${bboxNormB.x1 * 100}%`,
+                  top: `${bboxNormB.y1 * 100}%`,
+                  width: `${(bboxNormB.x2 - bboxNormB.x1) * 100}%`,
+                  height: `${(bboxNormB.y2 - bboxNormB.y1) * 100}%`,
+                  border: '3px solid #EC4899',
+                  borderRadius: '50%',
+                  background: 'rgba(236, 72, 153, 0.15)',
+                  boxShadow: '0 0 16px rgba(236, 72, 153, 0.5)',
+                  pointerEvents: 'none'
+                }}
+              >
+                <span style={{ 
+                  position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', 
+                  background: '#EC4899', color: '#FCFAF7', fontSize: '0.7rem', fontWeight: '800', 
+                  padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' 
+                }}>
+                  가구 B (지정됨)
+                </span>
+              </div>
+            )}
             
             {loading && (
               <div style={{ 
@@ -174,7 +227,7 @@ export default function StyleTransformer({
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 padding: '12px', fontSize: '0.85rem', fontWeight: '700', borderRadius: '12px',
-                textDecoration: 'none', fontFamily: 'Outfit, sans-serif'
+                textDecoration: 'none', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
               }}
             >
               변환된 이미지 다운로드 (새 창)
@@ -186,15 +239,15 @@ export default function StyleTransformer({
         <div style={{ 
           display: 'flex', 
           flexDirection: 'column', 
-          justifyContent: 'space-between',
+          gap: '16px',
           background: 'rgba(255, 255, 255, 0.45)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           border: '1px solid rgba(255, 255, 255, 0.45)',
           borderRadius: '20px',
           padding: '24px',
-          boxShadow: '0 20px 48px rgba(46, 40, 36, 0.04)',
-          minHeight: '340px'
+          boxShadow: '0 12px 36px rgba(46, 40, 36, 0.04)',
+          boxSizing: 'border-box'
         }}>
           {loading ? (
             <div style={{ 
@@ -235,23 +288,39 @@ export default function StyleTransformer({
             /* 변환 완료 피드백 화면 */
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'center', alignItems: 'stretch', gap: '20px', textAlign: 'center' }}>
               <div style={{ fontSize: '3rem', margin: '0 auto' }}>🎉</div>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--primary)', margin: '10px 0 4px', fontFamily: 'Outfit, sans-serif' }}>스타일 변환 완료!</h3>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.6', margin: '0 0 10px', fontFamily: 'Outfit, sans-serif' }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--primary)', margin: '10px 0 4px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>스타일 변환 완료!</h3>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.6', margin: '0 0 10px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
                 성공적으로 인테리어 스타일 변환이 완료되었습니다.<br />
                 <strong>아래 Before / After 쇼룸</strong>에서 결과를 확인하고 맞춤 제안을 받아보세요!
               </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: 'auto' }}>
+              <div style={{ display: 'flex', gap: '10px', marginTop: 'auto', flexWrap: 'nowrap' }}>
                 <button
                   type="button"
                   onClick={onResetResult}
                   className="btn btn-secondary"
                   style={{
-                    padding: '14px', fontSize: '0.9rem', fontWeight: '700', borderRadius: '12px',
-                    border: '1px solid var(--border-color)', transition: 'all 0.2s', width: '100%',
-                    fontFamily: 'Outfit, sans-serif', cursor: 'pointer'
+                    flex: 1,
+                    padding: '14px 8px', fontSize: '0.85rem', fontWeight: '800', borderRadius: '12px',
+                    border: '1px solid var(--border-color)', transition: 'all 0.2s',
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', cursor: 'pointer',
+                    background: '#FFFFFF', whiteSpace: 'nowrap'
                   }}
                 >
                   다른 스타일로 다시 하기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSwitchTab && onSwitchTab('repair')}
+                  className="btn btn-primary"
+                  style={{
+                    flex: 1,
+                    padding: '14px 8px', fontSize: '0.85rem', fontWeight: '800', borderRadius: '12px',
+                    border: 'none', transition: 'all 0.25s',
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', cursor: 'pointer',
+                    background: 'var(--primary)', color: '#FCFAF7', whiteSpace: 'nowrap'
+                  }}
+                >
+                  🛠️ 부분 가구 교체하기
                 </button>
               </div>
             </div>
@@ -259,7 +328,7 @@ export default function StyleTransformer({
             /* 기존 폼 & 칩 뷰 */
             <form onSubmit={handleTransformSubmit} style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between', gap: '16px', margin: 0 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label style={{ display: 'block', fontSize: '0.88rem', fontWeight: '800', color: 'var(--primary)', fontFamily: 'Outfit, sans-serif' }}>
+                <label style={{ display: 'block', fontSize: '0.88rem', fontWeight: '800', color: 'var(--primary)', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
                   원하는 공간 분위기 / 요구사항 입력:
                 </label>
                 <input
@@ -271,7 +340,7 @@ export default function StyleTransformer({
                   style={{ 
                     padding: '14px 16px', 
                     fontSize: '0.9rem', 
-                    fontFamily: 'Outfit, sans-serif',
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
                     borderRadius: '12px',
                     border: '1px solid var(--border-color)',
                     background: '#FFFFFF',
@@ -292,7 +361,7 @@ export default function StyleTransformer({
                   background: 'var(--primary)',
                   color: '#FCFAF7',
                   border: 'none', borderRadius: '12px', transition: 'all 0.25s ease',
-                  fontFamily: 'Outfit, sans-serif',
+                  fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
                   boxShadow: '0 8px 16px rgba(43, 53, 48, 0.15)'
                 }}
                 onMouseEnter={(e) => {

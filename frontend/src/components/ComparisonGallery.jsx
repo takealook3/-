@@ -151,10 +151,10 @@ export default function ComparisonGallery({
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '28px', alignItems: 'start', marginBottom: '28px' }}>
         {/* 좌측 Before */}
         <div>
-          <div style={{ fontSize: '0.9rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '10px', fontFamily: 'Outfit, sans-serif' }}>
+          <div style={{ height: '32px', display: 'flex', alignItems: 'center', fontSize: '0.9rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '10px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
             📸 Before (원본 공간)
           </div>
-          <div className="preview-box" style={{ height: '340px', border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden' }}>
+          <div className="preview-box" style={{ height: '340px', border: 'none', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.05)' }}>
             {fullOrig ? (
               <img src={fullOrig} alt="Before 원본" className="preview-img" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             ) : (
@@ -165,13 +165,13 @@ export default function ComparisonGallery({
 
         {/* 우측 After */}
         <div>
-          <div style={{ fontSize: '0.9rem', fontWeight: '800', color: 'var(--primary)', marginBottom: '10px', fontFamily: 'Outfit, sans-serif', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ height: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.9rem', fontWeight: '800', color: 'var(--primary)', marginBottom: '10px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
             <span>🏠 After (AI 리모델링 변환 완료)</span>
-            <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', background: 'var(--bg-card-inner)', padding: '4px 10px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+            <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-muted)', background: 'var(--bg-card-inner)', padding: '4px 10px', borderRadius: '12px', border: '1px solid var(--border-color)', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
               ⏱️ {resultData.processingTime}초 소요
             </span>
           </div>
-          <div className="preview-box" style={{ height: '340px', border: '2px solid var(--primary)', borderRadius: '10px', overflow: 'hidden' }}>
+          <div className="preview-box" style={{ height: '340px', border: 'none', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 8px 24px rgba(0,0,0,0.05)' }}>
             <img 
               src={fullRes} 
               alt="After 변환 완료" 
@@ -181,65 +181,64 @@ export default function ComparisonGallery({
             />
           </div>
 
-          {/* =====================================================================
-              [한글 주석: 선택지 A 적용 - AI 정량평가 지표 뱃지 표시부]
-              비유: 조리대에서 완성된 음식에 찍혀 나오는 AI 품질 검사 도장 뱃지입니다.
-             ===================================================================== */}
-          {resultData.metrics && (
-            <div style={{
-              marginTop: '14px',
-              padding: '12px 16px',
-              background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)',
-              border: '1px solid #bfdbfe',
-              borderRadius: '10px',
-              display: 'flex',
-              justifyContent: 'space-around',
-              alignItems: 'center',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
-            }}>
-              {/* ① CLIP Score (프롬프트 일치도) */}
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '0.75rem', color: '#1e40af', fontWeight: '700' }}>🎯 CLIP 일치도</div>
-                <div style={{ fontSize: '1.05rem', color: '#1d4ed8', fontWeight: '850', marginTop: '2px' }}>
-                  {resultData.metrics.clip_score !== undefined && resultData.metrics.clip_score !== null 
-                    ? `${(resultData.metrics.clip_score * 100).toFixed(0)}점` 
-                    : 'N/A'}
-                  <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#60a5fa', marginLeft: '4px' }}>
-                    ({resultData.metrics.clip_score || 0})
-                  </span>
-                </div>
-              </div>
-
-              <div style={{ width: '1px', height: '30px', background: '#cbd5e1' }} />
-
-              {/* ② PSNR (화질 손상/유지 변화량) - 보조 지표 */}
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: '700' }}>📐 화질 유지(PSNR)</div>
-                <div style={{ fontSize: '1.05rem', color: '#16a34a', fontWeight: '850', marginTop: '2px' }}>
-                  {resultData.metrics.psnr !== undefined && resultData.metrics.psnr !== null 
-                    ? `${resultData.metrics.psnr} dB` 
-                    : 'N/A'}
-                </div>
-              </div>
-
-              <div style={{ width: '1px', height: '30px', background: '#cbd5e1' }} />
-
-              {/* ③ SSIM (구조 유지도) */}
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '0.75rem', color: '#6b21a8', fontWeight: '700' }}>🏗️ 구조 유지(SSIM)</div>
-                <div style={{ fontSize: '1.05rem', color: '#9333ea', fontWeight: '850', marginTop: '2px' }}>
-                  {resultData.metrics.ssim !== undefined && resultData.metrics.ssim !== null 
-                    ? `${(resultData.metrics.ssim * 100).toFixed(0)}%` 
-                    : 'N/A'}
-                  <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#c084fc', marginLeft: '4px' }}>
-                    ({resultData.metrics.ssim || 0})
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
-      </div>
+
+      {/* AI 정량평가 지표 뱃지를 좌우 이미지 수평 대칭을 위해 2열 그리드 아래쪽으로 완전 분리 배치 */}
+      {resultData.metrics && (
+        <div style={{
+          marginTop: '16px',
+          marginBottom: '20px',
+          padding: '12px 16px',
+          background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)',
+          border: '1px solid #bfdbfe',
+          borderRadius: '12px',
+          display: 'flex',
+          justifyContent: 'space-around',
+          alignItems: 'center',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.04)'
+        }}>
+          {/* ① CLIP Score (프롬프트 일치도) */}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.75rem', color: '#1e40af', fontWeight: '700', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>🎯 CLIP 일치도</div>
+            <div style={{ fontSize: '1.05rem', color: '#1d4ed8', fontWeight: '850', marginTop: '2px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+              {resultData.metrics.clip_score !== undefined && resultData.metrics.clip_score !== null 
+                ? `${(resultData.metrics.clip_score * 100).toFixed(0)}점` 
+                : 'N/A'}
+              <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#60a5fa', marginLeft: '4px' }}>
+                ({resultData.metrics.clip_score || 0})
+              </span>
+            </div>
+          </div>
+
+          <div style={{ width: '1px', height: '30px', background: '#cbd5e1' }} />
+
+          {/* ② PSNR (화질 손상/유지 변화량) */}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: '700', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>📐 화질 유지(PSNR)</div>
+            <div style={{ fontSize: '1.05rem', color: '#16a34a', fontWeight: '850', marginTop: '2px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+              {resultData.metrics.psnr !== undefined && resultData.metrics.psnr !== null 
+                ? `${resultData.metrics.psnr} dB` 
+                : 'N/A'}
+            </div>
+          </div>
+
+          <div style={{ width: '1px', height: '30px', background: '#cbd5e1' }} />
+
+          {/* ③ SSIM (구조 유지도) */}
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '0.75rem', color: '#6b21a8', fontWeight: '700', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>🏗️ 구조 유지(SSIM)</div>
+            <div style={{ fontSize: '1.05rem', color: '#9333ea', fontWeight: '850', marginTop: '2px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+              {resultData.metrics.ssim !== undefined && resultData.metrics.ssim !== null 
+                ? `${(resultData.metrics.ssim * 100).toFixed(0)}%` 
+                : 'N/A'}
+              <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#c084fc', marginLeft: '4px' }}>
+                ({resultData.metrics.ssim || 0})
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 공간 맞춤 인테리어 제안 요약 영역 (변환 결과 하단에 렌더링) */}
       {resultData.recommendations && (
@@ -294,6 +293,60 @@ export default function ComparisonGallery({
             </div>
 
           </div>
+
+          {/* 3. 스타일 어울림 가구 쇼핑 추천 카드 리스트 */}
+          {matchedFurniture && matchedFurniture.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '24px', marginTop: '24px' }}>
+              <div style={{ fontSize: '1.02rem', fontWeight: '800', color: 'var(--primary)', marginBottom: '16px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                🛒 스타일 맞춤 가구 추천 & 쇼핑
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                {matchedFurniture.map((item, index) => (
+                  <div 
+                    key={index}
+                    onClick={() => item.url && window.open(item.url, '_blank')}
+                    style={{
+                      display: 'flex',
+                      gap: '16px',
+                      background: 'var(--bg-card-inner)',
+                      padding: '16px',
+                      borderRadius: '12px',
+                      border: '1px solid var(--border-color)',
+                      cursor: item.url ? 'pointer' : 'default',
+                      transition: 'all 0.25s ease',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (item.url) {
+                        e.currentTarget.style.transform = 'translateY(-3px)';
+                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(46, 40, 36, 0.08)';
+                        e.currentTarget.style.borderColor = 'var(--accent)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (item.url) {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.02)';
+                        e.currentTarget.style.borderColor = 'var(--border-color)';
+                      }
+                    }}
+                  >
+                    <div style={{ width: '90px', height: '90px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: '#f1f1f1' }}>
+                      <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', justifyContent: 'center' }}>
+                      <div style={{ fontWeight: '800', fontSize: '0.9rem', color: 'var(--text-main)', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                        {item.name}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                        {item.desc}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

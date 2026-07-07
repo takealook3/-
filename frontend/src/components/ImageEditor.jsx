@@ -7,17 +7,24 @@
 import React, { useState, useRef } from 'react';
 import { editImage, searchProducts, embedCropImage, API_BASE_URL } from '../services/api';
 
-export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGenerateSuccess, onError }) {
+export default function ImageEditor({ 
+  imageId, 
+  sessionId, 
+  originalImageUrl, 
+  onGenerateSuccess, 
+  onError,
+  bboxNormA,
+  setBboxNormA,
+  maskPixelsA,
+  setMaskPixelsA,
+  bboxNormB,
+  setBboxNormB,
+  maskPixelsB,
+  setMaskPixelsB,
+  onResetImage
+}) {
   // 마스크 모드: 'A' (1차 가구 수선) 또는 'B' (2차 가구 수선)
   const [maskMode, setMaskMode] = useState('A');
-
-  // 드래그 원형 마스킹 좌표 (A 영역 - 네온 블루)
-  const [bboxNormA, setBboxNormA] = useState(null); // { x1, y1, x2, y2 }
-  const [maskPixelsA, setMaskPixelsA] = useState(null); // [x1, y1, x2, y2]
-
-  // 드래그 원형 마스킹 좌표 (B 영역 - 네온 핑크)
-  const [bboxNormB, setBboxNormB] = useState(null); // { x1, y1, x2, y2 }
-  const [maskPixelsB, setMaskPixelsB] = useState(null); // [x1, y1, x2, y2]
 
   // 마우스 드래그 상태
   const [isDragging, setIsDragging] = useState(false);
@@ -349,6 +356,14 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
             metrics: res.data?.metrics || null // 한글 주석: 부분 인페인팅 정량평가 점수 전달
           });
         }
+        
+        // 수선 성공 시, 다음 단계 교체를 용이하게 하기 위해 드래그 영역 및 폼 인풋 리셋
+        setBboxNormA(null);
+        setMaskPixelsA(null);
+        setBboxNormB(null);
+        setMaskPixelsB(null);
+        setPromptA("");
+        setPromptB("");
       } else {
         onError({ errorCode: res.errorCode || "PROCESSING_FAILED", message: res.message });
       }
@@ -427,23 +442,29 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
           100% { transform: rotate(360deg); }
         }
       `}</style>
-      {/* 헤더 영역 - 이모지 제거 및 타이틀 폰트 굵기 복구 (두껍게 강조) */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div className="card-title" style={{ fontSize: '1.35rem', fontWeight: '700', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', color: 'var(--primary)', margin: 0, letterSpacing: '-0.02em' }}>
-          AI 유사 가구 추천 및 쇼핑
+      {/* 헤더 영역 - 대제목 제거 및 사진 변경/초기화 버튼 우측 배치 */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button 
+            onClick={onResetImage}
+            className="btn btn-secondary" 
+            style={{ fontSize: '0.8rem', padding: '8px 16px', borderRadius: '20px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', border: '1px solid var(--border-color)', background: '#fff', cursor: 'pointer' }}
+          >
+            다른 사진 변경
+          </button>
+          <button 
+            onClick={handleClearAll}
+            className="btn btn-secondary" 
+            style={{ fontSize: '0.8rem', padding: '8px 16px', borderRadius: '20px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', border: '1px solid var(--border-color)', background: '#fff', cursor: 'pointer' }}
+          >
+            전체 초기화
+          </button>
         </div>
-        <button 
-          onClick={handleClearAll}
-          className="btn btn-secondary" 
-          style={{ fontSize: '0.8rem', padding: '8px 16px', borderRadius: '20px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', border: '1px solid var(--border-color)', background: '#fff', cursor: 'pointer' }}
-        >
-          전체 초기화
-        </button>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.48fr 1fr', gap: '24px', alignItems: 'start' }}>
         {/* /좌측: 순수 마스킹 캔버스 영역 (글씨나 불필요한 컨트롤 제외) */}
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div
             ref={containerRef}
             className="canvas-container"
@@ -534,8 +555,9 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
           WebkitBackdropFilter: 'blur(20px)',
           border: '1px solid rgba(255, 255, 255, 0.45)',
           borderRadius: '20px',
-          padding: '16px 20px',
-          boxShadow: '0 8px 32px rgba(46, 40, 36, 0.03)'
+          padding: '24px',
+          boxShadow: '0 12px 36px rgba(46, 40, 36, 0.04)',
+          boxSizing: 'border-box'
         }}>
 
 
@@ -742,6 +764,34 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                 >
                   {searchingProducts ? "유사 가구 쇼핑 정보 찾는 중..." : "유사 가구 쇼핑 정보 검색"}
                 </button>
+
+                {/* 가구 부분 교체 완료 후 결과 이미지 다운로드 버튼 연동 */}
+                {editedResultUrl && (
+                  <a 
+                    href={editedResultUrl} 
+                    download="ZipPT_Repair_Result.jpg"
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="btn btn-primary"
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      padding: '14px', fontSize: '0.9rem', fontWeight: '700', borderRadius: '12px',
+                      textDecoration: 'none', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
+                      background: 'var(--accent)', color: '#1C1714', border: 'none', transition: 'all 0.25s ease',
+                      marginTop: '8px', boxShadow: '0 6px 18px rgba(199, 153, 114, 0.25)'
+                    }}
+                    onMouseEnter={(e) => { 
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 8px 20px rgba(199, 153, 114, 0.35)';
+                    }}
+                    onMouseLeave={(e) => { 
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 6px 18px rgba(199, 153, 114, 0.25)';
+                    }}
+                  >
+                    변환된 이미지 다운로드 (새 창)
+                  </a>
+                )}
               </div>
 
         </div>  {/* 우측 패널의 닫기 태그 */}
@@ -767,6 +817,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                   {productsListA.map((item, idx) => (
                     <div 
                       key={`A-${idx}`} 
+                      onClick={() => item.purchase_link && window.open(item.purchase_link, '_blank')}
                       style={{ 
                         display: 'flex', 
                         flexDirection: 'column',
@@ -779,7 +830,23 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                         fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
                         boxSizing: 'border-box',
                         width: '100%',
-                        justifyContent: 'space-between'
+                        justifyContent: 'space-between',
+                        cursor: item.purchase_link ? 'pointer' : 'default',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (item.purchase_link) {
+                          e.currentTarget.style.transform = 'translateY(-3px)';
+                          e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
+                          e.currentTarget.style.borderColor = 'var(--accent)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (item.purchase_link) {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)';
+                          e.currentTarget.style.borderColor = 'var(--border-color)';
+                        }
                       }}
                     >
                       <img 
@@ -840,6 +907,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                   {productsListB.map((item, idx) => (
                     <div 
                       key={`B-${idx}`} 
+                      onClick={() => item.purchase_link && window.open(item.purchase_link, '_blank')}
                       style={{ 
                         display: 'flex', 
                         flexDirection: 'column',
@@ -852,7 +920,23 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                         fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
                         boxSizing: 'border-box',
                         width: '100%',
-                        justifyContent: 'space-between'
+                        justifyContent: 'space-between',
+                        cursor: item.purchase_link ? 'pointer' : 'default',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (item.purchase_link) {
+                          e.currentTarget.style.transform = 'translateY(-3px)';
+                          e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.08)';
+                          e.currentTarget.style.borderColor = 'var(--accent)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (item.purchase_link) {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)';
+                          e.currentTarget.style.borderColor = 'var(--border-color)';
+                        }
                       }}
                     >
                       <img 
