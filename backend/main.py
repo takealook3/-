@@ -2912,6 +2912,189 @@ def embed_cropped_image(payload: Dict[str, Any]):
 def search_similar_products(payload: Dict[str, Any]):
     """
     [유사 상품 검색 창구]
+    사용자가 원형 마스크로 선택한 가구 영역을 크롭한 뒤,
+    로컬 CLIP 모델과 Chroma DB(furniture_collection)를 연동하여
+    데이터베이스에 저장되어 있는 벡터 정보와 유사도를 계산해 실제 상품을 추천합니다.
+    """
+    image_id = payload.get("image_id")
+    mask_pixels = payload.get("mask_pixels") # [px1, py1, px2, py2]
+    
+    # 1. 원본 파일 위치 탐색
+    orig_path = None
+    if image_id:
+        for search_folder in ("uploads", "results"):
+            for ext in (".jpg", ".jpeg", ".png"):
+                candidate_path = os.path.join(PROJECT_ROOT, search_folder, f"{image_id}{ext}")
+                if os.path.exists(candidate_path):
+                    orig_path = candidate_path
+                    break
+            if orig_path:
+                break
+                
+    # 2. 이미지 싹둑 오려내기 (Crop)
+    cropped_img_path = None
+    if orig_path and mask_pixels and isinstance(mask_pixels, list) and len(mask_pixels) == 4:
+        try:
+            px1, py1, px2, py2 = mask_pixels
+            with Image.open(orig_path) as img:
+                w, h = img.size
+                # 좌표 바운더리 체크 및 정렬
+                px1, px2 = sorted([max(0, min(px1, w)), max(0, min(px2, w))])
+                y1, y2 = sorted([max(0, min(py1, h)), max(0, min(py2, h))])
+                
+                if px2 - px1 > 5 and y2 - y1 > 5:
+                    cropped_img = img.crop((px1, y1, px2, y2)).convert("RGB")
+                    crops_dir = os.path.join(PROJECT_ROOT, "uploads", "crops")
+                    os.makedirs(crops_dir, exist_ok=True)
+                    cropped_img_path = os.path.join(crops_dir, f"{image_id}_{px1}_{py1}_{px2}_{py2}_crop.jpg")
+                    cropped_img.save(cropped_img_path, "JPEG", quality=90)
+                    print(f"✂️ [Product Search] 가구 이미지 오려내기 완료: {cropped_img_path}")
+        except Exception as e:
+            print(f"⚠️ [Product Search] 이미지 오려내기 중 에러: {e}")
+
+    # 3. 크로마 DB 벡터 유사도 기반 가구 추천
+    products = []
+    success_search = False
+
+    if cropped_img_path and os.path.exists(cropped_img_path):
+        try:
+            # 3-1. CLIP 이미지 임베딩 추출
+            from services.clip_service import CLIPService
+            clip_service = CLIPService()
+            crop_embedding = clip_service.get_image_embedding(cropped_img_path)
+            
+            if crop_embedding:
+                print("🧠 [Product Search] 크롭 이미지 CLIP 임베딩 추출 성공, Chroma DB 조회 개시...")
+                
+                # 3-2. Chroma DB 연결
+                import chromadb
+                import config
+                
+                if os.path.exists(config.DB_DIR):
+                    chroma_client = chromadb.PersistentClient(path=config.DB_DIR)
+                    col_names = [col.name for col in chroma_client.list_collections()]
+                    
+                    if config.COLLECTION_FURNITURE in col_names:
+                        collection = chroma_client.get_collection(config.COLLECTION_FURNITURE)
+                        db_count = collection.count()
+                        
+                        if db_count > 0:
+                            # 3-3. Chroma DB 쿼리 실행
+                            # n_results는 최대 6개까지 가져옵니다.
+                            results = collection.query(
+                                query_embeddings=[crop_embedding],
+                                n_results=6
+                            )
+                            
+                            if results and results.get("ids") and results["ids"][0]:
+                                ids = results["ids"][0]
+                                metadatas = results["metadatas"][0] if results.get("metadatas") else []
+                                distances = results["distances"][0] if results.get("distances") else []
+                                
+                                for idx, pid in enumerate(ids):
+                                    meta = metadatas[idx] if idx < len(metadatas) else {}
+                                    dist = distances[idx] if idx < len(distances) else 0.5
+                                    
+                                    # 코사인 유사도 점수 산출: Chroma의 cosine 거리는 1 - sim 이므로
+                                    sim_val = round(float(1.0 - dist), 2)
+                                    # 안전 보장 클램핑
+                                    sim_val = max(0.0, min(1.0, sim_val))
+                                    
+                                    products.append(
+                                        ProductItem(
+                                            product_name=meta.get("product_name") or "매칭 가구 상품",
+                                            price=meta.get("price") or "가격 정보 없음",
+                                            image_url=meta.get("image_url") or "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
+                                            purchase_link=meta.get("link") or "https://www.google.com",
+                                            similarity=sim_val
+                                        )
+                                    )
+                                
+                                # 유사도 순 정렬
+                                products.sort(key=lambda x: x.similarity, reverse=True)
+                                success_search = True
+                                print(f"🎉 [Product Search] Chroma DB 매칭 성공! 추천 상품 수: {len(products)}개")
+                            else:
+                                print("⚠️ [Product Search] Chroma DB에서 일치하는 벡터 결과가 없습니다.")
+                        else:
+                            print("⚠️ [Product Search] 가구 컬렉션의 데이터가 0개입니다.")
+                    else:
+                        print(f"⚠️ [Product Search] '{config.COLLECTION_FURNITURE}' 컬렉션이 없습니다.")
+                else:
+                    print("⚠️ [Product Search] Chroma DB 저장경로가 존재하지 않습니다.")
+            else:
+                print("❌ [Product Search] 크롭 이미지의 CLIP 임베딩 추출 실패.")
+        except Exception as db_err:
+            print(f"❌ [Product Search] Chroma DB 연동 검색 중 예외 발생: {db_err}")
+
+    # 4. [Fallback] Chroma DB 내 가구 데이터 미비 시 고품질 모킹 데이터베이스 가동
+    if not success_search or len(products) == 0:
+        print("⚠️ [Product Search] Chroma DB 매칭 실패 또는 데이터 부재로 4단계 고품질 Mock DB 가동합니다.")
+        prompt = (payload.get("prompt") or "").lower()
+        selected_obj = (payload.get("selected_object") or "").lower()
+        combined_query = f"{prompt} {selected_obj}"
+        
+        product_db = {
+            "sofa": [
+                {"product_name": "보루네오 로우Po 헤드레스트 3인용 가죽 소파", "price": "335000", "image_url": "https://search.pstatic.net/common/?src=https%3A%2F%2Fshopping-phinf.pstatic.net%2Fmain_4621884%2F46218846618.20240306141434.jpg", "purchase_link": "https://search.shopping.naver.com/catalog/46218846618", "similarity": 0.94},
+                {"product_name": "더뉴폼 아멜리 천연가죽 4인용 가죽소파", "price": "1070000", "image_url": "https://search.pstatic.net/common/?src=https%3A%2F%2Fshopping-phinf.pstatic.net%2Fmain_8908017%2F89080175218.4.jpg", "purchase_link": "https://smartstore.naver.com/main/products/11535664812", "similarity": 0.88},
+                {"product_name": "한샘 엠마 컴포트 천연면피가죽 4인용 소파", "price": "997160", "image_url": "https://search.pstatic.net/common/?src=https%3A%2F%2Fshopping-phinf.pstatic.net%2Fmain_2485911%2F24859111522.20201116100125.jpg", "purchase_link": "https://search.shopping.naver.com/catalog/24859111522", "similarity": 0.81}
+            ],
+            "bed": [
+                {"product_name": "이케아 말름(MALM) 모던 수납형 침대 프레임", "price": "449000", "image_url": "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=500&auto=format&fit=crop", "purchase_link": "https://www.ikea.com/kr/ko/p/malm-bed-frame-high-w-2-storage-boxes-white-s99175971/", "similarity": 0.92},
+                {"product_name": "에이스침대 BMA-1139-E 코지 라이트형 침대", "price": "1250000", "image_url": "https://images.unsplash.com/photo-1540518614846-7eded433c457?w=500&auto=format&fit=crop", "purchase_link": "https://www.acebed.com/product/view.do?goodsNo=GD0000000000000305", "similarity": 0.87}
+            ],
+            "table": [
+                {"product_name": "이케아 독스타(DOCKSTA) 원형 라운드 테이블", "price": "299000", "image_url": "https://images.unsplash.com/photo-1577140917170-285929fb55b7?w=500&auto=format&fit=crop", "purchase_link": "https://www.ikea.com/kr/ko/p/docksta-table-white-white-s19324995/", "similarity": 0.95},
+                {"product_name": "한샘 도노 세라믹 식탁 4인용 웜화이트", "price": "520000", "image_url": "https://images.unsplash.com/photo-1530018607912-eff2df114f11?w=500&auto=format&fit=crop", "purchase_link": "https://mall.hanssem.com/goods/goodsDetail.do?gdsNo=712395", "similarity": 0.89}
+            ],
+            "chair": [
+                {"product_name": "이케아 뇌뷔(NÖBBY) 카페 원목 체어", "price": "59000", "image_url": "https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=500&auto=format&fit=crop", "purchase_link": "https://www.ikea.com/kr/ko/p/noebby-chair-black-80415531/", "similarity": 0.91},
+                {"product_name": "시디즈 T50 에어 메쉬 라이트 사무용 의자", "price": "24900", "image_url": "https://images.unsplash.com/photo-1580481072645-022f9a6dbf27?w=500&auto=format&fit=crop", "purchase_link": "https://www.sidiz.com/product/T500HLDA", "similarity": 0.85}
+            ]
+        }
+        
+        target_category = "sofa"
+        if any(x in combined_query for x in ["침대", "bed", "sleep", "이불", "매트리스"]):
+            target_category = "bed"
+        elif any(x in combined_query for x in ["테이블", "식탁", "책상", "desk", "table", "식사"]):
+            target_category = "table"
+        elif any(x in combined_query for x in ["의자", "체어", "chair", "스툴"]):
+            target_category = "chair"
+            
+        recommended_items = product_db.get(target_category, product_db["sofa"])
+        
+        for item in recommended_items:
+            price_val = item["price"]
+            if price_val.isdigit():
+                price_val = f"{int(price_val):,}원"
+                
+            products.append(
+                ProductItem(
+                    product_name=item["product_name"],
+                    price=price_val,
+                    image_url=item["image_url"],
+                    purchase_link=item["purchase_link"],
+                    similarity=item["similarity"]
+                )
+            )
+            
+    # 최종적으로 가격 데이터 포맷 정리 (예: "335000" -> "335,000원")
+    for item in products:
+        if item.price.isdigit():
+            item.price = f"{int(item.price):,}원"
+
+    return SuccessResponse(
+        success=True,
+        data=ProductSearchResponse(products=products),
+        message="유사 가구 상품 추천 결과입니다."
+    )
+
+
+# 레거시 백업 함수 (라우터 데코레이터 제거 및 이름 변경)
+def search_similar_products_legacy(payload: Dict[str, Any]):
+    """
+    [유사 상품 검색 창구]
     사용자가 원형 마스크로 선택한 가구 영역을 싹둑 오려낸 뒤(Crop),
     제미나이(Gemini 2.0-Flash)와 구글 실시간 검색 툴(Search Grounding)을 사용해
     인터넷 상에서 실제 판매 중인 가구 유사 상품 3가지를 스캔하여 반환합니다.

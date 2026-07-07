@@ -25,10 +25,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
   // 드래그 중 현재 좌표를 ref로 추적 (mouseUp에서 최신값 동기적으로 읽기 위함)
   const dragCurrentRef = useRef({ x: 0, y: 0 });
 
-  // 1차/2차 수선 프롬프트
-  const [promptA, setPromptA] = useState("현대적이고 고급스러운 가죽 소파");
-  const [promptB, setPromptB] = useState("아늑한 우드 사이드 테이블");
-
+  // 1차/2차 수선 프롬프트 제거됨 (유사 상품 전용으로 개편)
   const [editing, setEditing] = useState(false);
   const [editedResultUrl, setEditedResultUrl] = useState(null);
 
@@ -294,67 +291,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
     return canvas.toDataURL('image/png');
   };
 
-  // 수선하기 요청 제출
-  const handleEditSubmit = async () => {
-    if (!promptA.trim()) {
-      onError({ errorCode: "PROMPT_REQUIRED", message: "1차 가구 수선 요청사항(Prompt A)을 입력해 주세요." });
-      return;
-    }
-    if (!maskPixelsA) {
-      onError({ errorCode: "MASK_REQUIRED", message: "1차 가구 수선 영역(A)을 지정해 주세요 (필수)" });
-      return;
-    }
-    
-    onError(null);
-    setEditing(true);
 
-    try {
-      const natW = imgRef.current.naturalWidth;
-      const natH = imgRef.current.naturalHeight;
-
-      // 마스크 1 (A) 원형 캔버스 추출
-      const base64MaskA = generateCircularBase64Mask(bboxNormA, natW, natH);
-      
-      // 마스크 2 (B) 원형 캔버스 추출 (지정된 경우에만)
-      const base64MaskB = bboxNormB ? generateCircularBase64Mask(bboxNormB, natW, natH) : null;
-
-      const res = await editImage({
-        imageId,
-        sessionId,
-        mask: base64MaskA,           // ComfyUI 인페인팅용 Base64 PNG 마스크
-        mask_b: base64MaskB,
-        mask_pixels_a: maskPixelsA,  // mock 폴백용 픽셀 좌표 배열 [x1,y1,x2,y2]
-        mask_pixels_b: maskPixelsB ? maskPixelsB : null,
-        prompt: promptA.trim(),
-        prompt_b: base64MaskB ? promptB.trim() : null
-      });
-
-      if (res.success) {
-        const eUrl = res.data?.edited_image_url || res.data?.editedImageUrl;
-        // 브라우저 캐시 방지를 위해 타임스탬프 쿼리 파라미터 추가
-        const cacheBustedUrl = eUrl ? `${eUrl}?t=${Date.now()}` : eUrl;
-        setEditedResultUrl(cacheBustedUrl);
-
-        if (onGenerateSuccess) {
-          onGenerateSuccess({
-            resultId: res.data?.result_id || imageId,
-            resultImageUrl: getFullUrl(cacheBustedUrl),
-            style: "repair",
-            prompt: promptA.trim(),
-            processingTime: res.data?.processing_time || 0.42,
-            status: "completed"
-          });
-        }
-      } else {
-        onError({ errorCode: res.errorCode || "PROCESSING_FAILED", message: res.message });
-      }
-    } catch (err) {
-      console.error(err);
-      onError({ errorCode: "CANVAS_ERROR", message: `마스크 픽셀 캔버스 렌더링 중 오류: ${err.message}` });
-    } finally {
-      setEditing(false);
-    }
-  };
 
   // 유사 가구 쇼핑 정보 검색 (A와 B 다중 영역 병렬 검색)
   const handleSearchProducts = async () => {
@@ -377,7 +314,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
             imageId,
             sessionId,
             maskPixels: maskPixelsA,
-            prompt: promptA.trim()
+            prompt: ""
           });
           if (res.success) {
             setProductsListA(res.data?.products || []);
@@ -393,7 +330,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
             imageId,
             sessionId,
             maskPixels: maskPixelsB,
-            prompt: promptB.trim()
+            prompt: ""
           });
           if (res.success) {
             setProductsListB(res.data?.products || []);
@@ -438,7 +375,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
       {/* 헤더 영역 - 이모지 제거 및 타이틀 폰트 굵기 복구 (두껍게 강조) */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div className="card-title" style={{ fontSize: '1.35rem', fontWeight: '700', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', color: 'var(--primary)', margin: 0, letterSpacing: '-0.02em' }}>
-          AI 가구 부분 교체 (수선)
+          AI 유사 가구 추천 및 쇼핑
         </div>
         <button 
           onClick={handleClearAll}
@@ -545,32 +482,8 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
           padding: '16px 20px',
           boxShadow: '0 8px 32px rgba(46, 40, 36, 0.03)'
         }}>
-          {editedResultUrl ? (
-            /* 가구 수선 완료 성공 피드백 */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', textAlign: 'center', padding: '10px 0' }}>
-              <div style={{ fontSize: '2.5rem', margin: '0 auto' }}>🎉</div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--primary)', margin: '4px 0', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-                가구 부분 교체 완료!
-              </h3>
-              <p style={{ fontSize: '0.82rem', color: 'var(--text-main)', lineHeight: '1.5', margin: '0 0 8px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-                선택한 가구 영역이 성공적으로 교체되었습니다.<br />
-                <strong>아래 Before / After 비교 쇼룸</strong>에서 결과를 확인하세요!
-              </p>
-              <button
-                type="button"
-                onClick={handleClearAll}
-                style={{
-                  padding: '14px', fontSize: '0.9rem', fontWeight: '600', borderRadius: '12px',
-                  border: '1px solid var(--border-color)', transition: 'all 0.2s', width: '100%',
-                  fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
-                  cursor: 'pointer', background: '#fff', color: 'var(--primary)'
-                }}
-              >
-                영역 다시 지정하여 편집하기
-              </button>
-            </div>
-          ) : (
-            <>
+
+
               {/* 수선 영역 탭 스위처 - 파스텔 색상 배경 & 이모지 및 가이드 문구 삭제, 탭 대제목 굵기 복구 (두껍게) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <span style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', color: '#7A6C62', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -642,7 +555,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                 </div>
               </div>
 
-              {/* 인풋 영역 A - 이모지 및 사진 드래그 필요 문구 삭제, 얇은 폰트 적용 */}
+              {/* 인풋 영역 A - 프롬프트 삭제 및 CLIP 특징 분석 레이블로 변경 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ 
                   fontSize: '0.82rem', 
@@ -650,7 +563,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                   color: '#075985', 
                   fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
                 }}>
-                  가구 A 교체 스타일 입력 (필수)
+                  가구 A 실시간 CLIP 특징 분석
                 </label>
                 
                 {/* 🎨 [산디과 코딩 가이드 - CLIP 실시간 단계별 분석 상태 피드백 영역] */}
@@ -697,15 +610,15 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                       <span style={{ fontSize: '0.68rem', color: '#15803D', fontWeight: '600' }}>{embeddingModelA}</span>
                     </div>
                     <div style={{ 
-                      fontSize: '0.68rem', 
-                      background: '#FFFFFF', 
-                      border: '1px solid #DCFCE7', 
-                      padding: '4px 6px', 
-                      borderRadius: '6px', 
-                      color: '#166534', 
-                      fontFamily: 'monospace', 
-                      overflowX: 'auto', 
-                      whiteSpace: 'nowrap' 
+                       fontSize: '0.68rem', 
+                       background: '#FFFFFF', 
+                       border: '1px solid #DCFCE7', 
+                       padding: '4px 6px', 
+                       borderRadius: '6px', 
+                       color: '#166534', 
+                       fontFamily: 'monospace', 
+                       overflowX: 'auto', 
+                       whiteSpace: 'nowrap' 
                     }} title={`L2 정규화 임베딩 전체 벡터:\n[${embeddingA.join(', ')}]`}>
                       Vector (512d): [{embeddingA.slice(0, 5).map(v => v.toFixed(4)).join(', ')}, ...]
                     </div>
@@ -727,27 +640,9 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                     가구 영역 A를 드래그하여 원형 마스킹을 지정하면 CLIP 모델 분석이 자동으로 개시됩니다.
                   </div>
                 )}
-                <input
-                  type="text"
-                  value={promptA}
-                  onChange={(e) => setPromptA(e.target.value)}
-                  placeholder="예: 현대적이고 고급스러운 가죽 소파"
-                  className="input-field"
-                  style={{ 
-                    padding: '10px 12px', 
-                    fontSize: '0.85rem', 
-                    fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
-                    border: `1.5px solid ${maskMode === 'A' ? '#3B82F6' : 'var(--border-color)'}`,
-                    borderRadius: '10px',
-                    borderWidth: '1.5px',
-                    background: '#FFFFFF',
-                    outline: 'none',
-                    transition: 'all 0.3s'
-                  }}
-                />
               </div>
 
-              {/* 인풋 영역 B - 이모지 제거 및 얇은 폰트 적용 */}
+              {/* 인풋 영역 B - 프롬프트 삭제 및 CLIP 특징 분석 레이블로 변경 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ 
                   fontSize: '0.82rem', 
@@ -756,7 +651,7 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                   fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
                   opacity: maskPixelsB ? 1 : 0.6,
                 }}>
-                  가구 B 교체 스타일 입력 (선택)
+                  가구 B 실시간 CLIP 특징 분석 (선택)
                 </label>
                 
                 {/* 🎨 [산디과 코딩 가이드 - CLIP 실시간 단계별 분석 상태 피드백 영역] */}
@@ -833,78 +728,44 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                     가구 영역 B를 드래그하여 원형 마스킹을 지정하면 CLIP 모델 분석이 자동으로 개시됩니다.
                   </div>
                 )}
-                <input
-                  type="text"
-                  value={promptB}
-                  onChange={(e) => setPromptB(e.target.value)}
-                  placeholder="예: 아늑한 우드 사이드 테이블"
-                  className="input-field"
-                  disabled={!maskPixelsB}
-                  style={{ 
-                    padding: '10px 12px',
-                    fontSize: '0.85rem',
-                    opacity: maskPixelsB ? 1 : 0.6,
-                    cursor: maskPixelsB ? 'text' : 'not-allowed',
-                    fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
-                    border: `1.5px solid ${maskMode === 'B' ? '#EC4899' : 'var(--border-color)'}`,
-                    borderRadius: '10px',
-                    background: maskPixelsB ? '#FFFFFF' : '#F8FAFC',
-                    outline: 'none',
-                    transition: 'all 0.3s'
-                  }}
-                />
               </div>
 
-              {/* 주요 작업 실행 버튼들 - 이모지 및 사진 드래그 관련 문구/아이콘 삭제 및 얇은 폰트 변경 */}
+              {/* 주요 작업 실행 버튼들 - 수선 기능 제거 및 검색 기능 단일화 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
                 <button
                   type="button"
-                  onClick={handleEditSubmit}
-                  disabled={editing || !maskPixelsA}
+                  onClick={handleSearchProducts}
+                  disabled={searchingProducts || (!maskPixelsA && !maskPixelsB)}
                   className="btn btn-primary btn-full"
                   style={{ 
-                    padding: '12px', 
-                    fontSize: '0.9rem', 
-                    fontWeight: '400',
-                    cursor: (!maskPixelsA || editing) ? 'not-allowed' : 'pointer',
-                    background: (!maskPixelsA) ? '#E2E8F0' : 'var(--primary)',
-                    color: (!maskPixelsA) ? '#94A3B8' : '#FCFAF7',
-                    border: 'none',
-                    borderRadius: '10px',
-                    transition: 'all 0.25s ease',
+                    padding: '14px', 
+                    fontSize: '0.95rem', 
+                    fontWeight: '600', 
+                    cursor: ((!maskPixelsA && !maskPixelsB) || searchingProducts) ? 'not-allowed' : 'pointer', 
+                    background: ((!maskPixelsA && !maskPixelsB) || searchingProducts) ? '#E2E8F0' : 'var(--primary)', 
+                    color: ((!maskPixelsA && !maskPixelsB) || searchingProducts) ? '#94A3B8' : '#FCFAF7', 
+                    border: 'none', 
+                    borderRadius: '12px', 
+                    transition: 'all 0.25s ease', 
                     fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
-                    boxShadow: maskPixelsA ? '0 6px 18px rgba(43, 53, 48, 0.12)' : 'none'
+                    boxShadow: (!maskPixelsA && !maskPixelsB) ? 'none' : '0 6px 18px rgba(43, 53, 48, 0.12)'
                   }}
-                  onMouseEnter={(e) => {
-                    if (maskPixelsA && !editing) {
+                  onMouseEnter={(e) => { 
+                    if ((maskPixelsA || maskPixelsB) && !searchingProducts) { 
                       e.currentTarget.style.transform = 'translateY(-1px)';
                       e.currentTarget.style.boxShadow = '0 8px 20px rgba(43, 53, 48, 0.2)';
                     }
                   }}
-                  onMouseLeave={(e) => {
-                    if (maskPixelsA && !editing) {
+                  onMouseLeave={(e) => { 
+                    if ((maskPixelsA || maskPixelsB) && !searchingProducts) { 
                       e.currentTarget.style.transform = 'translateY(0)';
                       e.currentTarget.style.boxShadow = '0 6px 18px rgba(43, 53, 48, 0.12)';
                     }
                   }}
                 >
-                  {editing ? "AI 부분 교체 적용 중..." : "AI 가구 편집/수선 실행"}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSearchProducts}
-                  disabled={searchingProducts || (!maskPixelsA && !maskPixelsB)}
-                  className="btn btn-secondary btn-full"
-                  style={{ padding: '14px', fontSize: '0.95rem', fontWeight: '400', cursor: (((maskMode === 'A' ? !maskPixelsA : !maskPixelsB) || searchingProducts) ? 'not-allowed' : 'pointer'), background: '#FFFFFF', color: 'var(--primary)', border: (maskMode === 'A' ? !maskPixelsA : !maskPixelsB) ? '1px solid rgba(0,0,0,0.06)' : '1.5px solid var(--primary)', borderRadius: '12px', transition: 'all 0.25s ease', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}
-                  onMouseEnter={(e) => { if (!(maskMode === 'A' ? !maskPixelsA : !maskPixelsB) && !searchingProducts) { e.currentTarget.style.backgroundColor = '#FCFAF7'; }}}
-                  onMouseLeave={(e) => { if (!(maskMode === 'A' ? !maskPixelsA : !maskPixelsB) && !searchingProducts) { e.currentTarget.style.backgroundColor = '#FFFFFF'; }}}
-                >
                   {searchingProducts ? "유사 가구 쇼핑 정보 찾는 중..." : "유사 가구 쇼핑 정보 검색"}
                 </button>
               </div>
-            </>
-          )}
 
         </div>  {/* 우측 패널의 닫기 태그 */}
       </div>    {/* 상단 1.25fr 1fr 그리드 레이아웃의 닫기 태그 */}
