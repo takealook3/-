@@ -10,7 +10,7 @@ import ComparisonGallery from './components/ComparisonGallery';
 import SessionModal from './components/SessionModal';
 import StyleTransformer from './components/StyleTransformer';
 import ChatWidget from './components/ChatWidget';
-import StyleEncyclopedia, { STYLE_DATABASE } from './components/StyleEncyclopedia';
+import StyleDetailModal, { STYLE_DATABASE } from './components/StyleDetailModal';
 import StyleQuiz from './components/StyleQuiz';
 import FurnitureShopShowroom from './components/FurnitureShopShowroom';
 import { checkHealth, sendChatMessage, API_BASE_URL } from './services/api';
@@ -518,7 +518,11 @@ export default function App() {
                   <div 
                     key={style.id} 
                     className="featured-card"
-                    style={{ cursor: 'default' }}
+                    onClick={() => {
+                      setActiveStyleId(style.id);
+                      setIsStyleModalOpen(true);
+                    }}
+                    style={{ cursor: 'pointer' }}
                   >
                     <div className="featured-card-img-wrapper">
                       {style.imageUrl ? (
@@ -762,10 +766,9 @@ export default function App() {
 
         {/* [메인에서 가구 카탈로그 제거 - Shop 버튼을 통해 새 창으로 제공됨] */}
 
-        {/* 28가지 인테리어 취향 스타일 도감 섹션 */}
-        <StyleEncyclopedia
+        {/* 스타일 가이드 팝업 상세 모달 */}
+        <StyleDetailModal
           activeId={activeStyleId}
-          setActiveId={setActiveStyleId}
           isModalOpen={isStyleModalOpen}
           setIsModalOpen={setIsStyleModalOpen}
         />
