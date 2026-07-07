@@ -143,6 +143,10 @@ export default function App() {
     return params.get('category') || null;
   });
 
+  // [신설] 스타일 도감용 상태값 (동료 누락 2차 에러 해소)
+  const [activeStyleId, setActiveStyleId] = useState(null);
+  const [isStyleModalOpen, setIsStyleModalOpen] = useState(false);
+
   // 5초 간격 최상단 히어로 배경 롤링 타이머
   useEffect(() => {
     const timer = setInterval(() => {
