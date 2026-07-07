@@ -29,12 +29,18 @@ export default function StyleTransformer({
   const summaryData = globalSummaryData;
 
   // 퀴즈 결과 프롬프트 주입 감지 및 인풋 갱신
-  useEffect(() => {
+  // 리액트 런타임 렌더링 충돌을 완벽하게 방지하기 위해 setTimeout으로 격리 실행합니다.
+  React.useEffect(() => {
     if (pendingPrompt) {
       setPrompt(pendingPrompt);
-      setPendingPrompt('');
+      const timer = setTimeout(() => {
+        setPendingPrompt('');
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [pendingPrompt, setPendingPrompt]);
+
+
 
   const getFullUrl = (url) => {
     if (!url) return "";
