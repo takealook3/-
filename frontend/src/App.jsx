@@ -10,7 +10,7 @@ import ComparisonGallery from './components/ComparisonGallery';
 import SessionModal from './components/SessionModal';
 import StyleTransformer from './components/StyleTransformer';
 import ChatWidget from './components/ChatWidget';
-import { STYLE_DATABASE } from './components/StyleEncyclopedia';
+import StyleEncyclopedia, { STYLE_DATABASE } from './components/StyleEncyclopedia';
 import StyleQuiz from './components/StyleQuiz';
 import FurnitureShopShowroom from './components/FurnitureShopShowroom';
 import { checkHealth, sendChatMessage, API_BASE_URL } from './services/api';
@@ -125,8 +125,8 @@ export default function App() {
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [activeTab, setActiveTab] = useState('home'); // GNB active 탭 상태 부모 통합
   const [heroImageIndex, setHeroImageIndex] = useState(0);
-
-
+  const [activeStyleId, setActiveStyleId] = useState(STYLE_DATABASE[0]?.id || 1);
+  const [isStyleModalOpen, setIsStyleModalOpen] = useState(false);
   const [startIndex, setStartIndex] = useState(0); // Featured Collections 카루셀 시작 인덱스 (모던=0으로 고정 기동)
 
   const [pendingPrompt, setPendingPrompt] = useState(''); // 취향 퀴즈 연동용 자동 프롬프트 상태

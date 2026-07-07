@@ -625,7 +625,6 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
               </div>
             </>
           )}
->>>>>>> c9fbd41757bfcd0c5b18c9e176e49f16bcb0a1c7
 
         </div>  {/* 우측 패널의 닫기 태그 */}
       </div>    {/* 상단 1.25fr 1fr 그리드 레이아웃의 닫기 태그 */}
@@ -687,7 +686,6 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                             {item.price}
                           </div>
                         </div>
-<<<<<<< HEAD
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px', gap: '8px' }}>
                           <span style={{ fontSize: '0.68rem', color: '#1E40AF', background: '#EFF6FF', padding: '3px 8px', borderRadius: '4px', fontWeight: '400', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', whiteSpace: 'nowrap' }}>
                             유사도 {Math.round(item.similarity * 100)}%
@@ -712,8 +710,6 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                             구매 링크 ↗
                           </a>
                         </div>
-=======
->>>>>>> c9fbd41757bfcd0c5b18c9e176e49f16bcb0a1c7
                       </div>
                     </div>
                   ))}
