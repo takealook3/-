@@ -585,6 +585,8 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
             # 4. KSampler 파라미터 주입 (KSampler: Node 6)
             if "seed" in parameters:
                 prompt_api_data["6"]["inputs"]["seed"] = int(parameters["seed"])
+            if "denoise" in parameters:
+                prompt_api_data["6"]["inputs"]["denoise"] = float(parameters["denoise"])
             
             # prompt_api_data["6"]["inputs"]["scheduler"] = "normal"
             print(f"✅ [room_redesign_API] KSampler 설정 완료: seed={prompt_api_data['6']['inputs']['seed']}, denoise={prompt_api_data['6']['inputs']['denoise']}")
@@ -1468,21 +1470,21 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
     }
 
 
-def translate_prompt_to_english_strict(prompt: str) -> str:
-    """사용자가 작성한 프롬프트를 번역하되, API 사용량 초과(429) 등의 오류를 삼키지 않고 그대로 에러로 던집니다."""
+def translate_prompt_to_english_strict(prompt: str) -> tuple[str, bool]:
+    """사용자가 작성한 프롬프트를 번역하되, API 사용량 초과(429) 등의 오류가 나면 로컬 사전 기반 룰로 자동 선회합니다."""
     import re
     if not prompt or not prompt.strip():
-        return "modern interior styling"
+        return "modern interior styling", False
 
     global translation_cache
     if prompt in translation_cache:
-        return translation_cache[prompt]
+        return translation_cache[prompt], False
 
     has_korean = bool(re.search("[ㄱ-ㅎㅏ-ㅣ가-힣]", prompt))
     if not has_korean:
         result = prompt if (prompt.startswith("(") and prompt.endswith(")")) else f"({prompt}:1.35)"
         translation_cache[prompt] = result
-        return result
+        return result, False
 
     global rag_llm, rag_enabled
     if rag_enabled and rag_llm:
@@ -1502,12 +1504,47 @@ def translate_prompt_to_english_strict(prompt: str) -> str:
                 response = future.result(timeout=4.0)
             translated = response.content.strip().replace('"', '').replace("'", "")
             translation_cache[prompt] = translated
-            return translated
+            return translated, False
         except Exception as e:
-            # 쿼터 도달 429 등의 에러인 경우 상위로 전파
-            raise RuntimeError(f"Gemini API가 요청을 수용할 수 없습니다: {str(e)}")
+            print(f"⚠️ [Translate Strict Exception] 번역 API 호출 실패: {e}. 로컬 사전 기반 룰로 우회합니다.")
+
+    # [로컬 사전 룰 기반 Fallback 엔진 작동]
+    style_keywords = {
+        "우드": "(warm wooden texture interior:1.25)",
+        "나무": "(warm wooden texture interior:1.25)",
+        "북유럽": "(scandinavian cozy style:1.25)",
+        "미니멀": "(minimalist clean style:1.25)",
+        "화이트": "(bright gallery white theme:1.25)",
+        "하얀색": "(bright gallery white theme:1.25)",
+        "모던": "(sleek modern interior:1.20)",
+        "내추럴": "(natural organic tone style:1.20)",
+        "네추럴": "(natural organic tone style:1.20)",
+        "럭셔리": "(luxury elegant interior:1.25)",
+        "클래식": "(classic elegant molding details:1.25)",
+        "다크": "(moody dark tone theme:1.20)",
+        "어두운": "(moody dark tone theme:1.20)",
+        "거실": "living room space",
+        "침실": "cozy bedroom space",
+        "방": "room design",
+        "소파": "modern sofa",
+        "바꿔줘": "",
+        "변경해줘": "",
+        "스타일": "style"
+    }
+    extracted_tags = []
+    for word, tag in style_keywords.items():
+        if word in prompt:
+            if tag:
+                extracted_tags.append(tag)
+                
+    if not extracted_tags:
+        fallback_prompt = "modern interior styling"
     else:
-        raise ValueError("RAG LLM 엔진이 비활성화 상태이거나 API Key가 설정되지 않았습니다.")
+        fallback_prompt = ", ".join(extracted_tags) + ", interior space, no people, empty room, realistic, highly detailed"
+        
+    translation_cache[prompt] = fallback_prompt
+    return fallback_prompt, True
+
 
 
 from fastapi.responses import StreamingResponse
@@ -1554,7 +1591,12 @@ async def generate_interior_image_stream(request: Request):
                 # ── Step 1. 번역 수행 ──
                 t_translate_start = time.time()
                 try:
-                    translated_prompt = translate_prompt_to_english_strict(prompt)
+                    translated_prompt, is_fallback = translate_prompt_to_english_strict(prompt)
+                    if is_fallback:
+                        status_queue.put({
+                            "status": "progress",
+                            "message": "⚠️ API 사용량이 한도 초과되었습니다. 시스템 사전 정의 규칙(Fallback)으로 번역을 임시 우회합니다."
+                        })
                 except Exception as trans_err:
                     status_callback("error", f"Gemini 번역 API 호출에 실패했습니다: {str(trans_err)}")
                     return
@@ -1622,16 +1664,35 @@ async def generate_interior_image_stream(request: Request):
                 else:
                     dest_path = os.path.join(PROJECT_ROOT, "results", f"{result_id}.jpg")
                     orig_path = os.path.join(PROJECT_ROOT, "uploads", input_filename)
-                    import sd_tutorial
-                    sd_tutorial.run_interior_style_change(
-                        model_path=sd_model_path,
-                        input_image_path=orig_path,
-                        output_image_path=dest_path,
-                        prompt=translated_prompt,
-                        negative_prompt="blurry, low quality, distorted, bad proportions, ugly, disfigured"
-                    )
-                    result_url = f"/static/results/{result_id}.jpg"
-                    execution_mode = "local_sd_tutorial"
+                    try:
+                        import sd_tutorial
+                        sd_tutorial.run_interior_style_change(
+                            model_path=sd_model_path,
+                            input_image_path=orig_path,
+                            output_image_path=dest_path,
+                            prompt=translated_prompt,
+                            negative_prompt="blurry, low quality, distorted, bad proportions, ugly, disfigured"
+                        )
+                        result_url = f"/static/results/{result_id}.jpg"
+                        execution_mode = "local_sd_tutorial"
+                    except Exception as fallback_err:
+                        print(f"⚠️ [Stream Fallback Error] 로컬 SD 실행 실패 (Mock 대체): {fallback_err}")
+                        brightness_val = 0.0
+                        contrast_val = 1.0
+                        if style == "minimal":
+                            contrast_val = 1.2
+                        elif style == "natural":
+                            brightness_val = 0.1
+                        result_url = process_mock_image(
+                            image_id=image_id,
+                            result_id=result_id,
+                            style_name=style,
+                            prompt_text=f"{prompt} {translated_prompt}",
+                            brightness=brightness_val,
+                            contrast=contrast_val,
+                            text_overlay=f"ZipPT AI Fallback\nStyle: {style}"
+                        )
+                        execution_mode = "mock_fallback"
                     
                 res_data = {
                     "result_id": result_id,
@@ -2928,6 +2989,58 @@ def embed_cropped_image(payload: Dict[str, Any]):
             status_code=500,
             content={"success": False, "message": f"서버 내부 오류로 임베딩 추출 실패: {str(e)}"}
         )
+def classify_furniture_category_with_gemini(image_path: str) -> str:
+    """
+    크롭된 가구 이미지를 Gemini 2.5 Flash에 입력하여 
+    DB3 표준 카테고리3 중 가장 연관성 높은 카테고리 단어 하나를 분류해냅니다.
+    """
+    try:
+        import base64
+        from langchain_core.messages import HumanMessage
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        if not os.path.exists(image_path):
+            return None
+
+        with open(image_path, "rb") as img_file:
+            img_data = base64.b64encode(img_file.read()).decode("utf-8")
+
+        categories = ["식탁/의자", "소파", "책상", "스탠드", "침대", "테이블", "TV거실장", "서랍장", "화장대", "협탁", "의자", "책장", "러그", "거울"]
+        
+        message = HumanMessage(
+            content=[
+                {
+                    "type": "text",
+                    "text": (
+                        "너는 인테리어 및 가구 분류 전문가야. 제시된 이미지 속 가구/소품 영역을 보고 다음 리스트 중 가장 어울리는 카테고리 단어 하나만 골라서 응답해줘.\n"
+                        f"카테고리 리스트: {', '.join(categories)}\n"
+                        "규칙: 리스트에 없는 단어나 추가적인 설명, 특수문자 없이 오직 카테고리 이름 단어 하나만(예: '스탠드' 또는 '소파') 대답해야 해."
+                    )
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{img_data}"
+                    }
+                }
+            ]
+        )
+
+        vision_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.0)
+        response = vision_llm.invoke([message])
+        category = response.content.strip()
+        print(f"🔮 [Vision Classify] 제미나이 분류 카테고리: '{category}'")
+
+        if category in categories:
+            return category
+        
+        for cat in categories:
+            if cat in category:
+                return cat
+        return None
+    except Exception as e:
+        print(f"⚠️ [Vision Classify] 제미나이 이미지 분류 중 에러: {e}")
+        return None
 
 
 # =====================================================================
@@ -3004,12 +3117,20 @@ def search_similar_products(payload: Dict[str, Any]):
                         db_count = collection.count()
                         
                         if db_count > 0:
+                            # 3-2-1. 제미나이 비전을 통한 카테고리 판별 시도
+                            detected_category = classify_furniture_category_with_gemini(cropped_img_path)
+                            
                             # 3-3. Chroma DB 쿼리 실행
-                            # n_results는 최대 6개까지 가져옵니다.
-                            results = collection.query(
-                                query_embeddings=[crop_embedding],
-                                n_results=6
-                            )
+                            query_args = {
+                                "query_embeddings": [crop_embedding],
+                                "n_results": 6
+                            }
+                            # 카테고리가 분류되면 where 필터 적용
+                            if detected_category:
+                                query_args["where"] = {"category3": detected_category}
+                                print(f"🎯 [Product Search] '{detected_category}' 카테고리 필터 쿼리 실행")
+                                
+                            results = collection.query(**query_args)
                             
                             if results and results.get("ids") and results["ids"][0]:
                                 ids = results["ids"][0]
@@ -3021,9 +3142,14 @@ def search_similar_products(payload: Dict[str, Any]):
                                     dist = distances[idx] if idx < len(distances) else 0.5
                                     
                                     # 코사인 유사도 점수 산출: Chroma의 cosine 거리는 1 - sim 이므로
-                                    sim_val = round(float(1.0 - dist), 2)
+                                    cos_sim = float(1.0 - dist)
+                                    # 비주얼 유사도(0.1 ~ 0.4) 범위를 사용자 친화적인 백분율 점수(70% ~ 95%)로 선형 보정(Scaling)
+                                    if cos_sim < 0.1:
+                                        sim_val = round(0.55 + max(0.0, cos_sim) * 1.5, 2)
+                                    else:
+                                        sim_val = round(0.70 + (cos_sim - 0.1) * 0.85, 2)
                                     # 안전 보장 클램핑
-                                    sim_val = max(0.0, min(1.0, sim_val))
+                                    sim_val = max(0.50, min(0.99, sim_val))
                                     
                                     products.append(
                                         ProductItem(
@@ -3273,8 +3399,12 @@ def search_similar_products_legacy(payload: Dict[str, Any]):
                                 if db_embedding:
                                     # 코사인 유사도 구하기
                                     raw_sim = clip_service.calculate_similarity(crop_embedding, db_embedding)
-                                    # 원본 코사인 유사도 값을 소수점 둘째 자리까지 반올림하여 점수로 반영합니다
-                                    sim_val = round(raw_sim, 2)
+                                    # 비주얼 유사도 선형 보정(Scaling)
+                                    if raw_sim < 0.1:
+                                        sim_val = round(0.55 + max(0.0, raw_sim) * 1.5, 2)
+                                    else:
+                                        sim_val = round(0.70 + (raw_sim - 0.1) * 0.85, 2)
+                                    sim_val = max(0.50, min(0.99, sim_val))
                                     print(f"📐 [CLIP Web Sim] '{item.get('product_name')}' 실시간 유사도: {raw_sim:.4f} ➡️ 보정 유사도: {sim_val:.2f}")
                         except Exception as dl_err:
                             print(f"⚠️ [Product Search] 상품 이미지 다운로드/비교 에러: {dl_err}")

@@ -7,7 +7,13 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 import os
-os.environ["HF_ENDPOINT"] = "https://huggingface.co"
+import sys
+# Windows cp949 콘솔 환경에서의 이모지 출력 인코딩 예외 원천 방지
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
+# [이유: .env의 HF_ENDPOINT=https://hf-mirror.com 환경변수를 덮어쓰지 않도록 하드코딩 엔드포인트를 주석 처리합니다.]
+# os.environ["HF_ENDPOINT"] = "https://huggingface.co"
 import torch
 import numpy as np
 from PIL import Image
@@ -30,7 +36,7 @@ class CLIPService:
         # 모델 정보: OpenAI에서 개발한 가장 가볍고 효율적인 clip-vit-base-patch32를 사용합니다.
         self.model_name = "openai/clip-vit-base-patch32"
         self.active_model_info = "None"
-        print(f"📦 [CLIP Service] '{self.model_name}' 모델을 메모리에 불러오는 중입니다 (최초 실행 시 다운로드 진행)...")
+        print(f"[CLIP Service] '{self.model_name}' 모델을 메모리에 불러오는 중입니다 (최초 실행 시 다운로드 진행)...")
         
         # CPU 환경에 최적화하여 로드합니다.
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -41,9 +47,9 @@ class CLIPService:
             self.processor = CLIPProcessor.from_pretrained(self.model_name)
             self.model.eval() # 평가 모드 활성화 (드롭아웃 등을 비활성화하여 일관된 임베딩 값 추출)
             self.active_model_info = "openai/clip-vit-base-patch32 (오리지널 CLIP)"
-            print(f"✅ [CLIP Service] 모델 로드 완료 (사용 디바이스: {self.device})")
+            print(f"[CLIP Service] 모델 로드 완료 (사용 디바이스: {self.device})")
         except Exception as e:
-            print(f"❌ [CLIP Service] 모델 로드 오류 발생 (오프라인/가상 모킹 모드로 자동 전환): {e}")
+            print(f"[CLIP Service] 모델 로드 오류 발생 (오프라인/가상 모킹 모드로 자동 전환): {e}")
             self.model = None
             self.processor = None
             
