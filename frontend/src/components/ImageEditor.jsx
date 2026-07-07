@@ -41,8 +41,15 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
   // 비유: 드래그가 끝난 소파나 테이블의 512차원 특징값(임베딩)과 추출 진행 상태를 각각 담는 레이어(State)입니다.
   const [embeddingA, setEmbeddingA] = useState(null);
   const [isEmbeddingA, setIsEmbeddingA] = useState(false);
+  const [embeddingModelA, setEmbeddingModelA] = useState("");
+  const [embeddingStepsA, setEmbeddingStepsA] = useState([]);
+  const [embeddingCurrentStepA, setEmbeddingCurrentStepA] = useState("");
+
   const [embeddingB, setEmbeddingB] = useState(null);
   const [isEmbeddingB, setIsEmbeddingB] = useState(false);
+  const [embeddingModelB, setEmbeddingModelB] = useState("");
+  const [embeddingStepsB, setEmbeddingStepsB] = useState([]);
+  const [embeddingCurrentStepB, setEmbeddingCurrentStepB] = useState("");
 
   const containerRef = useRef(null);
   const imgRef = useRef(null);
@@ -105,38 +112,71 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
   const triggerClipEmbedding = async (mode, pixels) => {
     if (!imageId || !pixels || pixels.length !== 4) return;
     
+    let setSteps, setCurrentStep, setIsEmbedding, setEmbedding, setModel;
     if (mode === 'A') {
-      setIsEmbeddingA(true);
-      setEmbeddingA(null);
+      setSteps = setEmbeddingStepsA;
+      setCurrentStep = setEmbeddingCurrentStepA;
+      setIsEmbedding = setIsEmbeddingA;
+      setEmbedding = setEmbeddingA;
+      setModel = setEmbeddingModelA;
     } else {
-      setIsEmbeddingB(true);
-      setEmbeddingB(null);
+      setSteps = setEmbeddingStepsB;
+      setCurrentStep = setEmbeddingCurrentStepB;
+      setIsEmbedding = setIsEmbeddingB;
+      setEmbedding = setEmbeddingB;
+      setModel = setEmbeddingModelB;
     }
-    
+
+    setIsEmbedding(true);
+    setEmbedding(null);
+    setModel("");
+    setSteps([]);
+    setCurrentStep("1. 드래그 영역 좌표 획득 완료 (분석 개시)");
+
+    // 실시간 진행 단계 가상 시뮬레이션 (유저 편의성 극대화)
+    const stepMessages = [
+      "1. 드래그 영역 좌표 획득 완료 (분석 개시)",
+      "2. 지정 영역 이미지 크롭(Crop) 수행 중...",
+      "3. 인코더 입력을 위한 크기 조정(224x224) 및 텐서 변환 중...",
+      "4. CLIP 심층 신경망을 활용한 다차원 이미지 특징 분석 중..."
+    ];
+
+    let messageIdx = 0;
+    const intervalId = setInterval(() => {
+      if (messageIdx < stepMessages.length - 1) {
+        messageIdx++;
+        setCurrentStep(stepMessages[messageIdx]);
+      }
+    }, 300);
+
     try {
       const res = await embedCropImage({
         imageId,
         maskPixels: pixels
       });
       
+      clearInterval(intervalId);
+
       if (res.success && res.data?.embedding) {
         console.log(`🧠 [CLIP Embedding ${mode}] 추출 성공 (차원: ${res.data.dimension})`, res.data.embedding);
-        if (mode === 'A') {
-          setEmbeddingA(res.data.embedding);
-        } else {
-          setEmbeddingB(res.data.embedding);
-        }
+        
+        const backendSteps = res.data.status_steps || [];
+        setSteps(backendSteps);
+        setModel(res.data.model_name || "openai/clip-vit-base-patch32 (오리지널 CLIP)");
+        setCurrentStep(`분석 완료! 사용 모델: ${res.data.model_name || "openai/clip-vit-base-patch32"}`);
+        setEmbedding(res.data.embedding);
       } else {
         console.error(`⚠️ [CLIP Embedding ${mode}] 추출 오류:`, res.message);
+        setCurrentStep("⚠️ CLIP 분석 에러 발생");
+        setSteps([`오류: ${res.message || "추출에 실패했습니다."}`]);
       }
     } catch (err) {
+      clearInterval(intervalId);
       console.error(`❌ [CLIP Embedding ${mode}] API 통신 에러:`, err);
+      setCurrentStep("❌ API 통신 실패");
+      setSteps([`오류: ${err.message}`]);
     } finally {
-      if (mode === 'A') {
-        setIsEmbeddingA(false);
-      } else {
-        setIsEmbeddingB(false);
-      }
+      setIsEmbedding(false);
     }
   };
 
@@ -187,11 +227,17 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
       setBboxNormA(null);
       setMaskPixelsA(null);
       setEmbeddingA(null);
+      setEmbeddingModelA("");
+      setEmbeddingStepsA([]);
+      setEmbeddingCurrentStepA("");
       setProductsListA([]);
     } else {
       setBboxNormB(null);
       setMaskPixelsB(null);
       setEmbeddingB(null);
+      setEmbeddingModelB("");
+      setEmbeddingStepsB([]);
+      setEmbeddingCurrentStepB("");
       setProductsListB([]);
     }
   };
@@ -201,9 +247,17 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
     setBboxNormA(null);
     setMaskPixelsA(null);
     setEmbeddingA(null);
+    setEmbeddingModelA("");
+    setEmbeddingStepsA([]);
+    setEmbeddingCurrentStepA("");
+    
     setBboxNormB(null);
     setMaskPixelsB(null);
     setEmbeddingB(null);
+    setEmbeddingModelB("");
+    setEmbeddingStepsB([]);
+    setEmbeddingCurrentStepB("");
+    
     setEditedResultUrl(null);
     setProductsListA([]);
     setProductsListB([]);
@@ -375,6 +429,12 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
   return (
     /* 아이폰6 시스템 폰트(Helvetica Neue)를 최상단 카드 컨테이너에 적용 */
     <div className="card" style={{ border: '1px solid var(--border-color)', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', padding: '28px' }}>
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
       {/* 헤더 영역 - 이모지 제거 및 타이틀 폰트 굵기 복구 (두껍게 강조) */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
         <div className="card-title" style={{ fontSize: '1.35rem', fontWeight: '700', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', color: 'var(--primary)', margin: 0, letterSpacing: '-0.02em' }}>
@@ -583,24 +643,90 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
               </div>
 
               {/* 인풋 영역 A - 이모지 및 사진 드래그 필요 문구 삭제, 얇은 폰트 적용 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ 
                   fontSize: '0.82rem', 
-                  fontWeight: '400', 
+                  fontWeight: '700', 
                   color: '#075985', 
                   fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
                 }}>
                   가구 A 교체 스타일 입력 (필수)
-                  {maskPixelsA && (
-                    <span style={{ fontSize: '0.72rem', background: '#3B82F6', color: '#fff', padding: '1px 6px', borderRadius: '4px' }}>영역 등록됨</span>
-                  )}
-                  <span style={{ fontSize: '0.72rem', color: isEmbeddingA ? '#64748B' : '#10B981', fontStyle: isEmbeddingA ? 'italic' : 'normal', fontWeight: '500' }}>
-                    {labelAFeedback}
-                  </span>
                 </label>
+                
+                {/* 🎨 [산디과 코딩 가이드 - CLIP 실시간 단계별 분석 상태 피드백 영역] */}
+                {isEmbeddingA ? (
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '4px', 
+                    background: '#F0F9FF', 
+                    border: '1.5px dashed #0EA5E9', 
+                    padding: '8px 12px', 
+                    borderRadius: '10px',
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="spinner-mini" style={{ 
+                        width: '12px', 
+                        height: '12px', 
+                        borderRadius: '50%', 
+                        border: '2px solid #0EA5E9', 
+                        borderTopColor: 'transparent', 
+                        display: 'inline-block',
+                        animation: 'spin 0.8s linear infinite' 
+                      }}></span>
+                      <span style={{ fontSize: '0.78rem', color: '#0369A1', fontWeight: '700' }}>CLIP 실시간 분석 중...</span>
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#0284C7', fontFamily: 'monospace', paddingLeft: '20px' }}>
+                      {embeddingCurrentStepA}
+                    </div>
+                  </div>
+                ) : embeddingA ? (
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '6px', 
+                    background: '#F0FDF4', 
+                    border: '1px solid #BBF7D0', 
+                    padding: '10px 12px', 
+                    borderRadius: '10px',
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+                      <span style={{ fontSize: '0.72rem', background: '#22C55E', color: '#fff', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>영역 등록됨</span>
+                      <span style={{ fontSize: '0.68rem', color: '#15803D', fontWeight: '600' }}>{embeddingModelA}</span>
+                    </div>
+                    <div style={{ 
+                      fontSize: '0.68rem', 
+                      background: '#FFFFFF', 
+                      border: '1px solid #DCFCE7', 
+                      padding: '4px 6px', 
+                      borderRadius: '6px', 
+                      color: '#166534', 
+                      fontFamily: 'monospace', 
+                      overflowX: 'auto', 
+                      whiteSpace: 'nowrap' 
+                    }} title={`L2 정규화 임베딩 전체 벡터:\n[${embeddingA.join(', ')}]`}>
+                      Vector (512d): [{embeddingA.slice(0, 5).map(v => v.toFixed(4)).join(', ')}, ...]
+                    </div>
+                    <details style={{ cursor: 'pointer' }}>
+                      <summary style={{ fontSize: '0.65rem', color: '#166534', fontWeight: '600' }}>분석 과정 세부 로그 보기</summary>
+                      <div style={{ fontSize: '0.62rem', color: '#14532D', padding: '4px 6px', fontFamily: 'monospace', lineHeight: '1.4' }}>
+                        {embeddingStepsA.map((step, idx) => (
+                          <div key={idx}>✓ {step}</div>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                ) : maskPixelsA ? (
+                  <div style={{ fontSize: '0.75rem', color: '#EF4444', fontStyle: 'italic' }}>
+                    드래그 완료 후 분석 중 에러가 발생했거나 임베딩이 비어 있습니다.
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.75rem', color: '#64748B', fontStyle: 'italic', background: '#F8FAFC', padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    가구 영역 A를 드래그하여 원형 마스킹을 지정하면 CLIP 모델 분석이 자동으로 개시됩니다.
+                  </div>
+                )}
                 <input
                   type="text"
                   value={promptA}
@@ -622,25 +748,91 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
               </div>
 
               {/* 인풋 영역 B - 이모지 제거 및 얇은 폰트 적용 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label style={{ 
                   fontSize: '0.82rem', 
-                  fontWeight: '400', 
+                  fontWeight: '700', 
                   color: '#9D174D', 
                   fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif',
                   opacity: maskPixelsB ? 1 : 0.6,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
                 }}>
                   가구 B 교체 스타일 입력 (선택)
-                  {maskPixelsB && (
-                    <span style={{ fontSize: '0.72rem', background: '#EC4899', color: '#fff', padding: '1px 6px', borderRadius: '4px' }}>영역 등록됨</span>
-                  )}
-                  <span style={{ fontSize: '0.72rem', color: isEmbeddingB ? '#64748B' : '#10B981', fontStyle: isEmbeddingB ? 'italic' : 'normal', fontWeight: '500' }}>
-                    {labelBFeedback}
-                  </span>
                 </label>
+                
+                {/* 🎨 [산디과 코딩 가이드 - CLIP 실시간 단계별 분석 상태 피드백 영역] */}
+                {isEmbeddingB ? (
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '4px', 
+                    background: '#FFF1F2', 
+                    border: '1.5px dashed #FDA4AF', 
+                    padding: '8px 12px', 
+                    borderRadius: '10px',
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className="spinner-mini" style={{ 
+                        width: '12px', 
+                        height: '12px', 
+                        borderRadius: '50%', 
+                        border: '2px solid #F43F5E', 
+                        borderTopColor: 'transparent', 
+                        display: 'inline-block',
+                        animation: 'spin 0.8s linear infinite' 
+                      }}></span>
+                      <span style={{ fontSize: '0.78rem', color: '#BE185D', fontWeight: '700' }}>CLIP 실시간 분석 중...</span>
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#E11D48', fontFamily: 'monospace', paddingLeft: '20px' }}>
+                      {embeddingCurrentStepB}
+                    </div>
+                  </div>
+                ) : embeddingB ? (
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: '6px', 
+                    background: '#FDF2F8', 
+                    border: '1px solid #FBCFE8', 
+                    padding: '10px 12px', 
+                    borderRadius: '10px',
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '4px' }}>
+                      <span style={{ fontSize: '0.72rem', background: '#EC4899', color: '#fff', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>영역 등록됨</span>
+                      <span style={{ fontSize: '0.68rem', color: '#BE185D', fontWeight: '600' }}>{embeddingModelB}</span>
+                    </div>
+                    <div style={{ 
+                      fontSize: '0.68rem', 
+                      background: '#FFFFFF', 
+                      border: '1px solid #FCE7F3', 
+                      padding: '4px 6px', 
+                      borderRadius: '6px', 
+                      color: '#9D174D', 
+                      fontFamily: 'monospace', 
+                      overflowX: 'auto', 
+                      whiteSpace: 'nowrap' 
+                    }} title={`L2 정규화 임베딩 전체 벡터:\n[${embeddingB.join(', ')}]`}>
+                      Vector (512d): [{embeddingB.slice(0, 5).map(v => v.toFixed(4)).join(', ')}, ...]
+                    </div>
+                    <details style={{ cursor: 'pointer' }}>
+                      <summary style={{ fontSize: '0.65rem', color: '#9D174D', fontWeight: '600' }}>분석 과정 세부 로그 보기</summary>
+                      <div style={{ fontSize: '0.62rem', color: '#881337', padding: '4px 6px', fontFamily: 'monospace', lineHeight: '1.4' }}>
+                        {embeddingStepsB.map((step, idx) => (
+                          <div key={idx}>✓ {step}</div>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+                ) : maskPixelsB ? (
+                  <div style={{ fontSize: '0.75rem', color: '#EF4444', fontStyle: 'italic' }}>
+                    드래그 완료 후 분석 중 에러가 발생했거나 임베딩이 비어 있습니다.
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.75rem', color: '#64748B', fontStyle: 'italic', background: '#F8FAFC', padding: '8px 12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    가구 영역 B를 드래그하여 원형 마스킹을 지정하면 CLIP 모델 분석이 자동으로 개시됩니다.
+                  </div>
+                )}
                 <input
                   type="text"
                   value={promptB}

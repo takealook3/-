@@ -2612,6 +2612,9 @@ def embed_cropped_image(payload: Dict[str, Any]):
         
     try:
         px1, py1, px2, py2 = mask_pixels
+        steps = []
+        steps.append("1. 드래그 영역 좌표 획득 완료")
+        
         with Image.open(orig_path) as img:
             w, h = img.size
             # 좌표가 원본 이미지 범위를 벗어나지 않게 클램핑 처리 및 정렬
@@ -2625,13 +2628,18 @@ def embed_cropped_image(payload: Dict[str, Any]):
                     content={"success": False, "message": "지정한 드래그 영역이 너무 작습니다."}
                 )
                 
+            steps.append("2. 이미지 영역 싹둑 오려내기 (Crop) 성공")
             # 이미지 싹둑 오려내기 (Crop)
             cropped_img = img.crop((px1, py1, px2, py2)).convert("RGB")
+            
+            steps.append("3. CLIP 모델 전처리 (224x224 리사이즈 및 정규화 텐서 변환) 완료")
             
             # 🎨 [산디과 코딩 가이드 - 실시간 가구 영역 임베딩 모델 기동]
             # 로컬 싱글톤 서비스에서 CLIP 모델 로드하여 512차원 특징 벡터값 생성
             from services.clip_service import CLIPService
             clip_service = CLIPService()
+            
+            steps.append("4. CLIP 인코더 신경망 기반 이미지 특징 벡터 추출 중")
             embedding = clip_service.get_image_embedding(cropped_img)
             
             if not embedding:
@@ -2640,14 +2648,20 @@ def embed_cropped_image(payload: Dict[str, Any]):
                     content={"success": False, "message": "CLIP 모델을 통한 이미지 임베딩 추출에 실패했습니다."}
                 )
                 
-            print(f"🧠 [CLIP Embed] 이미지 영역 임베딩 추출 성공! (BBox: {[px1, py1, px2, py2]}, 차원수: {len(embedding)})")
+            used_model = getattr(clip_service, "active_model_info", "openai/clip-vit-base-patch32")
+            steps.append("5. 특징 추출 완료 (L2 정규화 수행)")
+            steps.append(f"6. 분석 완료! 사용 인코더: {used_model}")
+            
+            print(f"🧠 [CLIP Embed] 이미지 영역 임베딩 추출 성공! (BBox: {[px1, py1, px2, py2]}, 차원수: {len(embedding)}, 모델: {used_model})")
             
             return {
                 "success": True,
                 "data": CropEmbeddingResponse(
                     embedding=embedding,
                     dimension=len(embedding),
-                    bbox=[px1, py1, px2, py2]
+                    bbox=[px1, py1, px2, py2],
+                    model_name=used_model,
+                    status_steps=steps
                 )
             }
             

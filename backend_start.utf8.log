@@ -1,0 +1,28 @@
+﻿.\venv\Scripts\python.exe : C:\study\Mini-Project\backend\query.py:338: LangChainDeprecationWarning: The class `Chroma`
+ was deprecated in LangChain 0.2.9 and will be removed in 1.0. An updated version of the class exists in the `langchain
+-chroma package and should be used instead. To use it run `pip install -U `langchain-chroma` and import as `from `langc
+hain_chroma import Chroma``.
+At line:1 char:1
++ .\venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0. ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\study\Mini-P...mport Chroma``.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  law_db = Chroma(
+INFO:     Started server process [21840]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 10048] error while attempting to bind on address ('127.0.0.1', 8000): [winerror 10048] �� ���� �ּ�(���
+�����/��Ʈ��ũ �ּ�/��Ʈ)�� �ϳ��� ����� �� �ֽ��ϴ�
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+⚠️ 커스텀 노드 임포트 불가 (모킹 대체): No module named 'image_nodes'
+✅ [경로 확인] ComfyUI 홈 디렉터리 탐색 성공: C:\ComfyUI_windows_portable
+🔧 Gemini 임베딩 모델 및 ChromaDB 로드 중...
+  - 법령(Law) BM25 인덱스 로드 중 (캐시 파일 사용)...
+  - 체크리스트(Checklist) BM25 인덱스 로드 중 (캐시 파일 사용)...
+  - FAQ(Knowledge) BM25 인덱스 로드 중 (캐시 파일 사용)...
+  - 컬렉션별 RRF 앙상블 리트리버 결합 중...
+✅ RAG 시스템 초기화 성공!
+📊 [DB Metadata Map] DB1 스타일 이미지 맵 로드 성공: 28개 스타일 등록
+📊 [DB Metadata Map] DB2 평형대 추천 맵 로드 성공: 4개 평형대 등록

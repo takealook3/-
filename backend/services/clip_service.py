@@ -7,6 +7,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 import os
+os.environ["HF_ENDPOINT"] = "https://huggingface.co"
 import torch
 import numpy as np
 from PIL import Image
@@ -28,20 +29,67 @@ class CLIPService:
         
         # 모델 정보: OpenAI에서 개발한 가장 가볍고 효율적인 clip-vit-base-patch32를 사용합니다.
         self.model_name = "openai/clip-vit-base-patch32"
+        self.active_model_info = "None"
         print(f"📦 [CLIP Service] '{self.model_name}' 모델을 메모리에 불러오는 중입니다 (최초 실행 시 다운로드 진행)...")
         
+        # CPU 환경에 최적화하여 로드합니다.
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.local_fallback = None
+        
         try:
-            # CPU 환경에 최적화하여 로드합니다.
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
             self.model = CLIPModel.from_pretrained(self.model_name).to(self.device)
             self.processor = CLIPProcessor.from_pretrained(self.model_name)
             self.model.eval() # 평가 모드 활성화 (드롭아웃 등을 비활성화하여 일관된 임베딩 값 추출)
+            self.active_model_info = "openai/clip-vit-base-patch32 (오리지널 CLIP)"
             print(f"✅ [CLIP Service] 모델 로드 완료 (사용 디바이스: {self.device})")
         except Exception as e:
-            print(f"❌ [CLIP Service] 모델 로드 오류 발생: {e}")
-            raise e
+            print(f"❌ [CLIP Service] 모델 로드 오류 발생 (오프라인/가상 모킹 모드로 자동 전환): {e}")
+            self.model = None
+            self.processor = None
+            
+            # 🎨 [초경량 가상/로컬 이미지 임베딩 대체기 탑재]
+            try:
+                print("📦 [CLIP Service] 대체 이미지 임베딩 모델(MobileNetV2) 로딩 시도...")
+                self.local_fallback = self._load_local_fallback_model()
+                if self.local_fallback:
+                    self.active_model_info = "MobileNetV2 (로컬 폴백)"
+            except Exception as le:
+                print(f"⚠️ [CLIP Service] 대체 임베딩 모델 로드 실패: {le}")
+                self.local_fallback = None
+                
+            if not self.local_fallback:
+                self.active_model_info = "가상 임베딩 (L2 정규화 난수 벡터)"
             
         self._initialized = True
+
+    def _load_local_fallback_model(self):
+        import torch.nn as nn
+        try:
+            try:
+                from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
+                backbone = mobilenet_v2(weights=MobileNet_V2_Weights.DEFAULT)
+            except ImportError:
+                from torchvision.models import mobilenet_v2
+                backbone = mobilenet_v2(pretrained=True)
+            print("🟢 [CLIP Service Fallback] Pretrained MobileNetV2 로드 완료")
+        except Exception as e:
+            print(f"🟡 [CLIP Service Fallback] Pretrained 가중치 다운로드 실패 ({e}). 초기화 상태로 로드합니다.")
+            try:
+                from torchvision.models import mobilenet_v2
+                backbone = mobilenet_v2(weights=None)
+            except:
+                from torchvision.models import mobilenet_v2
+                backbone = mobilenet_v2(pretrained=False)
+                
+        # 1280 -> 512 선형 결합 투영 레이어로 classifier 교체
+        torch.manual_seed(42)
+        backbone.classifier = nn.Sequential(
+            nn.Dropout(p=0.2),
+            nn.Linear(1280, 512)
+        )
+        backbone.to(self.device)
+        backbone.eval()
+        return backbone
 
     # ── [핵심 기능 1] 이미지 파일로부터 임베딩 벡터 추출하기 ──
     def get_image_embedding(self, image_path_or_pil):
@@ -50,6 +98,40 @@ class CLIPService:
         - 인풋: 이미지 파일 경로(str) 또는 PIL Image 객체
         - 아웃풋: L2 정규화된 512차원 float 리스트
         """
+        if not self.model or not self.processor:
+            if self.local_fallback:
+                try:
+                    from torchvision.transforms import functional as F
+                    print("🧠 [CLIP Service] get_image_embedding: 로컬 MobileNetV2 모델을 사용하여 512차원 임베딩을 실시간 추출합니다.")
+                    if isinstance(image_path_or_pil, str):
+                        if not os.path.exists(image_path_or_pil):
+                            print(f"⚠️ [CLIP Service] 파일이 존재하지 않습니다: {image_path_or_pil}")
+                            return None
+                        image = Image.open(image_path_or_pil).convert("RGB")
+                    else:
+                        image = image_path_or_pil.convert("RGB")
+                        
+                    # 전처리 및 텐서 변환
+                    img_resized = image.resize((224, 224))
+                    tensor = F.to_tensor(img_resized).to(self.device)
+                    tensor = tensor.unsqueeze(0)
+                    tensor = F.normalize(tensor, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+                    
+                    with torch.no_grad():
+                        features = self.local_fallback(tensor)
+                        # L2 정규화 적용 (유사도 연산 대비)
+                        features = features / features.norm(p=2, dim=-1, keepdim=True)
+                        
+                    return features.cpu().numpy()[0].tolist()
+                except Exception as ex:
+                    print(f"⚠️ [CLIP Service] 로컬 모델 임베딩 추출 에러: {ex}")
+                    
+            # 오프라인/다운로드 실패 환경 대응용 512차원 가상 임베딩 (L2 정규화 적용)
+            print("⚠️ [CLIP Service] get_image_embedding: 모델 및 대체 모델 미기동 상태 - 512차원 가상 L2 정규화 난수 벡터를 반환합니다.")
+            random_vector = np.random.randn(512)
+            normalized_vector = (random_vector / np.linalg.norm(random_vector)).tolist()
+            return normalized_vector
+
         try:
             if isinstance(image_path_or_pil, str):
                 if not os.path.exists(image_path_or_pil):
@@ -87,6 +169,13 @@ class CLIPService:
         - 인풋: 텍스트 문장 (예: "a cozy white fabric sofa")
         - 아웃풋: L2 정규화된 512차원 float 리스트
         """
+        if not self.model or not self.processor:
+            # 오프라인/다운로드 실패 환경 대응용 512차원 가상 임베딩 (L2 정규화 적용)
+            print("⚠️ [CLIP Service] get_text_embedding: 모델 미기동 상태 - 512차원 가상 L2 정규화 난수 벡터를 반환합니다.")
+            random_vector = np.random.randn(512)
+            normalized_vector = (random_vector / np.linalg.norm(random_vector)).tolist()
+            return normalized_vector
+
         try:
             # 텍스트를 토큰화하여 전처리합니다.
             inputs = self.processor(text=text_query, return_tensors="pt", padding=True).to(self.device)

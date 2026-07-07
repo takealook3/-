@@ -788,5 +788,7 @@ class CropEmbeddingResponse(BaseModel):
     embedding: List[float] = Field(..., description="512차원의 정규화된 CLIP 임베딩 벡터 값")
     dimension: int = Field(512, description="벡터 차원 크기 (기본값: 512)")
     bbox: List[int] = Field(..., description="크롭에 사용된 실제 픽셀 좌표 바운딩 박스 [px1, py1, px2, py2]")
+    model_name: str = Field("", description="분석에 사용된 실제 이미지 인코더 모델 이름")
+    status_steps: List[str] = Field([], description="CLIP 분석 처리 단계 리스트")
 
 
