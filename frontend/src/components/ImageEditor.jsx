@@ -832,25 +832,27 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                           <span style={{ fontSize: '0.68rem', color: '#1E40AF', background: '#EFF6FF', padding: '3px 8px', borderRadius: '4px', fontWeight: '400', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', whiteSpace: 'nowrap' }}>
                             유사도 {Math.round(item.similarity * 100)}%
                           </span>
-                          <a 
-                            href={item.purchase_link} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            style={{ 
-                              fontSize: '0.72rem', 
-                              fontWeight: '400', 
-                              color: '#fff', 
-                              background: 'var(--primary)', 
-                              padding: '6px 14px', 
-                              borderRadius: '6px',
-                              textDecoration: 'none',
-                              whiteSpace: 'nowrap',
-                              textAlign: 'center',
-                              fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
-                            }}
-                          >
-                            구매 링크 ↗
-                          </a>
+                          {item.purchase_link && (
+                            <a 
+                              href={item.purchase_link} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              style={{ 
+                                fontSize: '0.72rem', 
+                                fontWeight: '400', 
+                                color: '#fff', 
+                                background: 'var(--primary)', 
+                                padding: '6px 14px', 
+                                borderRadius: '6px',
+                                textDecoration: 'none',
+                                whiteSpace: 'nowrap',
+                                textAlign: 'center',
+                                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+                              }}
+                            >
+                              구매 링크 ↗
+                            </a>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -910,25 +912,27 @@ export default function ImageEditor({ imageId, sessionId, originalImageUrl, onGe
                           <span style={{ fontSize: '0.68rem', color: '#1E40AF', background: '#EFF6FF', padding: '3px 8px', borderRadius: '4px', fontWeight: '400', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif', whiteSpace: 'nowrap' }}>
                             유사도 {Math.round(item.similarity * 100)}%
                           </span>
-                          <a 
-                            href={item.purchase_link} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            style={{ 
-                              fontSize: '0.72rem', 
-                              fontWeight: '400', 
-                              color: '#fff', 
-                              background: 'var(--primary)', 
-                              padding: '6px 14px', 
-                              borderRadius: '6px',
-                              textDecoration: 'none',
-                              whiteSpace: 'nowrap',
-                              textAlign: 'center',
-                              fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
-                            }}
-                          >
-                            구매 링크 ↗
-                          </a>
+                          {item.purchase_link && (
+                            <a 
+                              href={item.purchase_link} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              style={{ 
+                                fontSize: '0.72rem', 
+                                fontWeight: '400', 
+                                color: '#fff', 
+                                background: 'var(--primary)', 
+                                padding: '6px 14px', 
+                                borderRadius: '6px',
+                                textDecoration: 'none',
+                                whiteSpace: 'nowrap',
+                                textAlign: 'center',
+                                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+                              }}
+                            >
+                              구매 링크 ↗
+                            </a>
+                          )}
                         </div>
                       </div>
                     </div>
