@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool # [이유: 동기 함수를 
 from typing import Optional, Dict, Any
 import uuid, os, time, datetime, sys, json, shutil
 import websocket # [이유: ComfyUI 서버와 실시간 양방향 이벤트를 주고받기 위해 websocket-client 패키지를 임포트합니다.]
-from PIL import Image
+from PIL import Image, ImageChops, ImageFilter
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
@@ -504,8 +504,15 @@ def translate_prompt_to_english(prompt: str) -> str:
     # Gemini API Key 유실 및 네트워크 오프라인 시에도 고품질 영문 태그를 조합해 냅니다.
     # =====================================================================
     style_keywords = {
-        "우드": "(warm wooden texture interior:1.25)",
-        "나무": "(warm wooden texture interior:1.25)",
+        # [한글 주석] 형태 키워드(원형, 사각형 등)를 사전에 등록하여 영문 이미지 생성 프롬프트에 형상을 강제 주입합니다.
+        "원형": "(round shape, circular:1.35)",
+        "둥근": "(round shape, circular:1.35)",
+        "타원형": "(oval shape, elliptical:1.35)",
+        "사각": "(rectangular shape, square:1.25)",
+        "사각형": "(rectangular shape, square:1.25)",
+        # [한글 주석] 카페트나 소파 등 배경이 나무색으로 오염되어 얼룩지는 현상을 방지하기 위해 interior 태그를 빼고 자재 질감(material texture)만 묘사합니다.
+        "우드": "(warm wooden material texture:1.25)",
+        "나무": "(warm wooden material texture:1.25)",
         "북유럽": "(scandinavian cozy style:1.25)",
         "미니멀": "(minimalist clean style:1.25)",
         "화이트": "(bright gallery white theme:1.25)",
@@ -548,20 +555,22 @@ def translate_prompt_to_english(prompt: str) -> str:
     }
     
     furniture_keywords = {
-        "소파": "(modern fabric sofa:1.25)",
-        "쇼파": "(modern fabric sofa:1.25)",
-        "침대": "(cozy premium bed:1.25)",
-        "테이블": "(minimalist wooden table:1.20)",
-        "식탁": "(minimalist wooden table:1.20)",
-        "의자": "(accent chair:1.20)",
-        "책상": "(minimalist workspace desk:1.20)",
-        "책장": "(wooden bookshelf:1.15)",
-        "조명": "(warm ambient lighting:1.20)",
-        "불빛": "(warm ambient lighting:1.20)",
-        "식물": "(indoor green plants decor:1.15)",
-        "화분": "(indoor green plants decor:1.15)",
-        "커튼": "(soft flowing curtains:1.15)",
-        "거울": "(modern wall mirror:1.15)",
+        # [한글 주석] 인페인팅 구역 내에 여러 개의 가구가 기괴하게 합성되는 중복 생성 현상을 막기 위해, a single 지시어를 강제 부여하여 단수 오브젝트만 생성하도록 유도합니다.
+        "소파": "(a single modern fabric sofa:1.25)",
+        "쇼파": "(a single modern fabric sofa:1.25)",
+        "침대": "(a single cozy premium bed:1.25)",
+        # [한글 주석] 테이블이 뭉개지거나 그림자가 없어 동화되지 않는 문제를 방지하기 위해 구체적인 상판/다리 묘사(flat tabletop, slender legs)와 사실적 그림자(realistic drop shadows, ambient occlusion) 태그를 주입합니다.
+        "테이블": "(a single round wooden coffee table with flat tabletop and slender legs:1.35), (realistic drop shadows:1.25), (ambient occlusion:1.15)",
+        "식탁": "(a single round wooden coffee table with flat tabletop and slender legs:1.35), (realistic drop shadows:1.25), (ambient occlusion:1.15)",
+        "의자": "(a single accent chair:1.20)",
+        "책상": "(a single minimalist workspace desk:1.20)",
+        "책장": "(a single wooden bookshelf:1.15)",
+        "조명": "(a single warm ambient lighting:1.20)",
+        "불빛": "(a single warm ambient lighting:1.20)",
+        "식물": "(a single indoor green plants decor:1.15)",
+        "화분": "(a single indoor green plants decor:1.15)",
+        "커튼": "(a single soft flowing curtains:1.15)",
+        "거울": "(a single modern wall mirror:1.15)",
         "벽": "wall texture",
         "바닥": "floor texture",
     }
@@ -1171,13 +1180,14 @@ def process_mock_image(
                     furniture_src = draw_mock_furniture_vector(box_w, box_h, furniture_key)
                 
                 if furniture_src:
-                    # 4-1. RGB 이미지인 경우 화이트 배경을 제거하여 투명 채널(RGBA) 생성
+                    # 4-1. [버그 해결] 흰색 배경 제거(누끼) 기준을 조금 더 선명하게 조정 (235 -> 220)
+                    # 이를 통해 모킹 가구 합성 시 테두리에 하얀색 지저분한 사각형 라인이 남는 현상을 없앱니다.
                     if furniture_src.mode != "RGBA":
                         rgba = furniture_src.convert("RGBA")
                         data = rgba.getdata()
                         new_data = []
                         for item in data:
-                            if item[0] > 235 and item[1] > 235 and item[2] > 235:
+                            if item[0] > 220 and item[1] > 220 and item[2] > 220:
                                 new_data.append((255, 255, 255, 0))
                             else:
                                 new_data.append(item)
@@ -1705,8 +1715,15 @@ def translate_prompt_to_english_strict(prompt: str) -> tuple[str, bool]:
 
     # [로컬 사전 룰 기반 Fallback 엔진 작동]
     style_keywords = {
-        "우드": "(warm wooden texture interior:1.25)",
-        "나무": "(warm wooden texture interior:1.25)",
+        # [한글 주석] 엄격 번역 모드(strict)의 로컬 사전에도 형태 키워드(원형, 사각형 등)를 등록하여 번역 시 모양을 명확히 전달하도록 보장합니다.
+        "원형": "(round shape, circular:1.35)",
+        "둥근": "(round shape, circular:1.35)",
+        "타원형": "(oval shape, elliptical:1.35)",
+        "사각": "(rectangular shape, square:1.25)",
+        "사각형": "(rectangular shape, square:1.25)",
+        # [한글 주석] 엄격 번역 사전에서도 배경 얼룩 왜곡을 방지하기 위해 interior 단어를 제외하고 자재 텍스처만 묘사합니다.
+        "우드": "(warm wooden material texture:1.25)",
+        "나무": "(warm wooden material texture:1.25)",
         "북유럽": "(scandinavian cozy style:1.25)",
         "미니멀": "(minimalist clean style:1.25)",
         "화이트": "(bright gallery white theme:1.25)",
@@ -1721,7 +1738,7 @@ def translate_prompt_to_english_strict(prompt: str) -> tuple[str, bool]:
         "거실": "living room space",
         "침실": "cozy bedroom space",
         "방": "room design",
-        "소파": "modern sofa",
+        "소파": "a single modern sofa",
         "바꿔줘": "",
         "변경해줘": "",
         "스타일": "style"
@@ -2705,54 +2722,53 @@ def edit_image(req: ImageEditRequest):
         result_path = os.path.join(PROJECT_ROOT, "results", real_filename)
         if os.path.exists(result_path) and os.path.exists(orig_path):
             try:
-                with Image.open(orig_path) as orig_img:
-                    orig_w, orig_h = orig_img.size
-                with Image.open(result_path) as res_img:
-                    # [한글 주석] 워크플로우에 AI 1080p 업스케일러 노드가 추가되었으므로 최종 정합 해상도 목표를 세로 1080 픽셀 기준으로 수정합니다.
-                    ratio = orig_w / orig_h
-                    target_w = int(1080 * ratio)
-                    target_h = 1080
-                    if res_img.size != (target_w, target_h):
-                        print(f"📏 [Resizing] 결과 이미지 해상도({res_img.size})를 AI 1080p 업스케일 목표 해상도({target_w}x{target_h})로 정밀 복원 리사이징합니다.")
-                        resized_img = res_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
-                        resized_img.save(result_path, "PNG" if real_filename.lower().endswith(".png") else "JPEG")
-            except Exception as resize_err:
-                print(f"⚠️ [Resizing] 결과 이미지 원본 해상도 복원 중 에러: {resize_err}")
-                from PIL import ImageChops
+                # [한글 주석] 전역 네임스페이스의 Image 객체 충돌 방지를 위해 로컬 재임포트를 생략하고 전역 PIL 라이브러리를 사용합니다.
                 
-                # 1. 이미지 로드 및 기본 객체 생성
+                # 1. 이미지 로드
                 orig_img = Image.open(orig_path).convert("RGB")
                 orig_w, orig_h = orig_img.size
                 
                 res_img = Image.open(result_path).convert("RGB")
-                # 결과 이미지를 원본 크기로 리사이징
-                if res_img.size != (orig_w, orig_h):
-                    res_img = res_img.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
+                res_w, res_h = res_img.size
                 
-                # 2. 마스크 로드 및 채널 통일화
+                # [한글 주석] 워크플로우에 AI 1080p 업스케일러 노드가 추가되었으므로 최종 정합 해상도 목표를 세로 1080 픽셀 기준으로 수정 및 통일합니다.
+                ratio = orig_w / orig_h
+                target_w = int(1080 * ratio)
+                target_h = 1080
+                
+                # 결과 이미지를 1080p 목표 해상도로 리사이징
+                if res_img.size != (target_w, target_h):
+                    print(f"📏 [Resizing] 결과 이미지 해상도({res_img.size})를 AI 1080p 업스케일 목표 해상도({target_w}x{target_h})로 정밀 복원 리사이징합니다.")
+                    res_img = res_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                
+                # 원본 이미지도 결과 이미지 해상도(target_w, target_h)와 정합하기 위해 동일 크기로 리사이징
+                orig_img_resized = orig_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                
+                # 2. 마스크 로드 및 채널 통일화 (결과 해상도에 맞추어 보존 리사이징)
                 mask_a = Image.open(mask_path_a).convert("L")
-                if mask_a.size != (orig_w, orig_h):
-                    mask_a = mask_a.resize((orig_w, orig_h), Image.Resampling.NEAREST)
+                mask_a = mask_a.resize((target_w, target_h), Image.Resampling.BILINEAR)
                 
                 final_mask = mask_a
                 
                 # 2단계 마스크가 활성화되어 존재할 경우 픽셀별 최댓값(Chops.lighter)으로 두 마스크를 합침
                 if mask_path_b and os.path.exists(mask_path_b):
                     mask_b = Image.open(mask_path_b).convert("L")
-                    if mask_b.size != (orig_w, orig_h):
-                        mask_b = mask_b.resize((orig_w, orig_h), Image.Resampling.NEAREST)
+                    mask_b = mask_b.resize((target_w, target_h), Image.Resampling.BILINEAR)
                     final_mask = ImageChops.lighter(final_mask, mask_b)
                 
-                # 3. 원본 이미지와 인페인팅 결과 이미지를 최종 마스크 기준으로 합성
-                composite_img = Image.composite(res_img, orig_img, final_mask)
+                # [한글 주석] 마스크 경계선을 부드럽게 만들어 합성 시 테두리가 더 자연스럽게 뭉개지도록 약간의 가우시안 블러(Feathering)를 마스크에 적용합니다.
+                final_mask = final_mask.filter(ImageFilter.GaussianBlur(radius=3))
+                
+                # 3. 원본 이미지와 인페인팅 결과 이미지를 최종 마스크 기준으로 정밀 합성 (배경 소파/카페트 완전 복원)
+                composite_img = Image.composite(res_img, orig_img_resized, final_mask)
                 
                 # 4. 포맷 매치 후 저장
                 save_format = "PNG" if real_filename.lower().endswith(".png") else "JPEG"
                 composite_img.save(result_path, save_format)
-                print(f"🎨 [Inpaint Precision Fix] 마스크 영역 합성 완료. 비마스크 영역 원본 100% 보존. 저장 경로: {result_path}")
+                print(f"🎨 [Inpaint Precision Fix] 마스크 영역 상시 정밀 합성 및 깃털 효과 블렌딩 적용 완료. 저장 경로: {result_path}")
                 
             except Exception as r_err:
-                print(f"⚠️ 원본 종횡비 복원 및 마스크 합성 중 예외: {r_err}")
+                print(f"⚠️ 원본 해상도 복원 및 마스크 합성 중 예외: {r_err}")
                 import traceback
                 traceback.print_exc()
                 
@@ -3334,14 +3350,17 @@ def search_similar_products(payload: Dict[str, Any]):
                         best_box = None
                         best_conf = 0.0
                         
-                        # 가구 및 유사 객체 영역을 정밀하게 탐색
+                        # 🎯 [버그 해결] COCO 데이터셋 기준 가구류 클래스 ID만 필터링하여 정밀 재크롭 적용
+                        # 56: chair, 57: couch (sofa), 58: potted plant, 59: bed, 60: dining table
+                        furniture_class_ids = {56, 57, 58, 59, 60}
                         for r in yolo_results:
                             boxes = r.boxes
                             for box in boxes:
+                                cls_id = int(box.cls[0].item())
                                 conf = float(box.conf[0].item())
-                                if conf > best_conf and conf >= 0.30:
+                                if cls_id in furniture_class_ids and conf > best_conf and conf >= 0.30:
                                     best_conf = conf
-                                    best_box = box.xyxy[0].tolist() # [x1, y1, x2, y2]
+                                    best_box = box.xyxy[0].tolist()
                                     
                         if best_box:
                             rx1, ry1, rx2, ry2 = [int(coord) for coord in best_box]
