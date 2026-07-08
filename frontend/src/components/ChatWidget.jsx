@@ -234,12 +234,6 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
               }}
             >
               <div 
-                onClick={() => {
-                  if (msg.sender === 'ai') {
-                    // AI의 조언 답변 텍스트를 클릭하면 자동으로 챗봇에 입력되어 RAG 질의응답이 연쇄적으로 동작하게 합니다.
-                    handleSend(msg.text);
-                  }
-                }}
                 style={{
                   maxWidth: '85%',
                   padding: '12px 16px',
@@ -250,16 +244,9 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
                   fontSize: '0.9rem',
                   lineHeight: '1.5',
                   boxShadow: '0 2px 6px rgba(43, 53, 48, 0.05)',
-                  cursor: msg.sender === 'ai' ? 'pointer' : 'default',
+                  cursor: 'default',
                   transition: 'all 0.2s ease'
                 }}
-                onMouseEnter={(e) => {
-                  if (msg.sender === 'ai') e.currentTarget.style.backgroundColor = '#F5ECE5';
-                }}
-                onMouseLeave={(e) => {
-                  if (msg.sender === 'ai') e.currentTarget.style.backgroundColor = '#FCFAF7';
-                }}
-                title={msg.sender === 'ai' ? "클릭 시 이 텍스트로 질문을 이어갑니다 💬" : undefined}
               >
                 {msg.text}
               </div>
@@ -315,9 +302,6 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
                   <div className="kakao-dot" />
                   <div className="kakao-dot" />
                 </div>
-                <span style={{ color: '#7A6C62', fontSize: '0.78rem', paddingLeft: '4px', fontWeight: '500' }}>
-                  {imageId ? "AI가 인테리어를 분석하고 새 스타일로 변환하는 중입니다..." : "AI 스타일리스트가 공간 정보를 분석하고 있습니다..."}
-                </span>
               </div>
             )}
 

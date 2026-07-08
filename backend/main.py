@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool # [이유: 동기 함수를 
 from typing import Optional, Dict, Any
 import uuid, os, time, datetime, sys, json, shutil
 import websocket # [이유: ComfyUI 서버와 실시간 양방향 이벤트를 주고받기 위해 websocket-client 패키지를 임포트합니다.]
-from PIL import Image
+from PIL import Image, ImageChops, ImageFilter
 
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8')
@@ -466,11 +466,11 @@ def translate_prompt_to_english(prompt: str) -> str:
             print(f"🌐 [Translate] 한글/한영혼용 프롬프트 번역 및 보강 시작: '{prompt}'")
             system_prompt = (
                 "You are an expert interior designer and prompt engineer for Stable Diffusion.\n"
-                "Your task is to translate and expand the following Korean interior/furniture prompt into a highly descriptive English prompt suitable for inpainting/redesign.\n"
+                "Your task is to translate and expand the following Korean furniture prompt into a highly descriptive English prompt suitable for inpainting.\n"
                 "CRITICAL: Ensure that the main object or furniture (e.g. bookshelf, carpet, table, sofa) is placed at the very beginning of the prompt.\n"
-                "Improve prompt understanding and clarity by expanding the core style with details such as textures (e.g. boucle fabric, oak wood, brushed brass), lighting (e.g. soft indirect ambient lighting, warm LED strip), color palette, and decor accessories.\n"
-                "Use Stable Diffusion weight syntax like (keyword:weight) for key objects or style words to emphasize them (e.g., '(cozy scandinavian bedroom:1.25)', '(warm wooden textures:1.2)').\n"
-                "Do NOT include any humans, people, man, woman, child, or animals. The scene must represent a completely empty, uninhabited architectural room design space.\n"
+                "Improve prompt understanding by expanding details strictly related to the target furniture itself (e.g., textures like oak wood, boucle fabric, brushed metal, color palette).\n"
+                "WARNING: Do NOT include or describe the floor, floorings, walls, background, or other room structures to prevent inpainting model from altering the existing background area (like carpets, tiles, or walls).\n"
+                "Do NOT include any humans, people, man, woman, child, or animals.\n"
                 "Keep the output as a clean, single-line comma-separated list of descriptive words, without any explanation, markdown, or intro.\n\n"
                 f"Korean: {prompt}\n"
                 "English Prompt:"
@@ -504,8 +504,15 @@ def translate_prompt_to_english(prompt: str) -> str:
     # Gemini API Key 유실 및 네트워크 오프라인 시에도 고품질 영문 태그를 조합해 냅니다.
     # =====================================================================
     style_keywords = {
-        "우드": "(warm wooden texture interior:1.25)",
-        "나무": "(warm wooden texture interior:1.25)",
+        # [한글 주석] 형태 키워드(원형, 사각형 등)를 사전에 등록하여 영문 이미지 생성 프롬프트에 형상을 강제 주입합니다.
+        "원형": "(round shape, circular:1.35)",
+        "둥근": "(round shape, circular:1.35)",
+        "타원형": "(oval shape, elliptical:1.35)",
+        "사각": "(rectangular shape, square:1.25)",
+        "사각형": "(rectangular shape, square:1.25)",
+        # [한글 주석] 카페트나 소파 등 배경이 나무색으로 오염되어 얼룩지는 현상을 방지하기 위해 interior 태그를 빼고 자재 질감(material texture)만 묘사합니다.
+        "우드": "(warm wooden material texture:1.25)",
+        "나무": "(warm wooden material texture:1.25)",
         "북유럽": "(scandinavian cozy style:1.25)",
         "미니멀": "(minimalist clean style:1.25)",
         "화이트": "(bright gallery white theme:1.25)",
@@ -548,20 +555,22 @@ def translate_prompt_to_english(prompt: str) -> str:
     }
     
     furniture_keywords = {
-        "소파": "(modern fabric sofa:1.25)",
-        "쇼파": "(modern fabric sofa:1.25)",
-        "침대": "(cozy premium bed:1.25)",
-        "테이블": "(minimalist wooden table:1.20)",
-        "식탁": "(minimalist wooden table:1.20)",
-        "의자": "(accent chair:1.20)",
-        "책상": "(minimalist workspace desk:1.20)",
-        "책장": "(wooden bookshelf:1.15)",
-        "조명": "(warm ambient lighting:1.20)",
-        "불빛": "(warm ambient lighting:1.20)",
-        "식물": "(indoor green plants decor:1.15)",
-        "화분": "(indoor green plants decor:1.15)",
-        "커튼": "(soft flowing curtains:1.15)",
-        "거울": "(modern wall mirror:1.15)",
+        # [한글 주석] 인페인팅 구역 내에 여러 개의 가구가 기괴하게 합성되는 중복 생성 현상을 막기 위해, a single 지시어를 강제 부여하여 단수 오브젝트만 생성하도록 유도합니다.
+        "소파": "(a single modern fabric sofa:1.25)",
+        "쇼파": "(a single modern fabric sofa:1.25)",
+        "침대": "(a single cozy premium bed:1.25)",
+        # [한글 주석] 테이블이 뭉개지거나 그림자가 없어 동화되지 않는 문제를 방지하기 위해 구체적인 상판/다리 묘사(flat tabletop, slender legs)와 사실적 그림자(realistic drop shadows, ambient occlusion) 태그를 주입합니다.
+        "테이블": "(a single round wooden coffee table with flat tabletop and slender legs:1.35), (realistic drop shadows:1.25), (ambient occlusion:1.15)",
+        "식탁": "(a single round wooden coffee table with flat tabletop and slender legs:1.35), (realistic drop shadows:1.25), (ambient occlusion:1.15)",
+        "의자": "(a single accent chair:1.20)",
+        "책상": "(a single minimalist workspace desk:1.20)",
+        "책장": "(a single wooden bookshelf:1.15)",
+        "조명": "(a single warm ambient lighting:1.20)",
+        "불빛": "(a single warm ambient lighting:1.20)",
+        "식물": "(a single indoor green plants decor:1.15)",
+        "화분": "(a single indoor green plants decor:1.15)",
+        "커튼": "(a single soft flowing curtains:1.15)",
+        "거울": "(a single modern wall mirror:1.15)",
         "벽": "wall texture",
         "바닥": "floor texture",
     }
@@ -688,7 +697,7 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 
             # 3. 긍정 프롬프트 1 주입 (Node 6)
             if "prompt" in parameters:
-                prompt_api_data["6"]["inputs"]["text"] = f"{parameters['prompt']}, high quality, 8k"
+                prompt_api_data["6"]["inputs"]["text"] = f"{parameters['prompt']}, proper scale, proportionate size, harmonized with surrounding furniture context, high quality, 8k"
                 print(f"✅ [inpainting_API] 긍정 프롬프트 1 주입: {parameters['prompt'][:50]}...")
                 
             # 4. KSampler 1 파라미터 주입 (Node 3)
@@ -699,9 +708,22 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 prompt_api_data["3"]["inputs"]["steps"] = int(parameters["steps"])
             if "cfg" in parameters:
                 prompt_api_data["3"]["inputs"]["cfg"] = float(parameters["cfg"])
+            
             if "denoise" in parameters:
-                prompt_api_data["3"]["inputs"]["denoise"] = float(parameters["denoise"])
-                
+                raw_denoise = float(parameters["denoise"])
+                # denoise가 1.0(0.95 이상)으로 유입되면 공간 구조가 왜곡되므로 0.65 황금 입체 가이드 비율로 자동 캡핑합니다.
+                prompt_api_data["3"]["inputs"]["denoise"] = 0.65 if raw_denoise >= 0.95 else raw_denoise
+                print(f"⚙️ [inpainting_API] KSampler 1 Denoise 강도 조절: {prompt_api_data['3']['inputs']['denoise']} (원본 입력: {raw_denoise})")
+            else:
+                # 파라미터 미전달 시 원래 가구의 형태와 그림자를 35% 수준으로 완벽 참조하는 0.65 디폴트 지정
+                prompt_api_data["3"]["inputs"]["denoise"] = 0.65
+                print("⚙️ [inpainting_API] KSampler 1 Denoise 디폴트 값 주입: 0.65 (공간 투시 보존)")
+
+            # VAE 인코더 마스크 가중치 패딩(grow_mask_by) 확장 적용 (주변 공간 컨텍스트 64px 조화로 꽉참 현상 방지)
+            if "10" in prompt_api_data:
+                prompt_api_data["10"]["inputs"]["grow_mask_by"] = 64
+                print("📐 [inpainting_API] VAEEncode 1 grow_mask_by 확장: 64 (주변 공간 구조 대조)")
+
             # ─── 동적 1/2단계 분기 판별 ───
             img_b = parameters.get("image_filename_b")
             if img_b and img_b != "":
@@ -709,9 +731,9 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 print("🔗 [inpainting_API] 2차 수선 활성화 (2단계 릴레이 파이프라인)")
                 prompt_api_data["18"]["inputs"]["image"] = img_b
                 if "prompt_b" in parameters and parameters["prompt_b"]:
-                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt_b']}, high quality, 8k"
+                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt_b']}, proper scale, proportionate size, harmonized with surrounding furniture context, high quality, 8k"
                 else:
-                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt']}, high quality, 8k"
+                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt']}, proper scale, proportionate size, harmonized with surrounding furniture context, high quality, 8k"
                 
                 if "seed" in parameters:
                     prompt_api_data["15"]["inputs"]["seed"] = int(parameters["seed"]) + 13
@@ -719,8 +741,16 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                     prompt_api_data["15"]["inputs"]["steps"] = int(parameters["steps"])
                 if "cfg" in parameters:
                     prompt_api_data["15"]["inputs"]["cfg"] = float(parameters["cfg"])
+                
                 if "denoise" in parameters:
-                    prompt_api_data["15"]["inputs"]["denoise"] = float(parameters["denoise"])
+                    raw_denoise_b = float(parameters["denoise"])
+                    prompt_api_data["15"]["inputs"]["denoise"] = 0.65 if raw_denoise_b >= 0.95 else raw_denoise_b
+                    print(f"⚙️ [inpainting_API] KSampler 2 Denoise 강도 조절: {prompt_api_data['15']['inputs']['denoise']}")
+                
+                if "14" in prompt_api_data:
+                    prompt_api_data["14"]["inputs"]["grow_mask_by"] = 64
+                    print("📐 [inpainting_API] VAEEncode 2 grow_mask_by 확장: 64")
+
                 # 최종 저장은 Node 16 (2단계 디코드) 결과물 사용
                 prompt_api_data["9"]["inputs"]["images"] = ["16", 0]
             else:
@@ -1171,13 +1201,14 @@ def process_mock_image(
                     furniture_src = draw_mock_furniture_vector(box_w, box_h, furniture_key)
                 
                 if furniture_src:
-                    # 4-1. RGB 이미지인 경우 화이트 배경을 제거하여 투명 채널(RGBA) 생성
+                    # 4-1. [버그 해결] 흰색 배경 제거(누끼) 기준을 조금 더 선명하게 조정 (235 -> 220)
+                    # 이를 통해 모킹 가구 합성 시 테두리에 하얀색 지저분한 사각형 라인이 남는 현상을 없앱니다.
                     if furniture_src.mode != "RGBA":
                         rgba = furniture_src.convert("RGBA")
                         data = rgba.getdata()
                         new_data = []
                         for item in data:
-                            if item[0] > 235 and item[1] > 235 and item[2] > 235:
+                            if item[0] > 220 and item[1] > 220 and item[2] > 220:
                                 new_data.append((255, 255, 255, 0))
                             else:
                                 new_data.append(item)
@@ -1705,8 +1736,15 @@ def translate_prompt_to_english_strict(prompt: str) -> tuple[str, bool]:
 
     # [로컬 사전 룰 기반 Fallback 엔진 작동]
     style_keywords = {
-        "우드": "(warm wooden texture interior:1.25)",
-        "나무": "(warm wooden texture interior:1.25)",
+        # [한글 주석] 엄격 번역 모드(strict)의 로컬 사전에도 형태 키워드(원형, 사각형 등)를 등록하여 번역 시 모양을 명확히 전달하도록 보장합니다.
+        "원형": "(round shape, circular:1.35)",
+        "둥근": "(round shape, circular:1.35)",
+        "타원형": "(oval shape, elliptical:1.35)",
+        "사각": "(rectangular shape, square:1.25)",
+        "사각형": "(rectangular shape, square:1.25)",
+        # [한글 주석] 엄격 번역 사전에서도 배경 얼룩 왜곡을 방지하기 위해 interior 단어를 제외하고 자재 텍스처만 묘사합니다.
+        "우드": "(warm wooden material texture:1.25)",
+        "나무": "(warm wooden material texture:1.25)",
         "북유럽": "(scandinavian cozy style:1.25)",
         "미니멀": "(minimalist clean style:1.25)",
         "화이트": "(bright gallery white theme:1.25)",
@@ -1721,7 +1759,7 @@ def translate_prompt_to_english_strict(prompt: str) -> tuple[str, bool]:
         "거실": "living room space",
         "침실": "cozy bedroom space",
         "방": "room design",
-        "소파": "modern sofa",
+        "소파": "a single modern sofa",
         "바꿔줘": "",
         "변경해줘": "",
         "스타일": "style"
@@ -2706,54 +2744,65 @@ def edit_image(req: ImageEditRequest):
         result_path = os.path.join(PROJECT_ROOT, "results", real_filename)
         if os.path.exists(result_path) and os.path.exists(orig_path):
             try:
-                with Image.open(orig_path) as orig_img:
-                    orig_w, orig_h = orig_img.size
-                with Image.open(result_path) as res_img:
-                    # [한글 주석] 워크플로우에 AI 1080p 업스케일러 노드가 추가되었으므로 최종 정합 해상도 목표를 세로 1080 픽셀 기준으로 수정합니다.
-                    ratio = orig_w / orig_h
-                    target_w = int(1080 * ratio)
-                    target_h = 1080
-                    if res_img.size != (target_w, target_h):
-                        print(f"📏 [Resizing] 결과 이미지 해상도({res_img.size})를 AI 1080p 업스케일 목표 해상도({target_w}x{target_h})로 정밀 복원 리사이징합니다.")
-                        resized_img = res_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
-                        resized_img.save(result_path, "PNG" if real_filename.lower().endswith(".png") else "JPEG")
-            except Exception as resize_err:
-                print(f"⚠️ [Resizing] 결과 이미지 원본 해상도 복원 중 에러: {resize_err}")
-                from PIL import ImageChops
+                # [한글 주석] 전역 네임스페이스의 Image 객체 충돌 방지를 위해 로컬 재임포트를 생략하고 전역 PIL 라이브러리를 사용합니다.
                 
-                # 1. 이미지 로드 및 기본 객체 생성
+                # 1. 이미지 로드
                 orig_img = Image.open(orig_path).convert("RGB")
                 orig_w, orig_h = orig_img.size
                 
                 res_img = Image.open(result_path).convert("RGB")
-                # 결과 이미지를 원본 크기로 리사이징
-                if res_img.size != (orig_w, orig_h):
-                    res_img = res_img.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
+                res_w, res_h = res_img.size
                 
-                # 2. 마스크 로드 및 채널 통일화
+                # [한글 주석] 워크플로우에 AI 1080p 업스케일러 노드가 추가되었으므로 최종 정합 해상도 목표를 세로 1080 픽셀 기준으로 수정 및 통일합니다.
+                ratio = orig_w / orig_h
+                target_w = int(1080 * ratio)
+                target_h = 1080
+                
+                # 결과 이미지를 1080p 목표 해상도로 리사이징
+                if res_img.size != (target_w, target_h):
+                    print(f"📏 [Resizing] 결과 이미지 해상도({res_img.size})를 AI 1080p 업스케일 목표 해상도({target_w}x{target_h})로 정밀 복원 리사이징합니다.")
+                    res_img = res_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                
+                # 원본 이미지도 결과 이미지 해상도(target_w, target_h)와 정합하기 위해 동일 크기로 리사이징
+                orig_img_resized = orig_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+                
+                # 2. 마스크 로드 및 채널 통일화 (결과 해상도에 맞추어 보존 리사이징)
                 mask_a = Image.open(mask_path_a).convert("L")
-                if mask_a.size != (orig_w, orig_h):
-                    mask_a = mask_a.resize((orig_w, orig_h), Image.Resampling.NEAREST)
+                mask_a = mask_a.resize((target_w, target_h), Image.Resampling.BILINEAR)
                 
                 final_mask = mask_a
                 
                 # 2단계 마스크가 활성화되어 존재할 경우 픽셀별 최댓값(Chops.lighter)으로 두 마스크를 합침
                 if mask_path_b and os.path.exists(mask_path_b):
                     mask_b = Image.open(mask_path_b).convert("L")
-                    if mask_b.size != (orig_w, orig_h):
-                        mask_b = mask_b.resize((orig_w, orig_h), Image.Resampling.NEAREST)
+                    mask_b = mask_b.resize((target_w, target_h), Image.Resampling.BILINEAR)
                     final_mask = ImageChops.lighter(final_mask, mask_b)
                 
-                # 3. 원본 이미지와 인페인팅 결과 이미지를 최종 마스크 기준으로 합성
-                composite_img = Image.composite(res_img, orig_img, final_mask)
+                # 3. [더블 패스 클린 알파 블렌딩 + 마스크 침식 페더링] (상시 정밀 합성)
+                # [한글 주석] 1단계: 칼 마스크 기준으로 결과물(res_img)과 리사이징된 원본(orig_img_resized)을 1차 합성하여 마스크 바깥쪽을 완전한 원본 이미지로 정제합니다.
+                clean_res_img = Image.composite(res_img, orig_img_resized, final_mask)
                 
-                # 4. 포맷 매치 후 저장
+                # 2단계: 가구 외곽의 흰색 노이즈 경계를 안쪽으로 수축(Erosion)시켜 깎아내기 위해 MinFilter 적용 (3x3 커널)
+                eroded_mask = final_mask.filter(ImageFilter.MinFilter(size=3))
+                
+                # 3단계: 깎인 경계면을 카펫/소파와 부드럽게 스며들게 하기 위해 6px 가우시안 블러 페더링 적용
+                final_mask_blurred = eroded_mask.filter(ImageFilter.GaussianBlur(radius=6))
+                
+                # 4단계: 정제된 가구 이미지와 원본을 침식 블러 마스크 기준으로 최종 합성
+                composite_img = Image.composite(clean_res_img, orig_img_resized, final_mask_blurred)
+                
+                # 5단계: 리사이징 시 흐려진 화질 선명도 1.2배 향상 보강
+                from PIL import ImageEnhance
+                enhancer = ImageEnhance.Sharpness(composite_img)
+                composite_img = enhancer.enhance(1.2)
+
+                # 6. 포맷 매치 후 저장
                 save_format = "PNG" if real_filename.lower().endswith(".png") else "JPEG"
                 composite_img.save(result_path, save_format)
-                print(f"🎨 [Inpaint Precision Fix] 마스크 영역 합성 완료. 비마스크 영역 원본 100% 보존. 저장 경로: {result_path}")
+                print(f"🎨 [Inpaint Precision Fix] 마스크 침식 페더링(6px) 및 1080p 정밀 상시 합성 완료. 저장 경로: {result_path}")
                 
             except Exception as r_err:
-                print(f"⚠️ 원본 종횡비 복원 및 마스크 합성 중 예외: {r_err}")
+                print(f"⚠️ 원본 해상도 복원 및 마스크 합성 중 예외: {r_err}")
                 import traceback
                 traceback.print_exc()
                 
@@ -3246,7 +3295,8 @@ def classify_furniture_category_with_gemini(image_path: str) -> str:
                     "text": (
                         "너는 인테리어 및 가구 분류 전문가야. 제시된 이미지 속 가구/소품 영역을 보고 다음 리스트 중 가장 어울리는 카테고리 단어 하나만 골라서 응답해줘.\n"
                         f"카테고리 리스트: {', '.join(categories)}\n"
-                        "규칙: 리스트에 없는 단어나 추가적인 설명, 특수문자 없이 오직 카테고리 이름 단어 하나만(예: '스탠드' 또는 '소파') 대답해야 해."
+                        "규칙: 리스트에 없는 단어나 추가적인 설명, 특수문자 없이 오직 카테고리 이름 단어 하나만(예: '스탠드' 또는 '소파') 대답해야 해.\n"
+                        "중요: 전구, 펜던트 조명, 샹들리에, 스폿라이트, 램프 등 빛을 발산하는 모든 종류의 조명 기구 및 소품은 무조건 '스탠드' 카테고리로 골라야 해."
                     )
                 },
                 {
@@ -3262,6 +3312,11 @@ def classify_furniture_category_with_gemini(image_path: str) -> str:
         response = vision_llm.invoke([message])
         category = response.content.strip()
         print(f"🔮 [Vision Classify] 제미나이 분류 카테고리: '{category}'")
+
+        # [후처리 보정 사전] 조명/전구 관련 변종 및 동의어 응답을 표준 카테고리 '스탠드'로 통일 변환
+        light_synonyms = ["조명", "전구", "램프", "펜던트", "샹들리에", "라이팅", "lighting", "bulb", "lamp"]
+        if any(syn in category.lower() for syn in light_synonyms) or "스탠드" in category:
+            return "스탠드"
 
         if category in categories:
             return category
@@ -3319,6 +3374,37 @@ def search_similar_products(payload: Dict[str, Any]):
                     cropped_img_path = os.path.join(crops_dir, f"{image_id}_{px1}_{py1}_{px2}_{py2}_crop.jpg")
                     cropped_img.save(cropped_img_path, "JPEG", quality=90)
                     print(f"✂️ [Product Search] 가구 이미지 오려내기 완료: {cropped_img_path}")
+                    
+                    # [YOLOv8 기반 배경 노이즈 제거를 위한 정밀 재크롭 전처리]
+                    try:
+                        from ultralytics import YOLO
+                        yolo_model = YOLO("yolov8n.pt")
+                        yolo_results = yolo_model(cropped_img_path, verbose=False)
+                        
+                        best_box = None
+                        best_conf = 0.0
+                        
+                        # 🎯 [버그 해결] COCO 데이터셋 기준 가구류 클래스 ID만 필터링하여 정밀 재크롭 적용
+                        # 56: chair, 57: couch (sofa), 58: potted plant, 59: bed, 60: dining table
+                        furniture_class_ids = {56, 57, 58, 59, 60}
+                        for r in yolo_results:
+                            boxes = r.boxes
+                            for box in boxes:
+                                cls_id = int(box.cls[0].item())
+                                conf = float(box.conf[0].item())
+                                if cls_id in furniture_class_ids and conf > best_conf and conf >= 0.30:
+                                    best_conf = conf
+                                    best_box = box.xyxy[0].tolist()
+                                    
+                        if best_box:
+                            rx1, ry1, rx2, ry2 = [int(coord) for coord in best_box]
+                            if rx2 - rx1 > 5 and ry2 - ry1 > 5:
+                                with Image.open(cropped_img_path) as temp_img:
+                                    refined_img = temp_img.crop((rx1, ry1, rx2, ry2))
+                                    refined_img.save(cropped_img_path, "JPEG", quality=95)
+                                    print(f"🎯 [YOLO Refinement] 드래그 영역 내 객체 정밀 재크롭 성공 (BBox: {[rx1, ry1, rx2, ry2]}, Conf: {best_conf:.2f})")
+                    except Exception as yolo_err:
+                        print(f"⚠️ [YOLO Refinement] 정밀 재크롭 수행 중 에러 (스킵하고 원래 영역 사용): {yolo_err}")
         except Exception as e:
             print(f"⚠️ [Product Search] 이미지 오려내기 중 에러: {e}")
 
@@ -3352,10 +3438,32 @@ def search_similar_products(payload: Dict[str, Any]):
                             # 3-2-1. 제미나이 비전을 통한 카테고리 판별 시도
                             detected_category = classify_furniture_category_with_gemini(cropped_img_path)
                             
-                            # 3-3. Chroma DB 쿼리 실행
+                            # 3-2-2. 하이브리드 검색을 위한 결합 텍스트 쿼리 및 임베딩 획득
+                            from services.clip_service import CLIPService
+                            clip_service = CLIPService()
+                            
+                            req_prompt = payload.get("prompt") or ""
+                            req_sel_obj = payload.get("selected_object") or ""
+                            
+                            text_queries = []
+                            if detected_category:
+                                text_queries.append(detected_category)
+                            if req_sel_obj and isinstance(req_sel_obj, str) and req_sel_obj.strip():
+                                text_queries.append(req_sel_obj.strip())
+                            if req_prompt and isinstance(req_prompt, str) and req_prompt.strip():
+                                text_queries.append(req_prompt.strip())
+                                
+                            query_text = " ".join(text_queries).strip()
+                            if not query_text:
+                                query_text = "가구"
+                                
+                            print(f"📖 [Product Search] 하이브리드 검색용 결합 텍스트 쿼리: '{query_text}'")
+                            text_query_emb = clip_service.get_text_embedding(query_text)
+                            
+                            # 3-3. Chroma DB 쿼리 실행 (후보군을 넉넉히 가져옴)
                             query_args = {
                                 "query_embeddings": [crop_embedding],
-                                "n_results": 3
+                                "n_results": 15
                             }
                             # 카테고리가 분류되면 where 필터 적용
                             if detected_category:
@@ -3369,34 +3477,56 @@ def search_similar_products(payload: Dict[str, Any]):
                                 metadatas = results["metadatas"][0] if results.get("metadatas") else []
                                 distances = results["distances"][0] if results.get("distances") else []
                                 
+                                temp_products = []
                                 for idx, pid in enumerate(ids):
                                     meta = metadatas[idx] if idx < len(metadatas) else {}
                                     dist = distances[idx] if idx < len(distances) else 0.5
                                     
                                     # 코사인 유사도 점수 산출: Chroma의 cosine 거리는 1 - sim 이므로
-                                    cos_sim = float(1.0 - dist)
-                                    # 비주얼 유사도(0.1 ~ 0.4) 범위를 사용자 친화적인 백분율 점수(70% ~ 95%)로 선형 보정(Scaling)
-                                    if cos_sim < 0.1:
-                                        sim_val = round(0.55 + max(0.0, cos_sim) * 1.5, 2)
+                                    img_sim = float(1.0 - dist)
+                                    
+                                    # 텍스트 코사인 유사도 점수 계산
+                                    text_sim = 0.0
+                                    import json
+                                    prod_text_emb_str = meta.get("text_embedding")
+                                    if prod_text_emb_str:
+                                        try:
+                                            prod_text_emb = json.loads(prod_text_emb_str)
+                                            if prod_text_emb and len(prod_text_emb) == 512 and text_query_emb and len(text_query_emb) == 512:
+                                                # 두 벡터가 L2 정규화되어 있으므로, 단순 dot product가 cosine similarity입니다.
+                                                text_sim = sum(a * b for a, b in zip(text_query_emb, prod_text_emb))
+                                        except Exception as json_err:
+                                            print(f"⚠️ [Product Search] 텍스트 임베딩 연산 오류 (ID: {pid}): {json_err}")
+                                            
+                                    # 최종 하이브리드 유사도 (이미지 50%, 텍스트 50% 가중치 결합)
+                                    final_sim = 0.5 * img_sim + 0.5 * text_sim
+                                    
+                                    # 비주얼 유사도 범위를 사용자 친화적인 백분율 점수(70% ~ 95%)로 선형 보정(Scaling)
+                                    if final_sim < 0.1:
+                                        sim_val = round(0.55 + max(0.0, final_sim) * 1.5, 2)
                                     else:
-                                        sim_val = round(0.70 + (cos_sim - 0.1) * 0.85, 2)
+                                        sim_val = round(0.70 + (final_sim - 0.1) * 0.85, 2)
                                     # 안전 보장 클램핑
                                     sim_val = max(0.50, min(0.99, sim_val))
                                     
-                                    products.append(
-                                        ProductItem(
+                                    temp_products.append({
+                                        "item": ProductItem(
                                             product_name=meta.get("product_name") or "매칭 가구 상품",
                                             price=meta.get("price") or "가격 정보 없음",
                                             image_url=meta.get("image_url") or "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
                                             purchase_link=meta.get("link") or "",
                                             similarity=sim_val
-                                        )
-                                    )
+                                        ),
+                                        "score": final_sim
+                                    })
                                 
-                                # 유사도 순 정렬
-                                products.sort(key=lambda x: x.similarity, reverse=True)
+                                # 하이브리드 점수 기준으로 정렬
+                                temp_products.sort(key=lambda x: x["score"], reverse=True)
+                                
+                                # 최종 상위 3개 선별
+                                products = [p["item"] for p in temp_products[:3]]
                                 success_search = True
-                                print(f"🎉 [Product Search] Chroma DB 매칭 성공! 추천 상품 수: {len(products)}개")
+                                print(f"🎉 [Product Search] Chroma DB 하이브리드 매칭 완료! 추천 상품 수: {len(products)}개 (후보군 {len(temp_products)}개 중)")
                             else:
                                 print("⚠️ [Product Search] Chroma DB에서 일치하는 벡터 결과가 없습니다.")
                         else:
@@ -3439,8 +3569,8 @@ def search_similar_products(payload: Dict[str, Any]):
                 keywords.extend(["체어", "스툴"])
             elif "소파" in detected_category:
                 keywords.extend(["쇼파"])
-            elif "스탠드" in detected_category:
-                keywords.extend(["조명", "램프"])
+            elif any(x in detected_category for x in ["스탠드", "조명", "전구", "램프", "펜던트", "샹들리에"]):
+                keywords.extend(["조명", "램프", "전구", "스탠드", "펜던트"])
         else:
             combined_query = f"{prompt} {selected_obj}"
             target_category = "sofa"
@@ -3450,7 +3580,7 @@ def search_similar_products(payload: Dict[str, Any]):
                 target_category = "table"
             elif any(x in combined_query for x in ["의자", "체어", "chair", "스툴"]):
                 target_category = "chair"
-            elif any(x in combined_query for x in ["조명", "스탠드", "light", "lamp", "불빛", "스폿"]):
+            elif any(x in combined_query for x in ["조명", "스탠드", "light", "lamp", "불빛", "스폿", "전구", "bulb", "펜던트", "pendant", "샹들리에", "chandelier"]):
                 target_category = "lighting"
             elif any(x in combined_query for x in ["화분", "식물", "plant", "flowerpot", "tree"]):
                 target_category = "plant"
@@ -3460,7 +3590,7 @@ def search_similar_products(payload: Dict[str, Any]):
                 "bed": ["침대", "매트리스"],
                 "table": ["식탁", "테이블", "책상"],
                 "chair": ["의자", "체어", "스툴"],
-                "lighting": ["조명", "스탠드", "램프"],
+                "lighting": ["조명", "스탠드", "램프", "전구", "펜던트"],
                 "plant": ["식물", "화분", "조화"]
             }
             keywords = cat_keywords.get(target_category, ["소파"])
