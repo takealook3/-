@@ -3245,7 +3245,8 @@ def classify_furniture_category_with_gemini(image_path: str) -> str:
                     "text": (
                         "너는 인테리어 및 가구 분류 전문가야. 제시된 이미지 속 가구/소품 영역을 보고 다음 리스트 중 가장 어울리는 카테고리 단어 하나만 골라서 응답해줘.\n"
                         f"카테고리 리스트: {', '.join(categories)}\n"
-                        "규칙: 리스트에 없는 단어나 추가적인 설명, 특수문자 없이 오직 카테고리 이름 단어 하나만(예: '스탠드' 또는 '소파') 대답해야 해."
+                        "규칙: 리스트에 없는 단어나 추가적인 설명, 특수문자 없이 오직 카테고리 이름 단어 하나만(예: '스탠드' 또는 '소파') 대답해야 해.\n"
+                        "중요: 전구, 펜던트 조명, 샹들리에, 스폿라이트, 램프 등 빛을 발산하는 모든 종류의 조명 기구 및 소품은 무조건 '스탠드' 카테고리로 골라야 해."
                     )
                 },
                 {
@@ -3261,6 +3262,11 @@ def classify_furniture_category_with_gemini(image_path: str) -> str:
         response = vision_llm.invoke([message])
         category = response.content.strip()
         print(f"🔮 [Vision Classify] 제미나이 분류 카테고리: '{category}'")
+
+        # [후처리 보정 사전] 조명/전구 관련 변종 및 동의어 응답을 표준 카테고리 '스탠드'로 통일 변환
+        light_synonyms = ["조명", "전구", "램프", "펜던트", "샹들리에", "라이팅", "lighting", "bulb", "lamp"]
+        if any(syn in category.lower() for syn in light_synonyms) or "스탠드" in category:
+            return "스탠드"
 
         if category in categories:
             return category
@@ -3318,6 +3324,34 @@ def search_similar_products(payload: Dict[str, Any]):
                     cropped_img_path = os.path.join(crops_dir, f"{image_id}_{px1}_{py1}_{px2}_{py2}_crop.jpg")
                     cropped_img.save(cropped_img_path, "JPEG", quality=90)
                     print(f"✂️ [Product Search] 가구 이미지 오려내기 완료: {cropped_img_path}")
+                    
+                    # [YOLOv8 기반 배경 노이즈 제거를 위한 정밀 재크롭 전처리]
+                    try:
+                        from ultralytics import YOLO
+                        yolo_model = YOLO("yolov8n.pt")
+                        yolo_results = yolo_model(cropped_img_path, verbose=False)
+                        
+                        best_box = None
+                        best_conf = 0.0
+                        
+                        # 가구 및 유사 객체 영역을 정밀하게 탐색
+                        for r in yolo_results:
+                            boxes = r.boxes
+                            for box in boxes:
+                                conf = float(box.conf[0].item())
+                                if conf > best_conf and conf >= 0.30:
+                                    best_conf = conf
+                                    best_box = box.xyxy[0].tolist() # [x1, y1, x2, y2]
+                                    
+                        if best_box:
+                            rx1, ry1, rx2, ry2 = [int(coord) for coord in best_box]
+                            if rx2 - rx1 > 5 and ry2 - ry1 > 5:
+                                with Image.open(cropped_img_path) as temp_img:
+                                    refined_img = temp_img.crop((rx1, ry1, rx2, ry2))
+                                    refined_img.save(cropped_img_path, "JPEG", quality=95)
+                                    print(f"🎯 [YOLO Refinement] 드래그 영역 내 객체 정밀 재크롭 성공 (BBox: {[rx1, ry1, rx2, ry2]}, Conf: {best_conf:.2f})")
+                    except Exception as yolo_err:
+                        print(f"⚠️ [YOLO Refinement] 정밀 재크롭 수행 중 에러 (스킵하고 원래 영역 사용): {yolo_err}")
         except Exception as e:
             print(f"⚠️ [Product Search] 이미지 오려내기 중 에러: {e}")
 
@@ -3351,10 +3385,32 @@ def search_similar_products(payload: Dict[str, Any]):
                             # 3-2-1. 제미나이 비전을 통한 카테고리 판별 시도
                             detected_category = classify_furniture_category_with_gemini(cropped_img_path)
                             
-                            # 3-3. Chroma DB 쿼리 실행
+                            # 3-2-2. 하이브리드 검색을 위한 결합 텍스트 쿼리 및 임베딩 획득
+                            from services.clip_service import CLIPService
+                            clip_service = CLIPService()
+                            
+                            req_prompt = payload.get("prompt") or ""
+                            req_sel_obj = payload.get("selected_object") or ""
+                            
+                            text_queries = []
+                            if detected_category:
+                                text_queries.append(detected_category)
+                            if req_sel_obj and isinstance(req_sel_obj, str) and req_sel_obj.strip():
+                                text_queries.append(req_sel_obj.strip())
+                            if req_prompt and isinstance(req_prompt, str) and req_prompt.strip():
+                                text_queries.append(req_prompt.strip())
+                                
+                            query_text = " ".join(text_queries).strip()
+                            if not query_text:
+                                query_text = "가구"
+                                
+                            print(f"📖 [Product Search] 하이브리드 검색용 결합 텍스트 쿼리: '{query_text}'")
+                            text_query_emb = clip_service.get_text_embedding(query_text)
+                            
+                            # 3-3. Chroma DB 쿼리 실행 (후보군을 넉넉히 가져옴)
                             query_args = {
                                 "query_embeddings": [crop_embedding],
-                                "n_results": 3
+                                "n_results": 15
                             }
                             # 카테고리가 분류되면 where 필터 적용
                             if detected_category:
@@ -3368,34 +3424,56 @@ def search_similar_products(payload: Dict[str, Any]):
                                 metadatas = results["metadatas"][0] if results.get("metadatas") else []
                                 distances = results["distances"][0] if results.get("distances") else []
                                 
+                                temp_products = []
                                 for idx, pid in enumerate(ids):
                                     meta = metadatas[idx] if idx < len(metadatas) else {}
                                     dist = distances[idx] if idx < len(distances) else 0.5
                                     
                                     # 코사인 유사도 점수 산출: Chroma의 cosine 거리는 1 - sim 이므로
-                                    cos_sim = float(1.0 - dist)
-                                    # 비주얼 유사도(0.1 ~ 0.4) 범위를 사용자 친화적인 백분율 점수(70% ~ 95%)로 선형 보정(Scaling)
-                                    if cos_sim < 0.1:
-                                        sim_val = round(0.55 + max(0.0, cos_sim) * 1.5, 2)
+                                    img_sim = float(1.0 - dist)
+                                    
+                                    # 텍스트 코사인 유사도 점수 계산
+                                    text_sim = 0.0
+                                    import json
+                                    prod_text_emb_str = meta.get("text_embedding")
+                                    if prod_text_emb_str:
+                                        try:
+                                            prod_text_emb = json.loads(prod_text_emb_str)
+                                            if prod_text_emb and len(prod_text_emb) == 512 and text_query_emb and len(text_query_emb) == 512:
+                                                # 두 벡터가 L2 정규화되어 있으므로, 단순 dot product가 cosine similarity입니다.
+                                                text_sim = sum(a * b for a, b in zip(text_query_emb, prod_text_emb))
+                                        except Exception as json_err:
+                                            print(f"⚠️ [Product Search] 텍스트 임베딩 연산 오류 (ID: {pid}): {json_err}")
+                                            
+                                    # 최종 하이브리드 유사도 (이미지 50%, 텍스트 50% 가중치 결합)
+                                    final_sim = 0.5 * img_sim + 0.5 * text_sim
+                                    
+                                    # 비주얼 유사도 범위를 사용자 친화적인 백분율 점수(70% ~ 95%)로 선형 보정(Scaling)
+                                    if final_sim < 0.1:
+                                        sim_val = round(0.55 + max(0.0, final_sim) * 1.5, 2)
                                     else:
-                                        sim_val = round(0.70 + (cos_sim - 0.1) * 0.85, 2)
+                                        sim_val = round(0.70 + (final_sim - 0.1) * 0.85, 2)
                                     # 안전 보장 클램핑
                                     sim_val = max(0.50, min(0.99, sim_val))
                                     
-                                    products.append(
-                                        ProductItem(
+                                    temp_products.append({
+                                        "item": ProductItem(
                                             product_name=meta.get("product_name") or "매칭 가구 상품",
                                             price=meta.get("price") or "가격 정보 없음",
                                             image_url=meta.get("image_url") or "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=500",
                                             purchase_link=meta.get("link") or "",
                                             similarity=sim_val
-                                        )
-                                    )
+                                        ),
+                                        "score": final_sim
+                                    })
                                 
-                                # 유사도 순 정렬
-                                products.sort(key=lambda x: x.similarity, reverse=True)
+                                # 하이브리드 점수 기준으로 정렬
+                                temp_products.sort(key=lambda x: x["score"], reverse=True)
+                                
+                                # 최종 상위 3개 선별
+                                products = [p["item"] for p in temp_products[:3]]
                                 success_search = True
-                                print(f"🎉 [Product Search] Chroma DB 매칭 성공! 추천 상품 수: {len(products)}개")
+                                print(f"🎉 [Product Search] Chroma DB 하이브리드 매칭 완료! 추천 상품 수: {len(products)}개 (후보군 {len(temp_products)}개 중)")
                             else:
                                 print("⚠️ [Product Search] Chroma DB에서 일치하는 벡터 결과가 없습니다.")
                         else:
@@ -3438,8 +3516,8 @@ def search_similar_products(payload: Dict[str, Any]):
                 keywords.extend(["체어", "스툴"])
             elif "소파" in detected_category:
                 keywords.extend(["쇼파"])
-            elif "스탠드" in detected_category:
-                keywords.extend(["조명", "램프"])
+            elif any(x in detected_category for x in ["스탠드", "조명", "전구", "램프", "펜던트", "샹들리에"]):
+                keywords.extend(["조명", "램프", "전구", "스탠드", "펜던트"])
         else:
             combined_query = f"{prompt} {selected_obj}"
             target_category = "sofa"
@@ -3449,7 +3527,7 @@ def search_similar_products(payload: Dict[str, Any]):
                 target_category = "table"
             elif any(x in combined_query for x in ["의자", "체어", "chair", "스툴"]):
                 target_category = "chair"
-            elif any(x in combined_query for x in ["조명", "스탠드", "light", "lamp", "불빛", "스폿"]):
+            elif any(x in combined_query for x in ["조명", "스탠드", "light", "lamp", "불빛", "스폿", "전구", "bulb", "펜던트", "pendant", "샹들리에", "chandelier"]):
                 target_category = "lighting"
             elif any(x in combined_query for x in ["화분", "식물", "plant", "flowerpot", "tree"]):
                 target_category = "plant"
@@ -3459,7 +3537,7 @@ def search_similar_products(payload: Dict[str, Any]):
                 "bed": ["침대", "매트리스"],
                 "table": ["식탁", "테이블", "책상"],
                 "chair": ["의자", "체어", "스툴"],
-                "lighting": ["조명", "스탠드", "램프"],
+                "lighting": ["조명", "스탠드", "램프", "전구", "펜던트"],
                 "plant": ["식물", "화분", "조화"]
             }
             keywords = cat_keywords.get(target_category, ["소파"])
