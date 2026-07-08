@@ -466,11 +466,11 @@ def translate_prompt_to_english(prompt: str) -> str:
             print(f"🌐 [Translate] 한글/한영혼용 프롬프트 번역 및 보강 시작: '{prompt}'")
             system_prompt = (
                 "You are an expert interior designer and prompt engineer for Stable Diffusion.\n"
-                "Your task is to translate and expand the following Korean interior/furniture prompt into a highly descriptive English prompt suitable for inpainting/redesign.\n"
+                "Your task is to translate and expand the following Korean furniture prompt into a highly descriptive English prompt suitable for inpainting.\n"
                 "CRITICAL: Ensure that the main object or furniture (e.g. bookshelf, carpet, table, sofa) is placed at the very beginning of the prompt.\n"
-                "Improve prompt understanding and clarity by expanding the core style with details such as textures (e.g. boucle fabric, oak wood, brushed brass), lighting (e.g. soft indirect ambient lighting, warm LED strip), color palette, and decor accessories.\n"
-                "Use Stable Diffusion weight syntax like (keyword:weight) for key objects or style words to emphasize them (e.g., '(cozy scandinavian bedroom:1.25)', '(warm wooden textures:1.2)').\n"
-                "Do NOT include any humans, people, man, woman, child, or animals. The scene must represent a completely empty, uninhabited architectural room design space.\n"
+                "Improve prompt understanding by expanding details strictly related to the target furniture itself (e.g., textures like oak wood, boucle fabric, brushed metal, color palette).\n"
+                "WARNING: Do NOT include or describe the floor, floorings, walls, background, or other room structures to prevent inpainting model from altering the existing background area (like carpets, tiles, or walls).\n"
+                "Do NOT include any humans, people, man, woman, child, or animals.\n"
                 "Keep the output as a clean, single-line comma-separated list of descriptive words, without any explanation, markdown, or intro.\n\n"
                 f"Korean: {prompt}\n"
                 "English Prompt:"
