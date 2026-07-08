@@ -697,7 +697,7 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 
             # 3. 긍정 프롬프트 1 주입 (Node 6)
             if "prompt" in parameters:
-                prompt_api_data["6"]["inputs"]["text"] = f"{parameters['prompt']}, high quality, 8k"
+                prompt_api_data["6"]["inputs"]["text"] = f"{parameters['prompt']}, proper scale, proportionate size, harmonized with surrounding furniture context, high quality, 8k"
                 print(f"✅ [inpainting_API] 긍정 프롬프트 1 주입: {parameters['prompt'][:50]}...")
                 
             # 4. KSampler 1 파라미터 주입 (Node 3)
@@ -708,9 +708,22 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 prompt_api_data["3"]["inputs"]["steps"] = int(parameters["steps"])
             if "cfg" in parameters:
                 prompt_api_data["3"]["inputs"]["cfg"] = float(parameters["cfg"])
+            
             if "denoise" in parameters:
-                prompt_api_data["3"]["inputs"]["denoise"] = float(parameters["denoise"])
-                
+                raw_denoise = float(parameters["denoise"])
+                # denoise가 1.0(0.95 이상)으로 유입되면 공간 구조가 왜곡되므로 0.65 황금 입체 가이드 비율로 자동 캡핑합니다.
+                prompt_api_data["3"]["inputs"]["denoise"] = 0.65 if raw_denoise >= 0.95 else raw_denoise
+                print(f"⚙️ [inpainting_API] KSampler 1 Denoise 강도 조절: {prompt_api_data['3']['inputs']['denoise']} (원본 입력: {raw_denoise})")
+            else:
+                # 파라미터 미전달 시 원래 가구의 형태와 그림자를 35% 수준으로 완벽 참조하는 0.65 디폴트 지정
+                prompt_api_data["3"]["inputs"]["denoise"] = 0.65
+                print("⚙️ [inpainting_API] KSampler 1 Denoise 디폴트 값 주입: 0.65 (공간 투시 보존)")
+
+            # VAE 인코더 마스크 가중치 패딩(grow_mask_by) 확장 적용 (주변 공간 컨텍스트 64px 조화로 꽉참 현상 방지)
+            if "10" in prompt_api_data:
+                prompt_api_data["10"]["inputs"]["grow_mask_by"] = 64
+                print("📐 [inpainting_API] VAEEncode 1 grow_mask_by 확장: 64 (주변 공간 구조 대조)")
+
             # ─── 동적 1/2단계 분기 판별 ───
             img_b = parameters.get("image_filename_b")
             if img_b and img_b != "":
@@ -718,9 +731,9 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 print("🔗 [inpainting_API] 2차 수선 활성화 (2단계 릴레이 파이프라인)")
                 prompt_api_data["18"]["inputs"]["image"] = img_b
                 if "prompt_b" in parameters and parameters["prompt_b"]:
-                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt_b']}, high quality, 8k"
+                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt_b']}, proper scale, proportionate size, harmonized with surrounding furniture context, high quality, 8k"
                 else:
-                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt']}, high quality, 8k"
+                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt']}, proper scale, proportionate size, harmonized with surrounding furniture context, high quality, 8k"
                 
                 if "seed" in parameters:
                     prompt_api_data["15"]["inputs"]["seed"] = int(parameters["seed"]) + 13
@@ -728,8 +741,16 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                     prompt_api_data["15"]["inputs"]["steps"] = int(parameters["steps"])
                 if "cfg" in parameters:
                     prompt_api_data["15"]["inputs"]["cfg"] = float(parameters["cfg"])
+                
                 if "denoise" in parameters:
-                    prompt_api_data["15"]["inputs"]["denoise"] = float(parameters["denoise"])
+                    raw_denoise_b = float(parameters["denoise"])
+                    prompt_api_data["15"]["inputs"]["denoise"] = 0.65 if raw_denoise_b >= 0.95 else raw_denoise_b
+                    print(f"⚙️ [inpainting_API] KSampler 2 Denoise 강도 조절: {prompt_api_data['15']['inputs']['denoise']}")
+                
+                if "14" in prompt_api_data:
+                    prompt_api_data["14"]["inputs"]["grow_mask_by"] = 64
+                    print("📐 [inpainting_API] VAEEncode 2 grow_mask_by 확장: 64")
+
                 # 최종 저장은 Node 16 (2단계 디코드) 결과물 사용
                 prompt_api_data["9"]["inputs"]["images"] = ["16", 0]
             else:
@@ -2756,16 +2777,28 @@ def edit_image(req: ImageEditRequest):
                     mask_b = mask_b.resize((target_w, target_h), Image.Resampling.BILINEAR)
                     final_mask = ImageChops.lighter(final_mask, mask_b)
                 
-                # [한글 주석] 마스크 경계선을 부드럽게 만들어 합성 시 테두리가 더 자연스럽게 뭉개지도록 약간의 가우시안 블러(Feathering)를 마스크에 적용합니다.
-                final_mask = final_mask.filter(ImageFilter.GaussianBlur(radius=3))
+                # 3. [더블 패스 클린 알파 블렌딩 + 마스크 침식 페더링] (상시 정밀 합성)
+                # [한글 주석] 1단계: 칼 마스크 기준으로 결과물(res_img)과 리사이징된 원본(orig_img_resized)을 1차 합성하여 마스크 바깥쪽을 완전한 원본 이미지로 정제합니다.
+                clean_res_img = Image.composite(res_img, orig_img_resized, final_mask)
                 
-                # 3. 원본 이미지와 인페인팅 결과 이미지를 최종 마스크 기준으로 정밀 합성 (배경 소파/카페트 완전 복원)
-                composite_img = Image.composite(res_img, orig_img_resized, final_mask)
+                # 2단계: 가구 외곽의 흰색 노이즈 경계를 안쪽으로 수축(Erosion)시켜 깎아내기 위해 MinFilter 적용 (3x3 커널)
+                eroded_mask = final_mask.filter(ImageFilter.MinFilter(size=3))
                 
-                # 4. 포맷 매치 후 저장
+                # 3단계: 깎인 경계면을 카펫/소파와 부드럽게 스며들게 하기 위해 6px 가우시안 블러 페더링 적용
+                final_mask_blurred = eroded_mask.filter(ImageFilter.GaussianBlur(radius=6))
+                
+                # 4단계: 정제된 가구 이미지와 원본을 침식 블러 마스크 기준으로 최종 합성
+                composite_img = Image.composite(clean_res_img, orig_img_resized, final_mask_blurred)
+                
+                # 5단계: 리사이징 시 흐려진 화질 선명도 1.2배 향상 보강
+                from PIL import ImageEnhance
+                enhancer = ImageEnhance.Sharpness(composite_img)
+                composite_img = enhancer.enhance(1.2)
+
+                # 6. 포맷 매치 후 저장
                 save_format = "PNG" if real_filename.lower().endswith(".png") else "JPEG"
                 composite_img.save(result_path, save_format)
-                print(f"🎨 [Inpaint Precision Fix] 마스크 영역 상시 정밀 합성 및 깃털 효과 블렌딩 적용 완료. 저장 경로: {result_path}")
+                print(f"🎨 [Inpaint Precision Fix] 마스크 침식 페더링(6px) 및 1080p 정밀 상시 합성 완료. 저장 경로: {result_path}")
                 
             except Exception as r_err:
                 print(f"⚠️ 원본 해상도 복원 및 마스크 합성 중 예외: {r_err}")
