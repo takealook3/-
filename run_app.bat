@@ -1,14 +1,13 @@
 @echo off
-chcp 65001 > nul
 cd /d "%~dp0"
 echo ==================================================
-echo 🏠 ZipPT AI 인테리어 스튜디오 통합 실행기 🏠
+echo * ZipPT AI Interior Studio Startup Tool *
 echo ==================================================
 
-:: 기본 Fallback 경로 설정 (사용자 미지정 시 사용)
+:: Set ComfyUI path
 set "COMFYUI_PATH=C:\Users\USER\Desktop\ComfyUI_windows_portable_nvidia\ComfyUI_windows_portable"
 
-:: .env 파일에서 COMFYUI_PATH 환경변수 읽기
+:: Read ComfyUI path from .env
 if exist .env (
     for /f "usebackq tokens=1,2 delims==" %%i in (".env") do (
         if "%%i"=="COMFYUI_PATH" (
@@ -17,29 +16,35 @@ if exist .env (
     )
 )
 
-:: 따옴표 정화 및 앞뒤 공백 제거 대응
+:: Clear quotes
 if defined COMFYUI_PATH (
     set "COMFYUI_PATH=%COMFYUI_PATH:"=%"
 )
 
-echo 1. FastAPI 백엔드 서버 구동 중... (포트 8000)
-:: 한글 주석: 가상환경(venv)이 존재하면 가상환경 파이썬으로, 없으면 일반 파이썬으로 백엔드 서버를 구동하도록 두 버전을 합침
-if exist ".\venv\Scripts\python.exe" (
-    start "FastAPI Backend" cmd /k ".\venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload"
+echo 1. Starting FastAPI Backend (Port 8000)...
+:: Run backend using venv if exists (without outer quote nesting)
+if exist ".\.venv\Scripts\python.exe" (
+    start "FastAPI Backend" cmd /k .\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+) else if exist ".\venv\Scripts\python.exe" (
+    start "FastAPI Backend" cmd /k .\venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ) else (
-    start "FastAPI Backend" cmd /k "python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload"
+    start "FastAPI Backend" cmd /k python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 )
-echo 2. React (Vite) 프론트엔드 개발 서버 구동 중... (포트 5173)
-start "React Frontend" cmd /k "cd frontend && npm.cmd run dev"
-echo 3. ComfyUI AI 가속 서버 구동 중... (포트 8188)
+
+echo 2. Starting React Frontend (Port 5173)...
+start /D "frontend" "React Frontend" cmd /k npm run dev
+
+echo 3. Starting ComfyUI Server (Port 8188)...
 if exist "%COMFYUI_PATH%\run_nvidia_gpu.bat" (
-    start "ComfyUI Server" cmd /k "cd /d "%COMFYUI_PATH%" && run_nvidia_gpu.bat"
+    start /D "%COMFYUI_PATH%" "ComfyUI Server" cmd /k run_nvidia_gpu.bat
 ) else (
-    echo [경고] 로컬 ComfyUI 포터블 실행 파일 %COMFYUI_PATH%\run_nvidia_gpu.bat 을 찾을 수 없습니다. 이미 켜져 있거나 경로를 확인해 주세요.
+    echo [WARNING] ComfyUI batch file %COMFYUI_PATH%\run_nvidia_gpu.bat not found.
 )
+
 echo ==================================================
-echo 서버 초기 기동을 위해 4초 대기 후 브라우저를 실행합니다...
+echo Waiting for servers to initialize...
 timeout /t 4 /nobreak > nul
-start http://localhost:5173
-echo 모든 서버 실행 및 브라우저 기동 명령을 완료했습니다.
+:: Auto-browser launch commented out by user request
+:: start http://localhost:5173
+echo Startup commands completed. (Auto-browser launch disabled)
 echo ==================================================

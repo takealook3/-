@@ -134,7 +134,7 @@ export default function StyleTransformer({
             height: 'auto'
           }}>
             <img 
-              src={resultImageUrl || getFullUrl(originalImageUrl)} 
+              src={resultImageUrl ? getFullUrl(resultImageUrl) : getFullUrl(originalImageUrl)} 
               alt="인테리어 전후 비교" 
               style={{ width: '100%', height: 'auto', display: 'block' }}
             />
@@ -219,7 +219,7 @@ export default function StyleTransformer({
           {/* 다운로드 - 이모지 제거 */}
           {resultImageUrl && (
             <a 
-              href={resultImageUrl} 
+              href={getFullUrl(resultImageUrl)} 
               download="ZipPT_Remodeling_Result.jpg"
               target="_blank" 
               rel="noreferrer"

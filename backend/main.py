@@ -1853,6 +1853,7 @@ async def generate_interior_image_stream(request: Request):
                     )
                     if real_filename:
                         result_filename = real_filename
+                        result_id = os.path.splitext(real_filename)[0]
                         result_url = f"/static/results/{result_filename}"
                         execution_mode = "real_comfyui"
                     else:

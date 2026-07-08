@@ -768,7 +768,7 @@ export default function ImageEditor({
                 {/* 가구 부분 교체 완료 후 결과 이미지 다운로드 버튼 연동 */}
                 {editedResultUrl && (
                   <a 
-                    href={editedResultUrl} 
+                    href={getFullUrl(editedResultUrl)} 
                     download="ZipPT_Repair_Result.jpg"
                     target="_blank" 
                     rel="noreferrer"
