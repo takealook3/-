@@ -688,7 +688,7 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 
             # 3. 긍정 프롬프트 1 주입 (Node 6)
             if "prompt" in parameters:
-                prompt_api_data["6"]["inputs"]["text"] = f"{parameters['prompt']}, high quality, 8k"
+                prompt_api_data["6"]["inputs"]["text"] = f"{parameters['prompt']}, proper scale, proportionate size, harmonized with surrounding furniture context, high quality, 8k"
                 print(f"✅ [inpainting_API] 긍정 프롬프트 1 주입: {parameters['prompt'][:50]}...")
                 
             # 4. KSampler 1 파라미터 주입 (Node 3)
@@ -710,10 +710,10 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 prompt_api_data["3"]["inputs"]["denoise"] = 0.65
                 print("⚙️ [inpainting_API] KSampler 1 Denoise 디폴트 값 주입: 0.65 (공간 투시 보존)")
 
-            # VAE 인코더 마스크 가중치 패딩(grow_mask_by) 확장 적용 (주변 공간 컨텍스트 16px 조화)
+            # VAE 인코더 마스크 가중치 패딩(grow_mask_by) 확장 적용 (주변 공간 컨텍스트 64px 조화로 꽉참 현상 방지)
             if "10" in prompt_api_data:
-                prompt_api_data["10"]["inputs"]["grow_mask_by"] = 16
-                print("📐 [inpainting_API] VAEEncode 1 grow_mask_by 확장: 16 (그림자 톤 보존)")
+                prompt_api_data["10"]["inputs"]["grow_mask_by"] = 64
+                print("📐 [inpainting_API] VAEEncode 1 grow_mask_by 확장: 64 (주변 공간 구조 대조)")
 
             # ─── 동적 1/2단계 분기 판별 ───
             img_b = parameters.get("image_filename_b")
@@ -722,9 +722,9 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 print("🔗 [inpainting_API] 2차 수선 활성화 (2단계 릴레이 파이프라인)")
                 prompt_api_data["18"]["inputs"]["image"] = img_b
                 if "prompt_b" in parameters and parameters["prompt_b"]:
-                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt_b']}, high quality, 8k"
+                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt_b']}, proper scale, proportionate size, harmonized with surrounding furniture context, high quality, 8k"
                 else:
-                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt']}, high quality, 8k"
+                    prompt_api_data["11"]["inputs"]["text"] = f"{parameters['prompt']}, proper scale, proportionate size, harmonized with surrounding furniture context, high quality, 8k"
                 
                 if "seed" in parameters:
                     prompt_api_data["15"]["inputs"]["seed"] = int(parameters["seed"]) + 13
@@ -739,8 +739,8 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                     print(f"⚙️ [inpainting_API] KSampler 2 Denoise 강도 조절: {prompt_api_data['15']['inputs']['denoise']}")
                 
                 if "14" in prompt_api_data:
-                    prompt_api_data["14"]["inputs"]["grow_mask_by"] = 16
-                    print("📐 [inpainting_API] VAEEncode 2 grow_mask_by 확장: 16")
+                    prompt_api_data["14"]["inputs"]["grow_mask_by"] = 64
+                    print("📐 [inpainting_API] VAEEncode 2 grow_mask_by 확장: 64")
 
                 # 최종 저장은 Node 16 (2단계 디코드) 결과물 사용
                 prompt_api_data["9"]["inputs"]["images"] = ["16", 0]
