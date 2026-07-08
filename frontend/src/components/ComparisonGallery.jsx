@@ -4,94 +4,7 @@
 import React from 'react';
 import { API_BASE_URL } from '../services/api';
 
-const FURNITURE_RECOMMENDATIONS = {
-  modern: [
-    {
-      name: "아치 모던 벨벳 3인 소파",
-      image: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=400&q=80",
-      desc: "공간을 차분하고 고급스럽게 연출하는 부드러운 스톤그레이 벨벳 마감 소파입니다. (가구 정보 ↗)",
-      url: "https://www.ikea.com/kr/ko/cat/sofas-so162/"
-    },
-    {
-      name: "블랙 스틸 프레임 콘솔 램프",
-      image: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=400&q=80",
-      desc: "직선적인 라인과 미니멀한 디자인으로 현대적 서재나 거실에 어울리는 조명입니다. (가구 정보 ↗)",
-      url: "https://www.ikea.com/kr/ko/cat/table-lamps-10732/"
-    }
-  ],
-  minimal: [
-    {
-      name: "플랫 아이보리 친환경 패브릭 소파",
-      image: "https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&fit=crop&w=400&q=80",
-      desc: "불필요한 디테일을 배제하고 안락함을 극대화한 로우타입 소파입니다. (가구 정보 ↗)",
-      url: "https://www.ikea.com/kr/ko/cat/fabric-sofas-10661/"
-    },
-    {
-      name: "스틸 무몰딩 미니멀 스탠드",
-      image: "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=400&q=80",
-      desc: "간결한 직선 구조로 어떠한 미니멀 공간에도 이질감 없이 녹아듭니다. (가구 정보 ↗)",
-      url: "https://www.ikea.com/kr/ko/cat/floor-lamps-10731/"
-    }
-  ],
-  natural: [
-    {
-      name: "노르딕 솔리드 오크 원목 체어",
-      image: "https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?auto=format&fit=crop&w=400&q=80",
-      desc: "자연 그대로의 결을 살린 화이트오크 원목과 린넨 패브릭 시트의 조화입니다. (가구 정보 ↗)",
-      url: "https://www.ikea.com/kr/ko/cat/dining-chairs-14705/"
-    },
-    {
-      name: "내추럴 라탄 케인 사이드 테이블",
-      image: "https://images.unsplash.com/photo-1533090161767-e6ffed986c88?auto=format&fit=crop&w=400&q=80",
-      desc: "수공예 라탄 위빙 마감으로 편안하고 아늑한 내추럴 무드를 연출합니다. (가구 정보 ↗)",
-      url: "https://www.ikea.com/kr/ko/cat/coffee-side-tables-10710/"
-    }
-  ],
-  vintage: [
-    {
-      name: "클래식 앤틱 브라운 가죽 암체어",
-      image: "https://images.unsplash.com/photo-1580481072645-022f9a6dbf27?auto=format&fit=crop&w=400&q=80",
-      desc: "은은한 광택과 에이징된 텍스처로 레트로 감성을 완성하는 암체어입니다. (가구 정보 ↗)",
-      url: "https://www.ikea.com/kr/ko/cat/armchairs-chairs-fu003/"
-    },
-    {
-      name: "레트로 러스틱 브론즈 펜던트 조명",
-      image: "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?auto=format&fit=crop&w=400&q=80",
-      desc: "황동 헤어라인 마감으로 공간에 빈티지하고 따뜻한 포인트를 줍니다. (가구 정보 ↗)",
-      url: "https://www.ikea.com/kr/ko/cat/pendant-lights-18750/"
-    }
-  ],
-  scandinavian: [
-    {
-      name: "아늑한 파스텔 샌드 패브릭 카우치",
-      image: "https://images.unsplash.com/photo-1581081127131-64a8a8f3c21a?auto=format&fit=crop&w=400&q=80",
-      desc: "북유럽 특유의 화사하고 산뜻한 분위기를 연출하는 와이드 패브릭 카우치입니다. (가구 정보 ↗)",
-      url: "https://www.ikea.com/kr/ko/cat/sofas-so162/"
-    },
-    {
-      name: "스칸디나비안 우드 삼각 다리 조명",
-      image: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=400&q=80",
-      desc: "내추럴 자작나무 프레임과 패브릭 쉐이드가 자아내는 온화한 빛의 흐름입니다. (가구 정보 ↗)",
-      url: "https://www.ikea.com/kr/ko/cat/floor-lamps-10731/"
-    }
-  ],
-  repair: [
-    {
-      name: "피에르 장네레 오마주 체어",
-      image: "https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?auto=format&fit=crop&w=400&q=80",
-      desc: "수공예 케인 우드와 가죽 프레임으로 고급 공간의 중심을 잡는 프리미엄 디자이너 체어입니다. (가구 정보 ↗)",
-      url: "https://www.ikea.com/kr/ko/cat/chairs-fu002/"
-    },
-    {
-      name: "아치 바우하우스 황동 테이블 램프",
-      image: "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=400&q=80",
-      desc: "바우하우스 디자인 철학을 계승한 미니멀 디자인 램프로 섬세한 조도를 연출합니다. (가구 정보 ↗)",
-      url: "https://www.ikea.com/kr/ko/cat/table-lamps-10732/"
-    }
-  ]
-};
-
-export default function ComparisonGallery({ 
+export default function ComparisonGallery({
   originalImageUrl, 
   resultData, 
   onError 
@@ -131,9 +44,6 @@ export default function ComparisonGallery({
       return clean ? `${clean}.` : "";
     }).filter(Boolean).slice(0, 3); // 최대 3개 항목까지 렌더링하도록 확장
   };
-
-  const styleKey = (resultData.style || "modern").toLowerCase();
-  const matchedFurniture = FURNITURE_RECOMMENDATIONS[styleKey] || FURNITURE_RECOMMENDATIONS.repair;
 
   return (
     <div className="card" style={{ border: '1px solid var(--border-color)', fontFamily: 'Outfit, sans-serif' }}>
@@ -317,60 +227,6 @@ export default function ComparisonGallery({
             </div>
 
           </div>
-
-          {/* 3. 스타일 어울림 가구 쇼핑 추천 카드 리스트 */}
-          {matchedFurniture && matchedFurniture.length > 0 && (
-            <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '24px', marginTop: '24px' }}>
-              <div style={{ fontSize: '1.02rem', fontWeight: '800', color: 'var(--primary)', marginBottom: '16px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-                🛒 스타일 맞춤 가구 추천 & 쇼핑
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                {matchedFurniture.map((item, index) => (
-                  <div 
-                    key={index}
-                    onClick={() => item.url && window.open(item.url, '_blank')}
-                    style={{
-                      display: 'flex',
-                      gap: '16px',
-                      background: 'var(--bg-card-inner)',
-                      padding: '16px',
-                      borderRadius: '12px',
-                      border: '1px solid var(--border-color)',
-                      cursor: item.url ? 'pointer' : 'default',
-                      transition: 'all 0.25s ease',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.02)'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (item.url) {
-                        e.currentTarget.style.transform = 'translateY(-3px)';
-                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(46, 40, 36, 0.08)';
-                        e.currentTarget.style.borderColor = 'var(--accent)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (item.url) {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.02)';
-                        e.currentTarget.style.borderColor = 'var(--border-color)';
-                      }
-                    }}
-                  >
-                    <div style={{ width: '90px', height: '90px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: '#f1f1f1' }}>
-                      <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', justifyContent: 'center' }}>
-                      <div style={{ fontWeight: '800', fontSize: '0.9rem', color: 'var(--text-main)', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-                        {item.name}
-                      </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-                        {item.desc}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

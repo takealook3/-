@@ -149,7 +149,7 @@ export default function StyleTransformer({
                   width: `${(bboxNormA.x2 - bboxNormA.x1) * 100}%`,
                   height: `${(bboxNormA.y2 - bboxNormA.y1) * 100}%`,
                   border: '3px solid #3B82F6',
-                  borderRadius: '50%',
+                  borderRadius: '12%', // 실제 전송되는 마스크(roundRect, radius 12%)와 동일한 모양으로 미리보기 표시
                   background: 'rgba(59, 130, 246, 0.15)',
                   boxShadow: '0 0 16px rgba(59, 130, 246, 0.5)',
                   pointerEvents: 'none'
@@ -175,7 +175,7 @@ export default function StyleTransformer({
                   width: `${(bboxNormB.x2 - bboxNormB.x1) * 100}%`,
                   height: `${(bboxNormB.y2 - bboxNormB.y1) * 100}%`,
                   border: '3px solid #EC4899',
-                  borderRadius: '50%',
+                  borderRadius: '12%', // 실제 전송되는 마스크(roundRect, radius 12%)와 동일한 모양으로 미리보기 표시
                   background: 'rgba(236, 72, 153, 0.15)',
                   boxShadow: '0 0 16px rgba(236, 72, 153, 0.5)',
                   pointerEvents: 'none'

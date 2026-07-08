@@ -9,6 +9,45 @@ import { sendChatMessage, API_BASE_URL } from '../services/api';
 
 export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt, setPendingPrompt }) {
   const [isOpen, setIsOpen] = useState(false);
+
+  // 챗봇 위젯을 마우스로 꾹 눌러 드래그하여 화면 다른 위치로 옮기는 기능
+  // 버튼(닫힘 상태)과 패널(열림 상태)이 같은 우하단 기준 좌표(right/bottom)를 공유하므로 위치가 항상 일치한다.
+  const [dragPos, setDragPos] = useState({ right: 24, bottom: 24 });
+  const dragStateRef = useRef({ dragging: false, moved: false, lastX: 0, lastY: 0 });
+
+  const handleDragMove = (e) => {
+    if (!dragStateRef.current.dragging) return;
+    const dx = e.clientX - dragStateRef.current.lastX;
+    const dy = e.clientY - dragStateRef.current.lastY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragStateRef.current.moved = true;
+    dragStateRef.current.lastX = e.clientX;
+    dragStateRef.current.lastY = e.clientY;
+    setDragPos((prev) => ({
+      right: Math.max(4, Math.min(window.innerWidth - 60, prev.right - dx)),
+      bottom: Math.max(4, Math.min(window.innerHeight - 60, prev.bottom - dy)),
+    }));
+  };
+
+  const handleDragEnd = () => {
+    dragStateRef.current.dragging = false;
+    document.body.style.userSelect = '';
+    window.removeEventListener('mousemove', handleDragMove);
+    window.removeEventListener('mouseup', handleDragEnd);
+  };
+
+  const handleDragStart = (e) => {
+    dragStateRef.current = { dragging: true, moved: false, lastX: e.clientX, lastY: e.clientY };
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleDragMove);
+    window.addEventListener('mouseup', handleDragEnd);
+  };
+
+  useEffect(() => {
+    return () => {
+      window.removeEventListener('mousemove', handleDragMove);
+      window.removeEventListener('mouseup', handleDragEnd);
+    };
+  }, []);
   const [messages, setMessages] = useState([
     {
       sender: 'ai',
@@ -117,11 +156,13 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
       `}</style>
       {/* 1. [플로팅 아이콘 버튼: 상시 렌더링 및 iOS 감성 작아짐 트랜지션] */}
       <button
-        onClick={() => setIsOpen(true)}
+        onMouseDown={handleDragStart}
+        onClick={() => { if (!dragStateRef.current.moved) setIsOpen(true); }}
+        title="꾹 눌러서 드래그하면 위치를 옮길 수 있어요"
         style={{
           position: 'fixed',
-          bottom: '24px',
-          right: '24px',
+          bottom: `${dragPos.bottom}px`,
+          right: `${dragPos.right}px`,
           zIndex: 9999,
           fontFamily: 'Outfit, sans-serif',
           backgroundColor: '#2B3530',
@@ -131,7 +172,7 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
           padding: '14px 26px',
           fontSize: '0.95rem',
           fontWeight: '600',
-          cursor: 'pointer',
+          cursor: 'grab',
           boxShadow: '0 8px 24px rgba(43, 53, 48, 0.2)',
           display: 'flex',
           alignItems: 'center',
@@ -140,12 +181,13 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
           transform: isOpen ? 'translateY(15px) scale(0.7)' : 'translateY(0) scale(1)', // 아래로 내려앉으며 작아짐
           visibility: isOpen ? 'hidden' : 'visible',
           pointerEvents: isOpen ? 'none' : 'auto',
-          transition: 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s, visibility 0.45s, background-color 0.25s'
+          transition: 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s, visibility 0.45s, background-color 0.25s',
+          touchAction: 'none'
         }}
-        onMouseEnter={(e) => { 
+        onMouseEnter={(e) => {
           e.currentTarget.style.backgroundColor = '#19201C';
         }}
-        onMouseLeave={(e) => { 
+        onMouseLeave={(e) => {
           e.currentTarget.style.backgroundColor = '#2B3530';
         }}
       >
@@ -156,8 +198,8 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
       {/* 2. [메신저 대화창 패널: 상시 렌더링 및 iOS 찰진 줌인 팝업 트랜지션] */}
       <div style={{
         position: 'fixed',
-        bottom: '24px',
-        right: '24px',
+        bottom: `${dragPos.bottom}px`,
+        right: `${dragPos.right}px`,
         zIndex: 9999,
         fontFamily: 'Outfit, sans-serif',
         width: '380px',
@@ -178,15 +220,22 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
         pointerEvents: isOpen ? 'auto' : 'none',
         transition: 'transform 0.48s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.38s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.48s'
       }}>
-        {/* 상단 헤더 바 */}
-        <div style={{
-          backgroundColor: '#2B3530',
-          padding: '16px 20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderBottom: '1px solid #CDBCB2'
-        }}>
+        {/* 상단 헤더 바 (꾹 눌러 드래그하면 위젯 전체를 원하는 위치로 옮길 수 있음) */}
+        <div
+          onMouseDown={handleDragStart}
+          title="꾹 눌러서 드래그하면 위치를 옮길 수 있어요"
+          style={{
+            backgroundColor: '#2B3530',
+            padding: '16px 20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderBottom: '1px solid #CDBCB2',
+            cursor: 'grab',
+            touchAction: 'none',
+            userSelect: 'none'
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '1.2rem' }}>🎨</span>
             <div>

@@ -116,3 +116,14 @@ transformers
 torch
 torchvision
 pillow
+ultralytics==8.4.90
+opencv-python-headless==5.0.0.93
+matplotlib==3.11.0
+nvidia-ml-py==13.610.43
+polars==1.42.1
+ultralytics-thop==2.0.20
+pyparsing==3.3.2
+kiwisolver==1.5.0
+fonttools==4.63.0
+cycler==0.12.1
+contourpy==1.3.3

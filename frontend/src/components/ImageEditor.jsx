@@ -5,7 +5,7 @@
 // 1차 단독 혹은 2차 동시 수선을 의뢰하는 프리미엄 편집 컴포넌트입니다.
 // ==============================================================
 import React, { useState, useRef } from 'react';
-import { editImage, searchProducts, embedCropImage, API_BASE_URL } from '../services/api';
+import { searchProducts, embedCropImage, API_BASE_URL } from '../services/api';
 
 export default function ImageEditor({ 
   imageId, 
@@ -37,6 +37,8 @@ export default function ImageEditor({
   const [promptB, setPromptB] = useState("");
   const [editing, setEditing] = useState(false);
   const [editedResultUrl, setEditedResultUrl] = useState(null);
+  // 부분 가구 교체 실행 시 스타일 변환과 동일하게 아래에 실시간 진행 상황을 보여주기 위한 상태
+  const [editProgress, setEditProgress] = useState('');
 
   // 유사 가구 검색 상태 변수
   const [searchingProducts, setSearchingProducts] = useState(false);
@@ -57,8 +59,48 @@ export default function ImageEditor({
   const [embeddingStepsB, setEmbeddingStepsB] = useState([]);
   const [embeddingCurrentStepB, setEmbeddingCurrentStepB] = useState("");
 
+  // 🎯 [YOLOv8-seg 가구 정밀 인식] 드래그 영역 안의 실제 가구 실루엣만 자동으로 잡아내는 상태
+  // detecting: 인식 중 여부 / mask: 감지 성공 시 받은 정밀 세그멘테이션 마스크(base64) / label: 감지된 가구 종류
+  const [yoloStateA, setYoloStateA] = useState({ detecting: false, mask: null, label: null, confidence: null });
+  const [yoloStateB, setYoloStateB] = useState({ detecting: false, mask: null, label: null, confidence: null });
+
   const containerRef = useRef(null);
   const imgRef = useRef(null);
+
+  // 드래그 완료 시 백엔드에 YOLOv8-seg 가구 인식을 요청하여 사각형 대신 정밀 실루엣 마스크로 교체 시도
+  const detectFurnitureMask = async (mode, pixels) => {
+    if (!imageId || !pixels || pixels.length !== 4) return;
+    const setYoloState = mode === 'A' ? setYoloStateA : setYoloStateB;
+    setYoloState({ detecting: true, mask: null, label: null, confidence: null });
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/image/detect_furniture_mask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_id: imageId, bbox: pixels })
+      });
+      const data = await res.json();
+      if (data.success && data.data?.detected) {
+        setYoloState({
+          detecting: false,
+          mask: data.data.mask,
+          label: data.data.label,
+          confidence: data.data.confidence
+        });
+        // 감지된 실제 가구 경계로 화면 미리보기 박스도 정밀 정합
+        const bp = data.data.bbox_norm;
+        if (bp) {
+          const setBbox = mode === 'A' ? setBboxNormA : setBboxNormB;
+          setBbox({ x1: bp.x1, y1: bp.y1, x2: bp.x2, y2: bp.y2 });
+        }
+      } else {
+        // 인식 실패 시 기존 사각형 드래그 선택을 그대로 사용 (조용히 폴백)
+        setYoloState({ detecting: false, mask: null, label: null, confidence: null });
+      }
+    } catch (err) {
+      console.error("YOLO 가구 인식 실패:", err);
+      setYoloState({ detecting: false, mask: null, label: null, confidence: null });
+    }
+  };
 
   if (!imageId || !originalImageUrl) return null;
 
@@ -83,10 +125,12 @@ export default function ImageEditor({
       setBboxNormA(null);
       setMaskPixelsA(null);
       setEmbeddingA(null);
+      setYoloStateA({ detecting: false, mask: null, label: null, confidence: null });
     } else {
       setBboxNormB(null);
       setMaskPixelsB(null);
       setEmbeddingB(null);
+      setYoloStateB({ detecting: false, mask: null, label: null, confidence: null });
     }
   };
 
@@ -219,11 +263,15 @@ export default function ImageEditor({
       setMaskPixelsA(targetPixels);
       // 드래그 완료 후 즉시 실시간 임베딩 트리거
       triggerClipEmbedding('A', targetPixels);
+      // 사각형 대신 실제 가구 윤곽선만 쓸 수 있도록 YOLOv8-seg 정밀 인식 시도
+      detectFurnitureMask('A', targetPixels);
     } else {
       setBboxNormB(finalCoords);
       setMaskPixelsB(targetPixels);
       // 드래그 완료 후 즉시 실시간 임베딩 트리거
       triggerClipEmbedding('B', targetPixels);
+      // 사각형 대신 실제 가구 윤곽선만 쓸 수 있도록 YOLOv8-seg 정밀 인식 시도
+      detectFurnitureMask('B', targetPixels);
     }
   };
 
@@ -238,6 +286,7 @@ export default function ImageEditor({
       setEmbeddingCurrentStepA("");
       setProductsListA([]);
       setPromptA("");
+      setYoloStateA({ detecting: false, mask: null, label: null, confidence: null });
     } else {
       setBboxNormB(null);
       setMaskPixelsB(null);
@@ -247,6 +296,7 @@ export default function ImageEditor({
       setEmbeddingCurrentStepB("");
       setProductsListB([]);
       setPromptB("");
+      setYoloStateB({ detecting: false, mask: null, label: null, confidence: null });
     }
   };
 
@@ -259,7 +309,8 @@ export default function ImageEditor({
     setEmbeddingStepsA([]);
     setEmbeddingCurrentStepA("");
     setPromptA("");
-    
+    setYoloStateA({ detecting: false, mask: null, label: null, confidence: null });
+
     setBboxNormB(null);
     setMaskPixelsB(null);
     setEmbeddingB(null);
@@ -267,15 +318,16 @@ export default function ImageEditor({
     setEmbeddingStepsB([]);
     setEmbeddingCurrentStepB("");
     setPromptB("");
-    
+    setYoloStateB({ detecting: false, mask: null, label: null, confidence: null });
+
     setEditedResultUrl(null);
     setProductsListA([]);
     setProductsListB([]);
     onError(null);
   };
 
-  // 캔버스 드로잉을 통한 원형 마스크 PNG 추출 헬퍼 함수
-  const generateCircularBase64Mask = (bbox, width, height) => {
+  // 캔버스 드로잉을 통한 마스크 PNG 추출 헬퍼 함수 (둥근 사각형 렌더링 고정)
+  const generateBase64Mask = (bbox, width, height) => {
     if (!bbox) return null;
     const canvas = document.createElement('canvas');
     canvas.width = width;
@@ -286,19 +338,20 @@ export default function ImageEditor({
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, width, height);
     
-    // 흰색 타원 칠하기
     const x = bbox.x1 * width;
     const y = bbox.y1 * height;
     const w = (bbox.x2 - bbox.x1) * width;
     const h = (bbox.y2 - bbox.y1) * height;
     
+    // 둥근 사각형(roundRect) 마스크 칠하기 (모서리 잔재 보존 및 가구 경계 정합 향상)
     ctx.fillStyle = '#ffffff';
+    const radius = Math.min(w, h) * 0.12; // 12% 수준의 자연스러운 둥근 라운딩 처리
     ctx.beginPath();
-    const cx = x + w / 2;
-    const cy = y + h / 2;
-    const rx = w / 2;
-    const ry = h / 2;
-    ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+    if (typeof ctx.roundRect === 'function') {
+      ctx.roundRect(x, y, w, h, radius);
+    } else {
+      ctx.rect(x, y, w, h);
+    }
     ctx.fill();
     
     return canvas.toDataURL('image/png');
@@ -317,61 +370,112 @@ export default function ImageEditor({
     
     onError(null);
     setEditing(true);
+    setEditProgress('부분 가구 교체 준비 중...');
+
+    const finishSuccess = (data) => {
+      const eUrl = data?.edited_image_url || data?.editedImageUrl;
+      // 브라우저 캐시 방지를 위해 타임스탬프 쿼리 파라미터 추가
+      const cacheBustedUrl = eUrl ? `${eUrl}?t=${Date.now()}` : eUrl;
+      setEditedResultUrl(cacheBustedUrl);
+
+      if (onGenerateSuccess) {
+        onGenerateSuccess({
+          resultId: data?.result_id || data?.edit_id || imageId,
+          resultImageUrl: getFullUrl(cacheBustedUrl),
+          style: "repair",
+          prompt: promptA.trim(),
+          processingTime: data?.processing_time || 0.42,
+          status: "completed",
+          metrics: data?.metrics || null // 한글 주석: 부분 인페인팅 정량평가 점수 전달
+        });
+      }
+
+      // 수선 성공 시, 다음 단계 교체를 용이하게 하기 위해 드래그 영역 및 폼 인풋 리셋
+      setBboxNormA(null);
+      setMaskPixelsA(null);
+      setBboxNormB(null);
+      setMaskPixelsB(null);
+      setPromptA("");
+      setPromptB("");
+    };
 
     try {
       const natW = imgRef.current.naturalWidth || 800;
       const natH = imgRef.current.naturalHeight || 600;
 
-      // 마스크 1 (A) 렌더링 및 Base64 인코딩
-      const base64MaskA = generateCircularBase64Mask(bboxNormA, natW, natH);
-      
-      // 마스크 2 (B) 렌더링 (선택적)
-      const base64MaskB = bboxNormB ? generateCircularBase64Mask(bboxNormB, natW, natH) : null;
+      // 마스크 1 (A): YOLOv8-seg 가 실제 가구 실루엣을 인식했다면 그 정밀 마스크를 우선 사용하고,
+      // 인식 실패 시(오브젝트 미검출 등) 기존 사각형 드래그 마스크로 자연스럽게 폴백한다.
+      const base64MaskA = yoloStateA.mask || generateBase64Mask(bboxNormA, natW, natH);
 
-      const res = await editImage({
-        imageId,
-        sessionId,
+      // 마스크 2 (B) 렌더링 (선택적) - 동일하게 YOLO 정밀 마스크 우선
+      const base64MaskB = bboxNormB ? (yoloStateB.mask || generateBase64Mask(bboxNormB, natW, natH)) : null;
+
+      const requestBody = {
+        image_id: imageId,
+        session_id: sessionId,
         mask: base64MaskA,           // ComfyUI 인페인팅용 Base64 PNG 마스크
         mask_b: base64MaskB,
         mask_pixels_a: maskPixelsA,  // mock 폴백용 픽셀 좌표 배열 [x1,y1,x2,y2]
         mask_pixels_b: maskPixelsB ? maskPixelsB : null,
+        selected_object: null,
         prompt: promptA.trim(),
         prompt_b: base64MaskB ? promptB.trim() : null
+      };
+
+      // 스타일 변환과 동일하게 실시간 진행 상황(SSE)을 아래에 표시하며 진행
+      const response = await fetch(`${API_BASE_URL}/api/image/edit/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody)
       });
 
-      if (res.success) {
-        const eUrl = res.data?.edited_image_url || res.data?.editedImageUrl;
-        // 브라우저 캐시 방지를 위해 타임스탬프 쿼리 파라미터 추가
-        const cacheBustedUrl = eUrl ? `${eUrl}?t=${Date.now()}` : eUrl;
-        setEditedResultUrl(cacheBustedUrl);
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP 통신 실패 (Status: ${response.status})`);
+      }
 
-        if (onGenerateSuccess) {
-          onGenerateSuccess({
-            resultId: res.data?.result_id || imageId,
-            resultImageUrl: getFullUrl(cacheBustedUrl),
-            style: "repair",
-            prompt: promptA.trim(),
-            processingTime: res.data?.processing_time || 0.42,
-            status: "completed",
-            metrics: res.data?.metrics || null // 한글 주석: 부분 인페인팅 정량평가 점수 전달
-          });
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      let finished = false;
+
+      while (!finished) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const rawData = line.slice(6).trim();
+            if (!rawData) continue;
+            const item = JSON.parse(rawData);
+
+            if (item.status === "error") {
+              onError({ errorCode: "PROCESSING_FAILED", message: item.message || "가구 교체에 실패했습니다." });
+              finished = true;
+              break;
+            } else if (item.status === "completed" && item.result_data) {
+              // result_data가 포함된 completed만 최종 완료로 간주 (ComfyUI 자체 완료 신호와 구분)
+              finishSuccess(item.result_data);
+              finished = true;
+              break;
+            } else {
+              setEditProgress(item.message || '처리 중...');
+            }
+          } catch (jsonErr) {
+            console.error("SSE JSON Parse Error:", jsonErr);
+          }
         }
-        
-        // 수선 성공 시, 다음 단계 교체를 용이하게 하기 위해 드래그 영역 및 폼 인풋 리셋
-        setBboxNormA(null);
-        setMaskPixelsA(null);
-        setBboxNormB(null);
-        setMaskPixelsB(null);
-        setPromptA("");
-        setPromptB("");
-      } else {
-        onError({ errorCode: res.errorCode || "PROCESSING_FAILED", message: res.message });
       }
     } catch (err) {
       console.error(err);
-      onError({ errorCode: "CANVAS_ERROR", message: `마스크 분석 캔버스 생성 중 오류가 발생했습니다: ${err.message}` });
+      onError({ errorCode: "CANVAS_ERROR", message: `마스크 분석 또는 통신 중 오류가 발생했습니다: ${err.message}` });
     } finally {
       setEditing(false);
+      setEditProgress('');
     }
   };
 
@@ -491,7 +595,7 @@ export default function ImageEditor({
               style={{ width: '100%', height: 'auto', display: 'block' }}
             />
             
-            {/* 1차 마스크 영역 박스 (디지털 블루 네온 원형) */}
+            {/* 1차 마스크 영역 박스 (디지털 블루 네온 원형/사각형) */}
             {bboxNormA && (
               <div
                 style={{
@@ -500,24 +604,28 @@ export default function ImageEditor({
                   top: `${bboxNormA.y1 * 100}%`,
                   width: `${(bboxNormA.x2 - bboxNormA.x1) * 100}%`,
                   height: `${(bboxNormA.y2 - bboxNormA.y1) * 100}%`,
-                  border: '3px solid #3B82F6',
-                  borderRadius: '50%',
+                  border: `3px ${yoloStateA.mask ? 'solid' : 'dashed'} #3B82F6`,
+                  borderRadius: '12%', // 실제 전송되는 마스크(roundRect, radius 12%)와 동일한 모양으로 미리보기 표시
                   background: 'rgba(59, 130, 246, 0.15)',
                   boxShadow: '0 0 16px rgba(59, 130, 246, 0.5)',
                   pointerEvents: 'none'
                 }}
               >
-                <span style={{ 
-                  position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', 
-                  background: '#3B82F6', color: '#FCFAF7', fontSize: '0.7rem', fontWeight: '800', 
-                  padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' 
+                <span style={{
+                  position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)',
+                  background: '#3B82F6', color: '#FCFAF7', fontSize: '0.7rem', fontWeight: '800',
+                  padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
                 }}>
-                  가구 A (선택됨)
+                  {yoloStateA.detecting
+                    ? 'AI 가구 인식 중...'
+                    : yoloStateA.mask
+                      ? `AI 정밀 인식: ${yoloStateA.label} (${Math.round((yoloStateA.confidence || 0) * 100)}%)`
+                      : '가구 A (사각형 선택)'}
                 </span>
               </div>
             )}
-            
-            {/* 2차 마스크 영역 박스 (로즈 핑크 네온 원형) - 이모지 제거 */}
+
+            {/* 2차 마스크 영역 박스 (로즈 핑크 네온 원형/사각형) - 이모지 제거 */}
             {bboxNormB && (
               <div
                 style={{
@@ -526,19 +634,23 @@ export default function ImageEditor({
                   top: `${bboxNormB.y1 * 100}%`,
                   width: `${(bboxNormB.x2 - bboxNormB.x1) * 100}%`,
                   height: `${(bboxNormB.y2 - bboxNormB.y1) * 100}%`,
-                  border: '3px solid #EC4899',
-                  borderRadius: '50%',
+                  border: `3px ${yoloStateB.mask ? 'solid' : 'dashed'} #EC4899`,
+                  borderRadius: '12%', // 실제 전송되는 마스크(roundRect, radius 12%)와 동일한 모양으로 미리보기 표시
                   background: 'rgba(236, 72, 153, 0.15)',
                   boxShadow: '0 0 16px rgba(236, 72, 153, 0.5)',
                   pointerEvents: 'none'
                 }}
               >
-                <span style={{ 
-                  position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)', 
-                  background: '#EC4899', color: '#FCFAF7', fontSize: '0.7rem', fontWeight: '800', 
-                  padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' 
+                <span style={{
+                  position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)',
+                  background: '#EC4899', color: '#FCFAF7', fontSize: '0.7rem', fontWeight: '800',
+                  padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
                 }}>
-                  가구 B (선택됨)
+                  {yoloStateB.detecting
+                    ? 'AI 가구 인식 중...'
+                    : yoloStateB.mask
+                      ? `AI 정밀 인식: ${yoloStateB.label} (${Math.round((yoloStateB.confidence || 0) * 100)}%)`
+                      : '가구 B (사각형 선택)'}
                 </span>
               </div>
             )}
@@ -631,6 +743,8 @@ export default function ImageEditor({
                   </button>
                 </div>
               </div>
+
+
 
               {/* 인풋 영역 A - 교체 스타일 입력 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -730,6 +844,24 @@ export default function ImageEditor({
                 >
                   {editing ? "AI 가구 교체 적용 중..." : "AI 가구 부분 교체 실행"}
                 </button>
+
+                {/* 스타일 변환과 동일한 실시간 진행 상황 표시 (부분 가구 교체 실행 시) */}
+                {editing && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    background: 'rgba(16, 185, 129, 0.08)',
+                    border: '1px solid rgba(16, 185, 129, 0.25)'
+                  }}>
+                    <div style={{ width: '9px', height: '9px', borderRadius: '50%', backgroundColor: '#10B981', animation: 'pulse 1.2s infinite', flexShrink: 0 }} />
+                    <span style={{ fontSize: '0.82rem', color: 'var(--text-main)', lineHeight: '1.4' }}>
+                      {editProgress || 'AI 엔진 연산을 대기 중입니다.'}
+                    </span>
+                  </div>
+                )}
 
                 <button
                   type="button"
