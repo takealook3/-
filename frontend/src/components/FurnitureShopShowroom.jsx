@@ -30,23 +30,39 @@ const HIGH_RES_OBJECT_IMAGES = [
   "https://images.unsplash.com/photo-1533090161767-e6ffed986c88?auto=format&fit=crop&w=800&q=80", // 아티스틱 유리 화병
   "https://images.unsplash.com/photo-1506812779316-934cef51b42e?auto=format&fit=crop&w=800&q=80", // 빈티지 감성 조명
   "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=800&q=80", // 레트로 턴테이블
-  "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80", // 지중해풍 소품
-  "https://images.unsplash.com/photo-1532323544230-7191fd51bc1b?auto=format&fit=crop&w=800&q=80", // 모로칸 랜턴
+  "https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?auto=format&fit=crop&w=800&q=80", // 5: 아로마 디퓨저 & 캔들
+  "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=800&q=80", // 6: 내추럴 우드 데코 트레이
   "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?auto=format&fit=crop&w=800&q=80"  // 모던 메탈 오브제
 ];
 
-const resolveHighResImage = (category, url, id) => {
-  // 1. URL이 완전히 비어있는 최후의 경우에만 깨짐 방지용 기본 고화질 이미지 매핑
-  if (!url) {
+const resolveHighResImage = (category, url, id, overlapsObj = null) => {
+  let finalUrl = url;
+
+  // [한글 주석] 1. 카테고리 크로스 오염 방어 (침대와 소파, 또는 오브제가 서로 중복되게 꼬인 불량 메타데이터 격리)
+  if (overlapsObj && finalUrl) {
+    if (category === '침대' && finalUrl === overlapsObj.sofaUrl) finalUrl = null;
+    if (category === '소파' && finalUrl === overlapsObj.bedUrl) finalUrl = null;
+    if (category === '오브제' && (
+      finalUrl === overlapsObj.bedUrl || 
+      finalUrl === overlapsObj.sofaUrl || 
+      finalUrl === overlapsObj.styleUrl || 
+      finalUrl === overlapsObj.styleImgUrl
+    )) {
+      finalUrl = null;
+    }
+  }
+
+  // [한글 주석] 2. 이미지 URL이 없거나 격리 필터에 의해 null 처리된 경우 카테고리 전용 프리미엄 고화질 이미지 덤프로 완벽 수선
+  if (!finalUrl) {
     const seed = id - 1; // 0-indexed로 일관성 매핑
     if (category === '침대') return HIGH_RES_BED_IMAGES[seed % HIGH_RES_BED_IMAGES.length];
     if (category === '소파') return HIGH_RES_SOFA_IMAGES[seed % HIGH_RES_SOFA_IMAGES.length];
     return HIGH_RES_OBJECT_IMAGES[seed % HIGH_RES_OBJECT_IMAGES.length];
   }
   
-  // 2. 사용자가 제대로 등록한 링크는 원본 그대로 사용 (핀터레스트 해상도 치환만 안전하게 처리)
-  let adjustedUrl = url;
-  if (adjustedUrl.includes('w=292') || adjustedUrl.includes('w=200') || adjustedUrl.includes('w=115')) {
+  // [한글 주석] 3. 사용자가 제대로 등록한 링크는 핀터레스트 해상도만 안전하게 고화질 규격으로 치환하여 사용
+  let adjustedUrl = finalUrl;
+  if (adjustedUrl.includes('w=292') || adjustedUrl.includes('w=200') || adjustedUrl.includes('w=115') || adjustedUrl.includes('w=720')) {
     adjustedUrl = adjustedUrl.replace(/w=\d+/, 'w=1000').replace(/h=\d+/, 'h=700');
   }
   // 핀터레스트의 736x 규격을 1200x 규격으로 교체하여 디테일 향상
@@ -84,6 +100,14 @@ export default function FurnitureShopShowroom({ onSelectStyle, selectedCategory,
   const allProducts = useMemo(() => {
     const products = [];
     stylesDb.forEach(style => {
+      // 카테고리 교차 검증용 이미지 맵 정의
+      const overlapsObj = {
+        bedUrl: style.images?.["침대"],
+        sofaUrl: style.images?.["소파"],
+        styleUrl: style.imageUrl,
+        styleImgUrl: style.images?.["스타일"]
+      };
+
       // 1. 소파
       if (style.images?.["소파"]) {
         products.push({
@@ -94,7 +118,7 @@ export default function FurnitureShopShowroom({ onSelectStyle, selectedCategory,
           title: "프리미엄 디자이너 소파",
           engName: `${style.engName} Edition Sofa`,
           desc: `${style.name} 무드에 맞춰 제작된 모던한 실루엣의 시그니처 소파입니다.`,
-          imageUrl: resolveHighResImage('소파', style.images["소파"], style.id),
+          imageUrl: resolveHighResImage('소파', style.images["소파"], style.id, overlapsObj),
           target: style.target,
           difficulty: style.difficulty,
           price: getVirtualPriceRange('소파', style.difficulty),
@@ -111,13 +135,14 @@ export default function FurnitureShopShowroom({ onSelectStyle, selectedCategory,
           title: "릴렉싱 원목/패브릭 침대",
           engName: `${style.engName} Relaxing Bed`,
           desc: `아늑한 ${style.name} 침실 환경을 조성해 주는 견고한 오크/패브릭 침대입니다.`,
-          imageUrl: resolveHighResImage('침대', style.images["침대"], style.id),
+          imageUrl: resolveHighResImage('침대', style.images["침대"], style.id, overlapsObj),
           target: style.target,
           difficulty: style.difficulty,
           price: getVirtualPriceRange('침대', style.difficulty),
           material: "북미산 화이트 오크 원목 / 오코텍스 인증 방수 패브릭"
         });
       }
+      // 3. 오브제 (소품) - [오브제1, 2, 3 모두 개별 상품 카드로 다중 팽창 적용]
       // 3. 오브제 (소품) - [오브제1, 2, 3 모두 개별 상품 카드로 다중 팽창 적용]
       ["오브제1", "오브제2", "오브제3"].forEach((key, index) => {
         if (style.images?.[key]) {
@@ -129,7 +154,7 @@ export default function FurnitureShopShowroom({ onSelectStyle, selectedCategory,
             title: `시그니처 오브제 컬렉션 0${index + 1}`,
             engName: `${style.engName} Decor Edition 0${index + 1}`,
             desc: `공간의 품격과 ${style.name} 무드를 완성하는 감성적인 테마 소품 0${index + 1}입니다.`,
-            imageUrl: resolveHighResImage('오브제', style.images[key], style.id + index * 100), /* [고화질 대체 이미지 씨드 변경] */
+            imageUrl: resolveHighResImage('오브제', style.images[key], style.id + index * 100, overlapsObj), /* [고화질 대체 이미지 씨드 변경 및 중복 방어 주입] */
             target: style.target,
             difficulty: style.difficulty,
             price: getVirtualPriceRange('오브제', style.difficulty),
