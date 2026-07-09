@@ -337,71 +337,6 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
             </div>
           ))}
 
-            {/* [추천 질문 칩] 대화 시작 전(첫 인사말만 있을 때)에만 노출 — 클릭하면 곧바로 질문 전송.
-                아이콘 박스 + 짧은 라벨의 가로 배열 필 카드 스타일 (반투명 유리 질감) */}
-            {messages.length === 1 && !loading && (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'row',
-                flexWrap: 'wrap',
-                gap: '8px',
-                marginTop: '4px',
-                width: '100%'
-              }}>
-                {SUGGESTED_QUESTIONS.map((q, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => handleSend(q.question)}
-                    title={q.question}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      backgroundColor: 'rgba(255, 255, 255, 0.6)',
-                      backdropFilter: 'blur(6px)',
-                      color: '#4A443E',
-                      border: 'none',
-                      borderRadius: '14px',
-                      padding: '7px 12px 7px 7px',
-                      fontSize: '0.76rem',
-                      fontWeight: '500',
-                      fontFamily: 'inherit',
-                      cursor: 'pointer',
-                      whiteSpace: 'nowrap',
-                      boxShadow: '0 2px 8px rgba(43, 53, 48, 0.06)',
-                      transition: 'background-color 0.2s, transform 0.15s, box-shadow 0.2s'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(43, 53, 48, 0.1)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.6)';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(43, 53, 48, 0.06)';
-                    }}
-                  >
-                    <span style={{
-                      width: '26px',
-                      height: '26px',
-                      borderRadius: '9px',
-                      backgroundColor: '#FCFAF7',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '0.85rem',
-                      boxShadow: 'inset 0 0 0 1px rgba(205, 188, 178, 0.4)'
-                    }}>
-                      {q.icon}
-                    </span>
-                    {q.label}
-                  </button>
-                ))}
-              </div>
-            )}
-
             {loading && (
               <div style={{
                 display: 'flex',
@@ -432,6 +367,71 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
           <div ref={messagesEndRef} />
         </div>
 
+
+        {/* [추천 질문 칩] 텍스트 입력창 바로 위, 세로로 3개 스택 — 대화 시작 전에만 노출, 클릭 시 즉시 전송 */}
+        {messages.length === 1 && !loading && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: '6px',
+            padding: '10px 12px',
+            backgroundColor: '#F3EBE5'
+          }}>
+            {SUGGESTED_QUESTIONS.map((q, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => handleSend(q.question)}
+                title={q.question}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.6)',
+                  backdropFilter: 'blur(6px)',
+                  color: '#4A443E',
+                  border: 'none',
+                  borderRadius: '14px',
+                  padding: '7px 12px 7px 7px',
+                  fontSize: '0.76rem',
+                  fontWeight: '500',
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  boxShadow: '0 2px 8px rgba(43, 53, 48, 0.06)',
+                  transition: 'background-color 0.2s, transform 0.15s, box-shadow 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(43, 53, 48, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.6)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(43, 53, 48, 0.06)';
+                }}
+              >
+                <span style={{
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '9px',
+                  backgroundColor: '#FCFAF7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.85rem',
+                  flexShrink: 0,
+                  boxShadow: 'inset 0 0 0 1px rgba(205, 188, 178, 0.4)'
+                }}>
+                  {q.icon}
+                </span>
+                {q.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* 하단 입력 영역 */}
         <form
