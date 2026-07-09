@@ -408,9 +408,6 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
                   <div className="kakao-dot" />
                   <div className="kakao-dot" />
                 </div>
-                <span style={{ color: '#7A6C62', fontSize: '0.78rem', paddingLeft: '4px', fontWeight: '500' }}>
-                  {imageId ? "AI가 인테리어를 분석하고 새 스타일로 변환하는 중입니다..." : "AI 스타일리스트가 공간 정보를 분석하고 있습니다..."}
-                </span>
               </div>
             )}
 
