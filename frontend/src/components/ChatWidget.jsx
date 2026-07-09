@@ -6,6 +6,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { sendChatMessage, API_BASE_URL } from '../services/api';
 
+// [추천 질문 칩] 클릭 즉시 질문이 전송되는 스타터 질문 3종.
+// 백엔드가 가장 잘 답하는 세 갈래(평형대 규격 추천 DB2 / 스타일·자재 매칭 DB1 / 시공 체크리스트 RAG)를 하나씩 커버한다.
+const SUGGESTED_QUESTIONS = [
+  "30평 아파트에 어울리는 가구 규격과 스타일을 추천해줘",
+  "모던 스타일에 어울리는 벽지와 바닥재 조합을 알려줘",
+  "셀프 인테리어 시공 전에 꼭 확인해야 할 체크리스트를 알려줘"
+];
+
 
 export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt, setPendingPrompt }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -327,6 +335,55 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
               )}
             </div>
           ))}
+
+            {/* [추천 질문 칩] 대화 시작 전(첫 인사말만 있을 때)에만 노출 — 클릭하면 곧바로 질문 전송 */}
+            {messages.length === 1 && !loading && (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                gap: '8px',
+                marginTop: '2px'
+              }}>
+                <span style={{ color: '#7A6C62', fontSize: '0.75rem', fontWeight: '600', paddingLeft: '4px' }}>
+                  이런 질문은 어때요? 👇
+                </span>
+                {SUGGESTED_QUESTIONS.map((q, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => handleSend(q)}
+                    style={{
+                      maxWidth: '90%',
+                      textAlign: 'left',
+                      backgroundColor: '#FCFAF7',
+                      color: '#2B3530',
+                      border: '1px solid #CDBCB2',
+                      borderRadius: '14px 14px 14px 4px',
+                      padding: '9px 14px',
+                      fontSize: '0.82rem',
+                      lineHeight: '1.4',
+                      fontFamily: 'inherit',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 6px rgba(43, 53, 48, 0.05)',
+                      transition: 'background-color 0.2s, border-color 0.2s, transform 0.15s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#2B3530';
+                      e.currentTarget.style.color = '#FCFAF7';
+                      e.currentTarget.style.transform = 'translateX(2px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#FCFAF7';
+                      e.currentTarget.style.color = '#2B3530';
+                      e.currentTarget.style.transform = 'translateX(0)';
+                    }}
+                  >
+                    💡 {q}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {loading && (
               <div style={{
