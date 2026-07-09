@@ -2707,7 +2707,7 @@ def chat_message(req: ChatMessageRequest):
             for phrase in forbidden_phrases:
                 answer = answer.replace(phrase, "")
             answer = answer.strip()
-            
+
         except Exception as e:
             print(f"❌ [RAG API] 처리 에러 발생 (로컬 모킹 대체): {e}")
             answer = f"['{req.question}']에 대해 임시 모킹 답변을 드립니다. (RAG 추적 오류: {e}) 보통 실내 벽면 복원에는 Gallery White 스타일이 적절합니다."
@@ -2719,6 +2719,46 @@ def chat_message(req: ChatMessageRequest):
             "ZipPT 벽면 복원 가이드북 제2조 (오프라인 추천)",
             "공간 재생 및 하자 방지 체크리스트"
         ]
+
+    # [질문 의도 기반 이미지 첨부] RAG 성공/실패/오프라인 모든 경로에 공통 적용.
+    # 자재(벽지/바닥재) 질문이면 방 전체 스타일 사진은 의도와 무관하므로 첨부하지 않고,
+    # 질문에 언급된 스타일의 벽지/바닥재 이미지만 마크다운(![라벨](URL))으로 본문에 붙인다.
+    # (프론트가 마크다운 이미지를 카드로 렌더링하며 URL 기준 중복 제거)
+    try:
+        _wall_kws = ("벽지", "도배")
+        _floor_kws = ("바닥재", "장판", "마루", "타일", "바닥")
+        _material_kws = _wall_kws + _floor_kws + ("자재", "페인트", "몰딩")
+        # '스타일' 안에 '타일'이 부분 문자열로 들어 있어 모든 스타일 질문이 자재 질문으로
+        # 오판되는 문제 방지 — '스타일'을 제거한 텍스트로 자재 키워드를 검사한다.
+        _q_mat = req.question.replace("스타일", "")
+        if any(kw in _q_mat for kw in _material_kws):
+            image_url = None  # 스타일 룸 전경 사진 제외
+            matched_detail = next(
+                (d for d in STYLE_DETAILS_LIST if d.get("style_name") and d["style_name"] in req.question),
+                None
+            )
+            if matched_detail:
+                wants_wall = any(kw in _q_mat for kw in _wall_kws)
+                wants_floor = any(kw in _q_mat for kw in _floor_kws)
+                generic = not (wants_wall or wants_floor)  # "자재 추천"처럼 포괄 질문이면 둘 다
+                material_lines = []
+                if (wants_wall or generic) and matched_detail.get("wallpaper_image_url"):
+                    material_lines.append(f"![{matched_detail.get('wallpaper_name') or '추천 벽지'}]({matched_detail['wallpaper_image_url']})")
+                if (wants_floor or generic) and matched_detail.get("floor_image_url"):
+                    material_lines.append(f"![{matched_detail.get('floor_name') or '추천 바닥재'}]({matched_detail['floor_image_url']})")
+                if material_lines:
+                    answer += "\n\n" + "\n".join(material_lines)
+                    print(f"🖼️ [RAG API] 자재 질문 의도 감지 → '{matched_detail['style_name']}' 벽지/바닥재 이미지 {len(material_lines)}장 첨부 (룸 사진 제외)")
+        elif not image_url:
+            # 자재 질문이 아닌 스타일 질문인데 이미지가 비어 있으면,
+            # 질문에 언급된 스타일의 대표 룸 사진을 폴백으로 첨부해 의도에 맞는 이미지를 보장한다.
+            for _s_name, _s_img in style_image_map.items():
+                if _s_name and _s_name in req.question:
+                    image_url = _s_img
+                    print(f"🖼️ [RAG API] 스타일 질문 폴백 → '{_s_name}' 대표 룸 이미지 첨부")
+                    break
+    except Exception as intent_err:
+        print(f"⚠️ [RAG API] 의도 기반 이미지 첨부 처리 오류(무시): {intent_err}")
 
     # [세션 장부 기록] 손님과의 대화 내용을 장부에 적어둡니다.
     session_data["chats"].append({

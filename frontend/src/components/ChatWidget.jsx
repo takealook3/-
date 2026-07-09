@@ -89,6 +89,29 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
     return `${API_BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
   };
 
+  // [AI 답변 마크다운 이미지 파서] RAG 답변에 섞여 오는 ![라벨](URL) 문법이
+  // 원문 그대로 노출되며 긴 URL이 말풍선 밖으로 넘치는 문제를 해결한다.
+  // → 이미지 문법은 본문에서 떼어내 실제 <img>로 렌더링하고, 잘린(미완성) 문법 꼬리는 제거한다.
+  const parseAiText = (text) => {
+    const images = [];
+    const seenUrls = new Set();
+    let cleaned = (text || '')
+      // 완성형 이미지/링크 문법: ![라벨](http...) 또는 [라벨](http...) — ]와 ( 사이 줄바꿈 허용
+      .replace(/!?\[([^\]]*)\]\s*\(\s*(https?:\/\/[^)\s]+)\s*\)/g, (m, alt, url) => {
+        // LLM 본문과 백엔드 첨부가 같은 이미지를 중복으로 넣는 경우 URL 기준 1회만 표시
+        if (!seenUrls.has(url)) {
+          seenUrls.add(url);
+          images.push({ alt: alt || '추천 자재 이미지', url });
+        }
+        return '';
+      })
+      // 답변이 중간에 잘려 닫는 괄호가 없는 미완성 문법 꼬리 제거
+      .replace(/!?\[[^\]]*\]?\s*\(?\s*https?:\/\/\S*$/, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    return { cleaned, images };
+  };
+
   const handleSend = async (questionText) => {
     const q = questionText || input;
     if (!q || !q.trim() || loading) return;
@@ -282,7 +305,11 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
           gap: '14px',
           backgroundColor: '#F3EBE5'
         }}>
-          {messages.map((msg, idx) => (
+          {messages.map((msg, idx) => {
+            const { cleaned, images } = msg.sender === 'ai'
+              ? parseAiText(msg.text)
+              : { cleaned: msg.text, images: [] };
+            return (
             <div
               key={idx}
               style={{
@@ -292,7 +319,7 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
                 width: '100%'
               }}
             >
-              <div 
+              <div
                 style={{
                   maxWidth: '85%',
                   padding: '12px 16px',
@@ -302,13 +329,65 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
                   border: msg.sender === 'user' ? 'none' : '1px solid #CDBCB2',
                   fontSize: '0.9rem',
                   lineHeight: '1.5',
+                  whiteSpace: 'pre-wrap',       /* 답변의 줄바꿈 보존 */
+                  wordBreak: 'break-word',      /* 긴 URL/단어가 말풍선 밖으로 넘치지 않게 강제 줄바꿈 */
+                  overflowWrap: 'anywhere',
                   boxShadow: '0 2px 6px rgba(43, 53, 48, 0.05)',
                   cursor: 'default',
                   transition: 'all 0.2s ease'
                 }}
               >
-                {msg.text}
+                {cleaned}
               </div>
+
+              {/* AI 답변 본문에서 추출한 마크다운 이미지들 — 한 줄에 2개씩 가로 그리드로 컴팩트하게 렌더링 */}
+              {images.length > 0 && (
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                  marginTop: '8px',
+                  maxWidth: '85%',
+                  width: '85%'
+                }}>
+                  {images.map((img, imgIdx) => (
+                    <div
+                      key={`md-img-${imgIdx}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveImageUrl(img.url);
+                      }}
+                      style={{
+                        flex: '0 0 calc(50% - 3px)',
+                        borderRadius: '10px',
+                        border: '1px solid #CDBCB2',
+                        overflow: 'hidden',
+                        cursor: 'zoom-in',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                        backgroundColor: '#FCFAF7'
+                      }}
+                    >
+                      <img
+                        src={img.url}
+                        alt={img.alt}
+                        style={{ width: '100%', height: '90px', objectFit: 'cover', display: 'block' }}
+                        onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }}
+                      />
+                      <div style={{
+                        padding: '4px 8px',
+                        fontSize: '0.66rem',
+                        color: '#7A6C62',
+                        fontWeight: '500',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}>
+                        {img.alt}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {msg.imageUrl && (
                 <div 
@@ -335,7 +414,8 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
 
             {loading && (
               <div style={{
@@ -373,7 +453,7 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
           <div style={{
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'stretch',
+            alignItems: 'flex-start', /* 칩 너비를 글자 길이에 맞춤 (stretch 해제) */
             gap: '6px',
             padding: '10px 12px',
             backgroundColor: '#F3EBE5'
