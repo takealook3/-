@@ -437,11 +437,6 @@ def convert_webui_to_api_format(webui_data: dict) -> dict:
 # 전역 번역 캐시 딕셔너리 구축 (속도 향상용) [이유: 반복적인 외부 API 호출을 억제하여 이미지 생성 성능을 높입니다.]
 translation_cache = {}
 
-<<<<<<< HEAD
-def translate_prompt_to_english(prompt: str, orig_image_path: Optional[str] = None) -> str:
-    """사용자가 작성한 프롬프트를 Gemini를 통해 AI 이미지 생성용 영문으로 번역 및 인테리어 전용으로 보강합니다.
-    원본 이미지(orig_image_path)가 존재할 경우 멀티모달 비전 쿼리를 동원해 3D 투시/앵글을 자동 분석해 주문서에 반영합니다.
-=======
 class GeminiTranslationError(Exception):
     """Gemini 번역이 실패했을 때(쿼터 초과 등) 발생. furniture_only 모드에서는 룰 기반 fallback으로 넘어가지 않고 이 예외를 그대로 상위로 전파한다."""
     def __init__(self, message: str, quota_exceeded: bool = False):
@@ -449,29 +444,23 @@ class GeminiTranslationError(Exception):
         self.quota_exceeded = quota_exceeded
 
 
-def translate_prompt_to_english(prompt: str, furniture_only: bool = False) -> str:
+def translate_prompt_to_english(prompt: str, furniture_only: bool = False, orig_image_path: Optional[str] = None) -> str:
     """사용자가 작성한 프롬프트를 Gemini를 통해 AI 이미지 생성용 영문으로 번역 및 인테리어 전용으로 보강합니다.
 
     furniture_only=True 이면 인페인팅(가구 단독 교체) 전용 모드로 동작하여,
     Gemini 쿼터 소진 등으로 fallback 파서가 동작하더라도 방/배경/장면 키워드를 절대 붙이지 않고
     교체 대상 가구 자체만 묘사한다. (배경 키워드가 붙으면 작은 마스크 영역에 방 전체가 그려져 뭉개짐)
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
+    원본 이미지(orig_image_path)가 존재할 경우 멀티모달 비전 쿼리를 동원해 3D 투시/앵글을 자동 분석해 주문서에 반영한다.
     """
     import re
     import base64
     if not prompt or not prompt.strip():
         return "modern furniture, photorealistic" if furniture_only else "modern interior styling"
 
-<<<<<<< HEAD
-    # 캐시 키 생성 시 이미지 경로 유무를 조합해 고유성 보장
-    cache_key = f"{prompt}::{orig_image_path}" if orig_image_path else prompt
-    global translation_cache
-=======
     # [이유: 동일 프롬프트에 대한 번역 요청이 들어오면 LLM API 호출을 거치지 않고 즉시 캐시본을 반환합니다.]
-    # 모드(가구전용/방전체)에 따라 결과가 다르므로 캐시 키에 모드를 포함한다.
+    # 모드(가구전용/방전체)와 비전 분석용 이미지 경로에 따라 결과가 다르므로 캐시 키에 둘 다 포함한다.
     global translation_cache
-    cache_key = f"{'F' if furniture_only else 'R'}::{prompt}"
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
+    cache_key = f"{'F' if furniture_only else 'R'}::{prompt}::{orig_image_path or ''}"
     if cache_key in translation_cache:
         print(f"🌐 [Translate] 캐싱된 번역 결과 반환: '{translation_cache[cache_key]}'")
         return translation_cache[cache_key]
@@ -539,61 +528,38 @@ def translate_prompt_to_english(prompt: str, furniture_only: bool = False) -> st
                 f"Korean: {prompt}\n"
                 "English Prompt:"
             )
-<<<<<<< HEAD
-            
-            # 메시지 컨텐츠 조립
+            # 메시지 컨텐츠 조립 (원본 이미지가 있으면 멀티모달 비전 쿼리 포함)
             message_contents = [{"type": "text", "text": system_prompt}] + image_content
             human_msg = HumanMessage(content=message_contents)
 
-            # 타임아웃(12.0초)이 적용된 동적 스레드 풀 실행 (지연이 있더라도 번역 성공률 극대화)
+            # 타임아웃 12초: 첫 Gemini 호출은 클라이언트/SSL 초기화로 지연이 잦고 비전 쿼리는 더 느리다.
+            # 결과는 캐시되므로 최초 1회만 지연에 영향.
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(rag_llm.invoke, [human_msg])
                 response = future.result(timeout=12.0)
-=======
-            # 타임아웃 8초: 앱 내 첫 Gemini 호출은 클라이언트/SSL 초기화로 2.5초를 넘기는 경우가 잦아
-            # 무조건 fallback으로 빠지던 문제가 있었음. 결과는 캐시되므로 최초 1회만 지연에 영향.
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(rag_llm.invoke, [HumanMessage(content=system_prompt)])
-                response = future.result(timeout=8.0)
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
             translated = response.content.strip().replace('"', '').replace("'", "")
             print(f"🌐 [Translate] 번역 완료: '{translated}'")
             translation_cache[cache_key] = translated
             return translated
         except Exception as e:
-<<<<<<< HEAD
-            print(f"⚠️ [Translate] 기본 모델 번역 실패 ({e}). 백업 모델(gemini-2.0-flash)로 재시도합니다.")
-            import traceback
-            traceback.print_exc()
-            try:
-                from langchain_google_genai import ChatGoogleGenerativeAI
-                backup_llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.2)
-                # 동일한 human_msg 재활용
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(backup_llm.invoke, [human_msg])
-                    response = future.result(timeout=12.0)
-=======
             print(f"⚠️ [Translate] 기본 모델 번역 실패 ({e}). 백업 모델(gemini-2.5-flash)로 재시도합니다.")
             try:
                 # [한글 주석] 주력 모델 실패/쿼터 초과 시 gemini-2.5-flash 로 우회 번역을 재시도한다.
                 #   (gemini-2.0-flash 는 무료 티어 쿼터가 먼저 소진되는 경우가 많아 2.5-flash 로 대체)
                 from langchain_google_genai import ChatGoogleGenerativeAI
                 backup_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2)
+                # 동일한 human_msg(멀티모달 포함) 재활용
                 with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(backup_llm.invoke, [HumanMessage(content=system_prompt)])
-                    response = future.result(timeout=8.0) # 백업 모델도 초기화 지연 여유를 위해 8초
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
+                    future = executor.submit(backup_llm.invoke, [human_msg])
+                    response = future.result(timeout=12.0)
                 translated = response.content.strip().replace('"', '').replace("'", "")
                 print(f"🌐 [Translate] 백업 모델 번역 성공: '{translated}'")
                 translation_cache[cache_key] = translated
                 return translated
             except Exception as e2:
-<<<<<<< HEAD
                 print(f"⚠️ [Translate] 백업 모델 번역도 실패 (비상 사전 Fallback 작동): {e2}")
                 import traceback
                 traceback.print_exc()
-=======
-                print(f"⚠️ [Translate] 백업 모델 번역도 실패: {e2}")
                 if furniture_only:
                     # [가구 교체 모드] 룰 기반 fallback은 품질이 떨어져 결과가 부자연스러워지므로 사용하지 않는다.
                     # Gemini 실패 시 명확한 에러를 상위로 전파하여 프론트에 사유(쿼터 초과 등)를 그대로 노출한다.
@@ -609,7 +575,6 @@ def translate_prompt_to_english(prompt: str, furniture_only: bool = False) -> st
     if furniture_only:
         # rag_llm 자체가 비활성화된 경우(초기화 실패 등)도 동일하게 명확한 에러로 처리
         raise GeminiTranslationError("Gemini 번역 엔진이 초기화되지 않았습니다. 서버 설정을 확인해주세요.", quota_exceeded=False)
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
 
     # =====================================================================
     # [정밀 룰 기반 Fallback 파서] (가구 교체 모드에서는 사용하지 않음 — 방 전체 리디자인 모드 전용)
@@ -936,22 +901,16 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 prompt_api_data["3"]["inputs"]["denoise"] = 0.87
                 print("⚙️ [inpainting_API] KSampler 1 Denoise 기본값(0.87) 적용")
 
-<<<<<<< HEAD
-            # VAE 인코더 마스크 가중치 패딩(grow_mask_by)을 2px로 극소화하여 누끼 따진 가구 안에서만 렌더링하도록 잠금 처리
-            if "10" in prompt_api_data:
-                prompt_api_data["10"]["inputs"]["grow_mask_by"] = 2
-                print("📐 [inpainting_API] VAEEncode 1 grow_mask_by 축소: 2 (누끼 합성 효과 적용)")
-=======
             # [구조 보존 인페인트] 노드 10/14는 VAEEncode + SetLatentNoiseMask(35/36) 조합으로 교체됨.
             # 마스크 영역을 지우지 않고 원본 가구를 흐릿한 밑그림(잠상)으로 남겨,
             # 새 가구가 기존 가구의 위치/방향/크기를 이어받게 한다.
             # 마스크 팽창(grow_mask_by)은 백엔드 process_and_save_mask의 MaxFilter 팽창이 대신 수행한다.
-            # (하위 호환: 구버전 inpainting.json의 VAEEncodeForInpaint에만 grow_mask_by를 주입)
+            # (하위 호환: 구버전 inpainting.json의 VAEEncodeForInpaint에만 grow_mask_by를 주입.
+            #  현행 VAEEncode 노드에는 grow_mask_by 입력 자체가 없어 무조건 주입하면 ComfyUI 검증 에러가 난다)
             if prompt_api_data.get("10", {}).get("class_type") == "VAEEncodeForInpaint":
                 g_mask = int(parameters["grow_mask_by"]) if "grow_mask_by" in parameters else 8
                 prompt_api_data["10"]["inputs"]["grow_mask_by"] = g_mask
                 print(f"📐 [inpainting_API] VAEEncode 1 grow_mask_by 적용: {g_mask}")
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
 
             # ─── 동적 1/2단계 분기 판별 ───
             img_b = parameters.get("image_filename_b")
@@ -981,17 +940,11 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                     prompt_api_data["15"]["inputs"]["denoise"] = 0.87
                     print("⚙️ [inpainting_API] KSampler 2 Denoise 기본값(0.87) 적용")
                 
-<<<<<<< HEAD
-                if "14" in prompt_api_data:
-                    prompt_api_data["14"]["inputs"]["grow_mask_by"] = 2
-                    print("📐 [inpainting_API] VAEEncode 2 grow_mask_by 축소: 2 (누끼 합성 효과 적용)")
-=======
                 # (하위 호환: 구버전 VAEEncodeForInpaint에만 grow_mask_by 주입 — 신규 구성은 백엔드 마스크 팽창 사용)
                 if prompt_api_data.get("14", {}).get("class_type") == "VAEEncodeForInpaint":
                     g_mask_b = int(parameters["grow_mask_by"]) if "grow_mask_by" in parameters else 8
                     prompt_api_data["14"]["inputs"]["grow_mask_by"] = g_mask_b
                     print(f"📐 [inpainting_API] VAEEncode 2 grow_mask_by 적용: {g_mask_b}")
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
 
                 # 최종 저장은 Node 16 (2단계 디코드) 결과물 사용
                 prompt_api_data["9"]["inputs"]["images"] = ["16", 0]
@@ -3374,16 +3327,6 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
                     mask_layer = decoded_img.convert("L")
                 
                 if mask_layer.size != (width, height):
-<<<<<<< HEAD
-                    mask_layer = mask_layer.resize((width, height), Image.Resampling.BILINEAR)
-                
-                # 🎨 [산디과 코딩 가이드 - 마스크 경계 소프트 페더링 블러 필터 적용]
-                # 비유: 원형으로 뚝 끊기는 마스크 경계를 부드럽게 뭉개어 자연스러운 그라데이션 깃털(Feather)처럼 배경에 합쳐지게 합니다.
-                feather = max(8, min(width, height) // 80)
-                mask_layer = mask_layer.filter(ImageFilter.MaxFilter(feather + 1))
-                mask_layer = mask_layer.filter(ImageFilter.GaussianBlur(feather))
-                    
-=======
                     mask_layer = mask_layer.resize((width, height), Image.Resampling.NEAREST)
 
                 # [정밀도 패치] 실제 웹 UI가 사용하는 경로(base64)에는 팽창/페더링이 전혀 없어
@@ -3397,7 +3340,7 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
                 feather = max(4, min(width, height) // 100)
                 mask_layer = mask_layer.filter(ImageFilter.GaussianBlur(feather))
 
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
+
             except Exception as e:
                 print(f"⚠️ Base64 디코딩 에러: {e}")
                 
@@ -3452,29 +3395,6 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
         print(f"⚠️ 마스크 체인 빌드 중 에러: {e}")
         w, h = 768, 512
 
-<<<<<<< HEAD
-    # ── [번역 중복 호출 제거 및 1회 일괄 배정] ──
-    # 번역 함수를 연달아 두 번 호출하면 업로드 대역폭이 2배로 들고 타임아웃 확률이 폭증합니다.
-    # 단 한 번만 호출해 변수에 획득한 뒤 분배하여 API 성공률을 2배 높입니다.
-    translated_main_prompt = translate_prompt_to_english(req.prompt, orig_path)
-    translated_sub_prompt = translate_prompt_to_english(req.prompt_b, orig_path) if req.prompt_b else translated_main_prompt
-
-    parameters = {
-        "image_filename": mask_filename_a,
-        "image_filename_b": mask_filename_b or "",
-        "orig_image": orig_input_filename,
-        "prompt": translated_main_prompt,
-        "prompt_b": translated_sub_prompt,
-        "seed": int(time.time()) % 1000000
-    }
-    
-    # 실시간 화질 자연스러움 극대화를 위한 기본 권장 스윗스팟 자동 연동 (요청에 누락 시 적용)
-    # [이유: 0.45 디노이즈 강도는 원래 가구의 3D 투시 구도와 크기 비율을 90% 이상 박제한 채 스타일만 변경합니다.]
-    parameters["steps"] = req.steps if req.steps is not None else 25
-    parameters["cfg"] = req.cfg if req.cfg is not None else 8.0
-    parameters["denoise"] = req.denoise if req.denoise is not None else 0.45
-    
-=======
     # ── [크롭-앤-스티치 인페인팅] SD1.5 네이티브 해상도로 마스크 주변만 생성 ──
     # 고해상도 원본 전체를 잠상으로 쓰면 SD1.5(학습 해상도 512px)가 마스크를 "512px 감각"으로
     # 채워, 방 전체 크기의 거대한 가구가 그려지는 문제가 있었다.
@@ -3597,8 +3517,10 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
 
     _report("translating", "가구 설명을 AI 프롬프트로 번역 중...")
     try:
-        translated_prompt_a = translate_prompt_to_english(req.prompt, furniture_only=True)
-        translated_prompt_b = translate_prompt_to_english(req.prompt_b or req.prompt, furniture_only=True)
+        # 원본 이미지를 함께 전달해 Gemini 비전이 방의 원근/카메라 앵글을 분석·반영하도록 한다.
+        # (동일 프롬프트+이미지 조합은 캐시되므로 두 번째 호출부터는 API 비용이 없다)
+        translated_prompt_a = translate_prompt_to_english(req.prompt, furniture_only=True, orig_image_path=orig_path)
+        translated_prompt_b = translate_prompt_to_english(req.prompt_b or req.prompt, furniture_only=True, orig_image_path=orig_path)
     except GeminiTranslationError as ge:
         # 룰 기반 fallback으로 넘어가지 않고, ComfyUI 호출 이전에 즉시 명확한 에러를 반환한다.
         print(f"❌ [inpainting_API] Gemini 번역 실패로 편집 중단: {ge}")
@@ -3632,7 +3554,6 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
     #  여러 오브젝트 상상 문제는 "exactly one single object" 프롬프트와 크롭-앤-스티치가 억제한다)
     parameters["denoise"] = req.denoise if req.denoise is not None else 0.92
 
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
     real_filename = None
     if comfy_online:
         _report("comfy_queue", "ComfyUI 이미지 생성 엔진에 작업 대기열 등록 중...")
@@ -3722,11 +3643,6 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
 
             # [항상 실행] 이미지 정밀 합성 및 소파 영역 보호 파이프라인
             try:
-<<<<<<< HEAD
-                # [한글 주석] 전역 네임스페이스의 Image 객체 충돌 방지를 위해 로컬 재임포트를 생략하고 전역 PIL 라이브러리를 사용합니다.
-                
-                # 1. 이미지 로드
-=======
                 # ImageFilter는 파일 상단에서 이미 모듈 레벨로 import되어 있음.
                 # 여기서 다시 로컬 import하면 이 함수(edit_image) 전체에서 ImageFilter가 지역변수로 취급되어,
                 # 위에서 먼저 실행되는 중첩 함수 process_and_save_mask 내부의 ImageFilter 참조가
@@ -3734,47 +3650,29 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
                 from PIL import ImageChops
 
                 # 1. 이미지 로드 및 기본 객체 생성
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
                 orig_img = Image.open(orig_path).convert("RGB")
                 orig_w, orig_h = orig_img.size
-                
+
                 res_img = Image.open(result_path).convert("RGB")
-                res_w, res_h = res_img.size
-                
-                # [한글 주석] 워크플로우에 AI 1080p 업스케일러 노드가 추가되었으므로 최종 정합 해상도 목표를 세로 1080 픽셀 기준으로 수정 및 통일합니다.
-                ratio = orig_w / orig_h
-                target_w = int(1080 * ratio)
-                target_h = 1080
-                
-                # 결과 이미지를 1080p 목표 해상도로 리사이징
-                if res_img.size != (target_w, target_h):
-                    print(f"📏 [Resizing] 결과 이미지 해상도({res_img.size})를 AI 1080p 업스케일 목표 해상도({target_w}x{target_h})로 정밀 복원 리사이징합니다.")
-                    res_img = res_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
-                
-                # 원본 이미지도 결과 이미지 해상도(target_w, target_h)와 정합하기 위해 동일 크기로 리사이징
-                orig_img_resized = orig_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
-                
-                # 2. 마스크 로드 및 채널 통일화 (결과 해상도에 맞추어 보존 리사이징)
+                # 결과 이미지를 원본 크기로 리사이징 (위 주석대로 1080p 왕복 확대는 순수 손실이라 하지 않는다.
+                # 변화 감지 합성은 결과/원본이 같은 해상도여야 동작한다)
+                if res_img.size != (orig_w, orig_h):
+                    res_img = res_img.resize((orig_w, orig_h), Image.Resampling.LANCZOS)
+
+                # 2. 마스크 로드 및 채널 통일화
                 mask_a = Image.open(mask_path_a).convert("L")
-                mask_a = mask_a.resize((target_w, target_h), Image.Resampling.BILINEAR)
-                
+                if mask_a.size != (orig_w, orig_h):
+                    mask_a = mask_a.resize((orig_w, orig_h), Image.Resampling.NEAREST)
+
                 final_mask = mask_a
-                
+
                 # 2단계 마스크가 활성화되어 존재할 경우 픽셀별 최댓값(Chops.lighter)으로 두 마스크를 합침
                 if mask_path_b and os.path.exists(mask_path_b):
                     mask_b = Image.open(mask_path_b).convert("L")
-                    mask_b = mask_b.resize((target_w, target_h), Image.Resampling.BILINEAR)
+                    if mask_b.size != (orig_w, orig_h):
+                        mask_b = mask_b.resize((orig_w, orig_h), Image.Resampling.NEAREST)
                     final_mask = ImageChops.lighter(final_mask, mask_b)
                 
-<<<<<<< HEAD
-                # 3. [초정밀 1:1 누끼 레이어 얹기 합성]
-                # 🎨 [산디과 코딩 가이드 - 마스크 100% 누끼 다이렉트 패치]
-                # 비유: AI가 그린 고해상도 가구 이미지를 가위로 정교하게 잘라내어(누끼), 사용자가 올린 원본 사진의 정확한 위치에 한 픽셀의 오차도 없이 얹는 포토샵 레이어 기법입니다.
-                # 주변 배경(벽, 창문)은 1픽셀도 건드리지 않고 100% 선명한 원본 그대로 완벽하게 보존됩니다.
-                composite_img = Image.composite(res_img, orig_img_resized, final_mask)
-                
-                # 5단계: 리사이징 시 흐려진 화질 선명도 1.2배 향상 보강
-=======
                 import numpy as np
 
                 # 3. [변화 감지 기반 오브젝트 합성] ("테두리가 뿌옇게 뜨는" 문제의 근본 해결)
@@ -3840,7 +3738,6 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
 
                 # 선명도 보강은 합성 전에 '생성된 패치'에만 적용한다.
                 # (합성 후 전체 이미지에 적용하면 보존해야 할 원본 배경까지 미세하게 변형된다)
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
                 from PIL import ImageEnhance
                 res_img = ImageEnhance.Sharpness(res_img).enhance(1.2)
 
@@ -3869,11 +3766,7 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
                 # 6. 포맷 매치 후 저장
                 save_format = "PNG" if real_filename.lower().endswith(".png") else "JPEG"
                 composite_img.save(result_path, save_format)
-<<<<<<< HEAD
-                print(f"🎨 [Inpaint Precision Fix] 마스크 침식 페더링(6px) 및 1080p 정밀 상시 합성 완료. 저장 경로: {result_path}")
-=======
                 print(f"🎨 [Inpaint Precision Fix] 마스크 침식 페더링(6px) 및 소파 영역 보호 합성 완료. 저장 경로: {result_path}")
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
                 
             except Exception as r_err:
                 print(f"⚠️ 원본 해상도 복원 및 마스크 합성 중 예외: {r_err}")

@@ -6,11 +6,7 @@
       "cfg": 8.5,
       "sampler_name": "dpmpp_sde",
       "scheduler": "karras",
-<<<<<<< HEAD
-      "denoise": 0.95,
-=======
       "denoise": 0.9,
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
       "model": [
         "4",
         0
@@ -155,17 +151,10 @@
     "inputs": {
       "seed": 611711229991393,
       "steps": 25,
-<<<<<<< HEAD
-      "cfg": 8.0,
-      "sampler_name": "dpmpp_sde",
-      "scheduler": "karras",
-      "denoise": 0.55,
-=======
       "cfg": 8.5,
       "sampler_name": "dpmpp_sde",
       "scheduler": "karras",
       "denoise": 0.9,
->>>>>>> 3a9ace05e5e0df7f6acfd6759a9967e2fc1327f9
       "model": [
         "4",
         0
