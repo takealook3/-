@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import stylesDb from './styles_db.json'; // 28가지 DB 한글 원본 스타일 DB 탑재
 
 // 3가지 공간 카테고리 아이콘 정의 — 감성 가구 일러스트 SVG (거실 추가, 주방/화장실만 유지)
@@ -80,17 +80,24 @@ const HIGH_RES_FALLBACK_IMAGES = {
 
 // 해상도 튜닝 및 폴백 오토 파서
 const getHighResImageUrl = (name, rawUrl) => {
+  // 1. 사용자가 등록한 유효한 이미지 주소가 있다면 우선하여 사용 (핀터레스트 해상도 치환 등 안전처리 적용)
+  if (rawUrl && !rawUrl.startsWith('data:image')) {
+    let adjustedUrl = rawUrl;
+    if (adjustedUrl.includes('w=292') || adjustedUrl.includes('w=200') || adjustedUrl.includes('w=115')) {
+      adjustedUrl = adjustedUrl.replace(/w=\d+/, 'w=1000').replace(/h=\d+/, 'h=700');
+    }
+    // 핀터레스트의 736x 규격을 1200x 규격으로 교체하여 화질 향상
+    if (adjustedUrl.includes('pinimg.com/736x/')) {
+      adjustedUrl = adjustedUrl.replace('/736x/', '/1200x/');
+    }
+    return adjustedUrl;
+  }
+  
+  // 2. 사용자가 설정한 원본 주소가 비어있거나 유효하지 않은 경우에만 하드코딩 Unsplash 이미지로 폴백
   if (HIGH_RES_FALLBACK_IMAGES[name]) {
     return HIGH_RES_FALLBACK_IMAGES[name];
   }
-  if (!rawUrl || rawUrl.startsWith('data:image')) {
-    return "";
-  }
-  let adjustedUrl = rawUrl;
-  if (adjustedUrl.includes('w=292') || adjustedUrl.includes('w=200') || adjustedUrl.includes('w=115')) {
-    adjustedUrl = adjustedUrl.replace(/w=\d+/, 'w=1000').replace(/h=\d+/, 'h=700');
-  }
-  return adjustedUrl;
+  return "";
 };
 
 // DB1.csv 이미지 맵을 동적으로 병합 (지능형 고해상도 처리탑재)
@@ -101,6 +108,13 @@ export const STYLE_DATABASE = stylesDb.map(item => ({
 
 export default function StyleDetailModal({ activeId, isModalOpen, setIsModalOpen }) {
   const [selectedCategory, setSelectedCategory] = useState('거실'); // 선택된 카테고리 필터 (기본값: 거실)
+
+  // [추가] 모달창이 열릴 때마다 항상 '거실'이 기본 선택되도록 상태 초기화
+  useEffect(() => {
+    if (isModalOpen) {
+      setSelectedCategory('거실');
+    }
+  }, [isModalOpen]);
 
   if (!isModalOpen) return null;
 
@@ -168,7 +182,7 @@ export default function StyleDetailModal({ activeId, isModalOpen, setIsModalOpen
         >
           ✕
         </button>
-    
+        
         {/* 1. 좌측 웜 샌드 텍스트 패널 */}
         <div style={{
           backgroundColor: '#F1EAE4', // 시안의 부드러운 오트밀 베이지색 재현
@@ -296,6 +310,7 @@ export default function StyleDetailModal({ activeId, isModalOpen, setIsModalOpen
                 );
               })}
             </div>
+            {/* 선택 시 해당 카테고리 보유 여부 안내 (거실 제외) - [사용자 요청: 글씨 삭제] */}
           </div>
         </div>
 

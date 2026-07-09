@@ -109,6 +109,18 @@ function TopNav({ activeTab, onTabClick, serverStatus, onRefreshHealth, sessionI
 }
 
 export default function App() {
+  // [추가] DB에서 각 카테고리의 지정된 이미지를 추출하여 숍 카테고리 퀵 카드 이미지로 바인딩
+  const categoryImages = React.useMemo(() => {
+    const sofa = STYLE_DATABASE.find(item => item.name === '모던')?.images?.["소파"];
+    const bed = STYLE_DATABASE.find(item => item.name === '재팬디')?.images?.["침대"];
+    const decor = STYLE_DATABASE.find(item => item.name === '럭셔리')?.images?.["오브제1"];
+    return {
+      sofa: sofa || "https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&fit=crop&w=800&q=80",
+      bed: bed || "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80",
+      decor: decor || "https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=80"
+    };
+  }, []);
+
   const [serverStatus, setServerStatus] = useState({ loading: true, online: false, error: null });
   
   // [신설] ?page=shop 여부 판별 상태 추가
@@ -152,8 +164,6 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     return params.get('category') || null;
   });
-
-
 
   // 5초 간격 최상단 히어로 배경 롤링 타이머
   useEffect(() => {
@@ -455,7 +465,7 @@ export default function App() {
           </div>
         </header>
         {/* 가구 카탈로그 단독 렌더링 영역 */}
-        <main className="main-content" style={{ padding: '40px 24px 80px', maxWidth: '1200px', margin: '0 auto', gap: '32px' }}>
+        <main className="main-content" style={{ padding: '40px 24px 80px', maxWidth: '1400px', margin: '0 auto', gap: '32px' }}>
           <FurnitureShopShowroom
             selectedCategory={selectedShopCategory}
             setSelectedCategory={setSelectedShopCategory}
@@ -644,7 +654,7 @@ export default function App() {
             }}>
               <div className="category-card-img-wrapper">
                 <img 
-                  src="https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&fit=crop&w=800&q=80" 
+                  src={categoryImages.sofa} 
                   alt="Sofa" 
                   className="category-card-img" 
                 />
@@ -660,7 +670,7 @@ export default function App() {
             }}>
               <div className="category-card-img-wrapper">
                 <img 
-                  src="https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80" 
+                  src={categoryImages.bed} 
                   alt="Bed" 
                   className="category-card-img" 
                 />
@@ -676,7 +686,7 @@ export default function App() {
             }}>
               <div className="category-card-img-wrapper">
                 <img 
-                  src="https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=80" 
+                  src={categoryImages.decor} 
                   alt="Decor" 
                   className="category-card-img" 
                 />
@@ -871,8 +881,6 @@ export default function App() {
           isModalOpen={isStyleModalOpen}
           setIsModalOpen={setIsStyleModalOpen}
         />
-
-
 
         {/* 하단 럭셔리 브랜드 푸터 (NÜMA 시안 감성 완벽 재현) */}
         <footer style={{

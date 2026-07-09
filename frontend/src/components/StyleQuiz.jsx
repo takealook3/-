@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { STYLE_DATABASE } from './StyleDetailModal';
-import { Sparkles, ArrowRight, RefreshCw, Copy, Check } from 'lucide-react';
+import { Sparkles, ArrowRight, RefreshCw, Copy, Check, ArrowLeft, Home } from 'lucide-react';
 
 // 8개 문항 데이터셋 정의 (QUIZ images 내의 15개 파일 매핑)
 const QUIZ_QUESTIONS = [
@@ -187,6 +187,7 @@ const getBestStyleMatch = (space, tone, era) => {
 };
 
 export default function StyleQuiz({ onApplyPrompt }) {
+  const [isStarted, setIsStarted] = useState(false); // [신설] 퀴즈 시작 대기 상태
   const [currentStep, setCurrentStep] = useState(0);
   const [scores, setScores] = useState({ space: 0, tone: 0, era: 0 });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -195,9 +196,13 @@ export default function StyleQuiz({ onApplyPrompt }) {
   const [generatedPrompt, setGeneratedPrompt] = useState('');
   const [copied, setCopied] = useState(false);
   const [resultTraits, setResultTraits] = useState([]); // 성향 저장용 상태 추가
+  const [history, setHistory] = useState([]); // [추가] 이전 단계 복원을 위한 점수 히스토리
 
   // 옵션 선택 시 점수 누적 및 다음 단계 이동
   const handleSelectOption = (axis, score) => {
+    // 현재 점수 상태를 히스토리에 기록하여 이전 단계로 갈 때 복구하도록 함
+    setHistory(prev => [...prev, scores]);
+
     const nextScores = { ...scores, [axis]: scores[axis] + score };
     setScores(nextScores);
 
@@ -268,11 +273,23 @@ export default function StyleQuiz({ onApplyPrompt }) {
   const handleRestart = () => {
     setCurrentStep(0);
     setScores({ space: 0, tone: 0, era: 0 });
+    setHistory([]); // [추가] 히스토리 리셋
     setShowResult(false);
     setResultStyle(null);
     setGeneratedPrompt('');
     setCopied(false);
     setResultTraits([]);
+    setIsStarted(false); // [추가] 시작 화면으로 돌아가도록 초기화
+  };
+
+  // [추가] 이전 문항으로 복귀하는 핸들러
+  const handlePrevStep = () => {
+    if (currentStep > 0 && history.length > 0) {
+      const prevScores = history[history.length - 1];
+      setScores(prevScores);
+      setHistory(prev => prev.slice(0, -1));
+      setCurrentStep(prev => prev - 1);
+    }
   };
 
   const handleCopyPrompt = () => {
@@ -280,6 +297,117 @@ export default function StyleQuiz({ onApplyPrompt }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  // 0. 시작 대기 화면 (커버 화면)
+  if (!isStarted) {
+    return (
+      <div className="quiz-container flex-center" style={{ fontFamily: 'Outfit, "Noto Sans KR", sans-serif' }}>
+        <div className="quiz-card text-center animate-fade-in" style={{
+          position: 'relative',
+          padding: '56px 40px',
+          borderRadius: '28px',
+          maxWidth: '520px',
+          width: '100%',
+          margin: '0 auto',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '28px',
+          overflow: 'hidden',
+          backgroundImage: 'url("https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=800")',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          boxShadow: '0 40px 90px rgba(28,23,20,0.35)',
+          border: '1px solid rgba(255, 255, 255, 0.15)'
+        }}>
+          {/* 어두운 럭셔리 그라데이션 필름 필터 오버레이 */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'linear-gradient(180deg, rgba(28, 23, 20, 0.4) 0%, rgba(28, 23, 20, 0.92) 80%, #1C1714 100%)',
+            zIndex: 1
+          }} />
+
+          {/* 콘텐츠 영역 (z-index 조절로 필터 위에 노출) */}
+          <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
+
+            {/* 타이틀 및 설명 */}
+            <div style={{ marginTop: '8px' }}>
+              <span style={{
+                fontSize: '0.8rem',
+                fontWeight: '900',
+                color: '#C39F7D',
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                fontFamily: 'Outfit, sans-serif'
+              }}>
+                Interior Style Persona Finder
+              </span>
+              <h2 style={{
+                fontSize: '2.1rem',
+                fontWeight: '950',
+                color: '#FCFAF7',
+                marginTop: '10px',
+                lineHeight: '1.25',
+                letterSpacing: '-0.8px',
+                textShadow: '0 4px 15px rgba(0,0,0,0.4)',
+                fontFamily: 'Outfit, "Noto Sans KR", sans-serif'
+              }}>
+                나만의 홈스타일링<br />페르소나 찾기
+              </h2>
+              <p style={{
+                fontSize: '0.88rem',
+                color: '#D1C7BD',
+                marginTop: '16px',
+                lineHeight: '1.7',
+                maxWidth: '400px',
+                marginRight: 'auto',
+                marginLeft: 'auto',
+                fontWeight: '500'
+              }}>
+                8개의 엄선된 인테리어 퀴즈를 통해 라이프스타일 밸런스를 측정하고, 생성형 AI 공간 편집에 즉시 사용 가능한 **리모델링 프롬프트 키워드**를 받아보세요.
+              </p>
+            </div>
+            
+            {/* 시작하기 럭셔리 버튼 */}
+            <button
+              onClick={() => setIsStarted(true)}
+              style={{
+                width: '100%',
+                padding: '18px 28px',
+                fontSize: '1rem',
+                fontWeight: '900',
+                borderRadius: '16px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '10px',
+                color: '#1C1714',
+                background: 'linear-gradient(135deg, #EADBC8 0%, #DAC0A3 100%)',
+                boxShadow: '0 12px 30px rgba(218, 192, 163, 0.25)',
+                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
+                e.currentTarget.style.boxShadow = '0 16px 36px rgba(218, 192, 163, 0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                e.currentTarget.style.boxShadow = '0 12px 30px rgba(218, 192, 163, 0.25)';
+              }}
+            >
+              내 스타일 진단 시작하기 <ArrowRight size={20} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // 1. 로딩(분석) 중인 화면
   if (isAnalyzing) {
@@ -511,6 +639,86 @@ export default function StyleQuiz({ onApplyPrompt }) {
               {currentQuestion.optionB.label}
             </div>
           </div>
+        </div>
+
+        {/* 처음으로 / 이전으로 돌아가기 양옆 버튼 [사용자 요청 반영: 아이콘 위주의 간단한 표시] */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '20px' }}>
+          {/* 이전 단계 버튼: 1단계 이상일 때만 표시하거나 비활성화 처리 */}
+          <button 
+            onClick={handlePrevStep}
+            disabled={currentStep === 0}
+            style={{ 
+              background: 'transparent',
+              border: '1px solid rgba(139, 126, 116, 0.2)',
+              color: currentStep === 0 ? 'rgba(139, 126, 116, 0.3)' : 'var(--text-muted, #8B7E74)',
+              fontSize: '0.8rem',
+              fontWeight: '700',
+              cursor: currentStep === 0 ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '6px 14px',
+              borderRadius: '20px',
+              transition: 'all 0.2s ease-in-out',
+              fontFamily: 'Outfit, "Noto Sans KR", sans-serif',
+              opacity: currentStep === 0 ? 0.4 : 0.7
+            }}
+            onMouseEnter={(e) => {
+              if (currentStep > 0) {
+                e.currentTarget.style.opacity = '1';
+                e.currentTarget.style.color = 'var(--primary)';
+                e.currentTarget.style.backgroundColor = 'rgba(139, 126, 116, 0.08)';
+                e.currentTarget.style.transform = 'translateX(-2px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (currentStep > 0) {
+                e.currentTarget.style.opacity = '0.7';
+                e.currentTarget.style.color = 'var(--text-muted, #8B7E74)';
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.transform = 'translateX(0)';
+              }
+            }}
+            title="이전 단계로"
+          >
+            <ArrowLeft size={14} /> 이전
+          </button>
+
+          {/* 처음으로 버튼 */}
+          <button 
+            onClick={handleRestart}
+            style={{ 
+              background: 'transparent',
+              border: '1px solid rgba(139, 126, 116, 0.2)',
+              color: 'var(--text-muted, #8B7E74)',
+              fontSize: '0.8rem',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '6px 14px',
+              borderRadius: '20px',
+              transition: 'all 0.2s ease-in-out',
+              fontFamily: 'Outfit, "Noto Sans KR", sans-serif',
+              opacity: 0.7
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.opacity = '1';
+              e.currentTarget.style.color = 'var(--primary)';
+              e.currentTarget.style.backgroundColor = 'rgba(139, 126, 116, 0.08)';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.opacity = '0.7';
+              e.currentTarget.style.color = 'var(--text-muted, #8B7E74)';
+              e.currentTarget.style.backgroundColor = 'transparent';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+            title="처음 화면으로"
+          >
+            <Home size={14} /> 처음
+          </button>
         </div>
       </div>
     </div>

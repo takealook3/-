@@ -21,7 +21,7 @@ if defined COMFYUI_PATH (
     set "COMFYUI_PATH=%COMFYUI_PATH:"=%"
 )
 
-echo 1. Starting FastAPI Backend (Port 8000)...
+echo 1. FastAPI 백엔드 서버 구동 중... (포트 8000)
 :: Run backend using venv if exists (without outer quote nesting)
 if exist ".\.venv\Scripts\python.exe" (
     start "FastAPI Backend" cmd /k .\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
@@ -38,7 +38,7 @@ echo 3. Starting ComfyUI Server (Port 8188)...
 if exist "%COMFYUI_PATH%\run_nvidia_gpu.bat" (
     start /D "%COMFYUI_PATH%" "ComfyUI Server" cmd /k run_nvidia_gpu.bat
 ) else (
-    echo [WARNING] ComfyUI batch file %COMFYUI_PATH%\run_nvidia_gpu.bat not found.
+    echo [경고] ComfyUI 실행 파일 %COMFYUI_PATH%\run_nvidia_gpu.bat 을 찾을 수 없습니다.
 )
 
 echo ==================================================

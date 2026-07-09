@@ -30,6 +30,7 @@ body {
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+  overflow-y: scroll; /* 브라우저 전체 창에 스크롤바 영역을 상시 예약하여 덜컹거림(시프트) 방지 */
   width: 100%;
 }
 
@@ -880,7 +881,8 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 24px;
   box-shadow: 0 30px 60px rgba(46, 40, 36, 0.05);
-  transition: all 0.4s ease;
+  /* [수정] 울렁거림(바운스/지연 리플로우) 없이 '쑤욱' 부드럽고 날렵하게 전환되는 프리미엄 감속 곡선 적용 */
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   color: var(--text-main) !important;
 }
 
@@ -1250,7 +1252,6 @@ body {
     height: 240px;
   }
 }
-
 /* =====================================================================
  * [스타일 변환용 프리미엄 스켈레톤 로딩 & 펄스 애니메이션]
  * ===================================================================== */
@@ -1272,4 +1273,25 @@ body {
     opacity: 0.4;
     transform: scale(1.15);
   }
+}
+
+/* =====================================================================
+ * [사용자 요청] 퀴즈 결과 화면 프리미엄 등장 애니메이션 및 Stagger 시간차 효과
+ * ===================================================================== */
+.animate-fade-in {
+  animation: fadeInEffect 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 결과 카드 내 좌우 구성요소 스크롤 시간차(Stagger) 연출 */
+.quiz-result-layout > * {
+  opacity: 0;
+  animation: fadeInEffect 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.quiz-result-layout > *:nth-child(1) {
+  animation-delay: 0.15s;
+}
+
+.quiz-result-layout > *:nth-child(2) {
+  animation-delay: 0.35s;
 }

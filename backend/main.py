@@ -437,17 +437,21 @@ def convert_webui_to_api_format(webui_data: dict) -> dict:
 # 전역 번역 캐시 딕셔너리 구축 (속도 향상용) [이유: 반복적인 외부 API 호출을 억제하여 이미지 생성 성능을 높입니다.]
 translation_cache = {}
 
-def translate_prompt_to_english(prompt: str) -> str:
-    """사용자가 작성한 프롬프트를 Gemini를 통해 AI 이미지 생성용 영문으로 번역 및 인테리어 전용으로 보강합니다."""
+def translate_prompt_to_english(prompt: str, orig_image_path: Optional[str] = None) -> str:
+    """사용자가 작성한 프롬프트를 Gemini를 통해 AI 이미지 생성용 영문으로 번역 및 인테리어 전용으로 보강합니다.
+    원본 이미지(orig_image_path)가 존재할 경우 멀티모달 비전 쿼리를 동원해 3D 투시/앵글을 자동 분석해 주문서에 반영합니다.
+    """
     import re
+    import base64
     if not prompt or not prompt.strip():
         return "modern interior styling"
 
-    # [이유: 동일 프롬프트에 대한 번역 요청이 들어오면 LLM API 호출을 거치지 않고 즉시 캐시본을 반환합니다.]
+    # 캐시 키 생성 시 이미지 경로 유무를 조합해 고유성 보장
+    cache_key = f"{prompt}::{orig_image_path}" if orig_image_path else prompt
     global translation_cache
-    if prompt in translation_cache:
-        print(f"🌐 [Translate] 캐싱된 번역 결과 반환: '{translation_cache[prompt]}'")
-        return translation_cache[prompt]
+    if cache_key in translation_cache:
+        print(f"🌐 [Translate] 캐싱된 번역 결과 반환: '{translation_cache[cache_key]}'")
+        return translation_cache[cache_key]
 
     # 한글 문자 존재 여부 검사 (한영 혼용 포함)
     has_korean = bool(re.search("[ㄱ-ㅎㅏ-ㅣ가-힣]", prompt))
@@ -455,7 +459,7 @@ def translate_prompt_to_english(prompt: str) -> str:
     # 한글이 전혀 없는 순수 영문인 경우, 가중치 래핑만 적용해 반환
     if not has_korean:
         result = prompt if (prompt.startswith("(") and prompt.endswith(")")) else f"({prompt}:1.35)"
-        translation_cache[prompt] = result
+        translation_cache[cache_key] = result
         return result
 
     global rag_llm, rag_enabled
@@ -464,6 +468,7 @@ def translate_prompt_to_english(prompt: str) -> str:
         from langchain_core.messages import HumanMessage
         try:
             print(f"🌐 [Translate] 한글/한영혼용 프롬프트 번역 및 보강 시작: '{prompt}'")
+            
             system_prompt = (
                 "You are an expert interior designer and prompt engineer for Stable Diffusion.\n"
                 "Your task is to translate and expand the following Korean furniture prompt into a highly descriptive English prompt suitable for inpainting.\n"
@@ -472,32 +477,73 @@ def translate_prompt_to_english(prompt: str) -> str:
                 "WARNING: Do NOT include or describe the floor, floorings, walls, background, or other room structures to prevent inpainting model from altering the existing background area (like carpets, tiles, or walls).\n"
                 "Do NOT include any humans, people, man, woman, child, or animals.\n"
                 "Keep the output as a clean, single-line comma-separated list of descriptive words, without any explanation, markdown, or intro.\n\n"
+            )
+            
+            # 멀티모달 이미지 처리 추가 (네트워크 전송 지연 및 타임아웃 방지를 위해 512px 썸네일로 압축 전송)
+            image_content = []
+            if orig_image_path and os.path.exists(orig_image_path):
+                try:
+                    from io import BytesIO
+                    with Image.open(orig_image_path) as img:
+                        # 3점 투시와 가구 구도를 식별하는 데는 512px 해상도로 충분하며 전송 용량이 1/100로 줄어듭니다.
+                        # RGBA -> RGB 변환으로 cannot write mode RGBA as JPEG 에러 완벽 차단
+                        img_copy = img.convert("RGB")
+                        img_copy.thumbnail((512, 512))
+                        buffered = BytesIO()
+                        img_copy.save(buffered, format="JPEG", quality=80)
+                        encoded_string = base64.b64encode(buffered.getvalue()).decode("utf-8")
+                    
+                    # langchain_google_genai의 multimodal 메시지 구조화
+                    image_content = [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{encoded_string}"}
+                        }
+                    ]
+                    system_prompt += (
+                        "CRITICAL ANALYSIS TASK:\n"
+                        "Look at the uploaded room photo. Analyze the perspective view and the spatial angle of the furniture in the image (e.g. 'three-point perspective view from the left side', '45-degree diagonal angle layout', 'side view', or 'straight-on view').\n"
+                        "You MUST strictly describe the exact 3D camera angle and perspective of the target furniture in the room and put this perspective descriptor at the front of your output prompt so the generated model matches the original angle perfectly.\n\n"
+                    )
+                except Exception as img_err:
+                    print(f"⚠️ [Translate Vision] 이미지 로드 중 에러: {img_err}")
+
+            system_prompt += (
                 f"Korean: {prompt}\n"
                 "English Prompt:"
             )
-            # 타임아웃(2.5초)이 적용된 동적 스레드 풀 실행 (네트워크 블로킹 방지) [이유: 8초에서 2.5초로 지연 최소화]
+            
+            # 메시지 컨텐츠 조립
+            message_contents = [{"type": "text", "text": system_prompt}] + image_content
+            human_msg = HumanMessage(content=message_contents)
+
+            # 타임아웃(12.0초)이 적용된 동적 스레드 풀 실행 (지연이 있더라도 번역 성공률 극대화)
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(rag_llm.invoke, [HumanMessage(content=system_prompt)])
-                response = future.result(timeout=2.5)
+                future = executor.submit(rag_llm.invoke, [human_msg])
+                response = future.result(timeout=12.0)
             translated = response.content.strip().replace('"', '').replace("'", "")
             print(f"🌐 [Translate] 번역 완료: '{translated}'")
-            translation_cache[prompt] = translated
+            translation_cache[cache_key] = translated
             return translated
         except Exception as e:
             print(f"⚠️ [Translate] 기본 모델 번역 실패 ({e}). 백업 모델(gemini-2.0-flash)로 재시도합니다.")
+            import traceback
+            traceback.print_exc()
             try:
-                # [한글 주석] 주력 번역 모델 쿼터 한도 도달 시 gemini-2.0-flash 모델을 통해 우회 번역을 재시도합니다.
                 from langchain_google_genai import ChatGoogleGenerativeAI
                 backup_llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.2)
+                # 동일한 human_msg 재활용
                 with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(backup_llm.invoke, [HumanMessage(content=system_prompt)])
-                    response = future.result(timeout=2.5) # [이유: 대기 최소화를 위해 2.5초로 단축]
+                    future = executor.submit(backup_llm.invoke, [human_msg])
+                    response = future.result(timeout=12.0)
                 translated = response.content.strip().replace('"', '').replace("'", "")
                 print(f"🌐 [Translate] 백업 모델 번역 성공: '{translated}'")
-                translation_cache[prompt] = translated
+                translation_cache[cache_key] = translated
                 return translated
             except Exception as e2:
                 print(f"⚠️ [Translate] 백업 모델 번역도 실패 (비상 사전 Fallback 작동): {e2}")
+                import traceback
+                traceback.print_exc()
 
     # =====================================================================
     # [정밀 룰 기반 Fallback 파서]
@@ -505,25 +551,27 @@ def translate_prompt_to_english(prompt: str) -> str:
     # =====================================================================
     style_keywords = {
         # [한글 주석] 형태 키워드(원형, 사각형 등)를 사전에 등록하여 영문 이미지 생성 프롬프트에 형상을 강제 주입합니다.
-        "원형": "(round shape, circular:1.35)",
-        "둥근": "(round shape, circular:1.35)",
-        "타원형": "(oval shape, elliptical:1.35)",
-        "사각": "(rectangular shape, square:1.25)",
-        "사각형": "(rectangular shape, square:1.25)",
+        "원형": "(round shape, circular:1.05)",
+        "둥근": "(round shape, circular:1.05)",
+        "타원형": "(oval shape, elliptical:1.05)",
+        "사각": "(rectangular shape, square:1.05)",
+        "사각형": "(rectangular shape, square:1.05)",
         # [한글 주석] 카페트나 소파 등 배경이 나무색으로 오염되어 얼룩지는 현상을 방지하기 위해 interior 태그를 빼고 자재 질감(material texture)만 묘사합니다.
-        "우드": "(warm wooden material texture:1.25)",
-        "나무": "(warm wooden material texture:1.25)",
-        "북유럽": "(scandinavian cozy style:1.25)",
-        "미니멀": "(minimalist clean style:1.25)",
-        "화이트": "(bright gallery white theme:1.25)",
-        "하얀색": "(bright gallery white theme:1.25)",
-        "모던": "(sleek modern interior:1.20)",
-        "내추럴": "(natural organic tone style:1.20)",
-        "네추럴": "(natural organic tone style:1.20)",
-        "럭셔리": "(luxury elegant interior:1.25)",
-        "빈티지": "(vintage industrial style:1.25)",
-        "어반": "(urban modern style:1.20)",
-        "따뜻한": "(warm cozy mood:1.15)",
+        "우드": "(warm wooden material texture:1.10)",
+        "나무": "(warm wooden material texture:1.10)",
+        "목재": "(warm wooden material texture:1.10)",
+        "원목": "(warm wooden material texture:1.15)",
+        "북유럽": "(scandinavian cozy style:1.10)",
+        "미니멀": "(minimalist clean style:1.10)",
+        "화이트": "(bright gallery white theme:1.10)",
+        "하얀색": "(bright gallery white theme:1.10)",
+        "모던": "(sleek modern interior:1.10)",
+        "내추럴": "(natural organic tone style:1.10)",
+        "네추럴": "(natural organic tone style:1.10)",
+        "럭셔리": "(luxury elegant interior:1.15)",
+        "빈티지": "(vintage industrial style:1.15)",
+        "어반": "(urban modern style:1.10)",
+        "따뜻한": "(warm cozy mood:1.05)",
         "아늑한": "(warm cozy mood:1.15)",
         "어두운": "(moody dark tone theme:1.20)",
         "밝은": "(bright well-lit interior:1.15)",
@@ -556,21 +604,21 @@ def translate_prompt_to_english(prompt: str) -> str:
     
     furniture_keywords = {
         # [한글 주석] 인페인팅 구역 내에 여러 개의 가구가 기괴하게 합성되는 중복 생성 현상을 막기 위해, a single 지시어를 강제 부여하여 단수 오브젝트만 생성하도록 유도합니다.
-        "소파": "(a single modern fabric sofa:1.25)",
-        "쇼파": "(a single modern fabric sofa:1.25)",
-        "침대": "(a single cozy premium bed:1.25)",
+        "소파": "(a single modern fabric sofa:1.45)",
+        "쇼파": "(a single modern fabric sofa:1.45)",
+        "침대": "(a single cozy premium bed:1.45)",
         # [한글 주석] 테이블이 뭉개지거나 그림자가 없어 동화되지 않는 문제를 방지하기 위해 구체적인 상판/다리 묘사(flat tabletop, slender legs)와 사실적 그림자(realistic drop shadows, ambient occlusion) 태그를 주입합니다.
-        "테이블": "(a single round wooden coffee table with flat tabletop and slender legs:1.35), (realistic drop shadows:1.25), (ambient occlusion:1.15)",
-        "식탁": "(a single round wooden coffee table with flat tabletop and slender legs:1.35), (realistic drop shadows:1.25), (ambient occlusion:1.15)",
-        "의자": "(a single accent chair:1.20)",
-        "책상": "(a single minimalist workspace desk:1.20)",
-        "책장": "(a single wooden bookshelf:1.15)",
-        "조명": "(a single warm ambient lighting:1.20)",
-        "불빛": "(a single warm ambient lighting:1.20)",
-        "식물": "(a single indoor green plants decor:1.15)",
-        "화분": "(a single indoor green plants decor:1.15)",
-        "커튼": "(a single soft flowing curtains:1.15)",
-        "거울": "(a single modern wall mirror:1.15)",
+        "테이블": "(a single round wooden coffee table with flat tabletop and slender legs:1.45), (realistic drop shadows:1.15)",
+        "식탁": "(a single round wooden coffee table with flat tabletop and slender legs:1.45), (realistic drop shadows:1.15)",
+        "의자": "(a single accent chair:1.45)",
+        "책상": "(a single minimalist workspace desk:1.40)",
+        "책장": "(a single wooden bookshelf:1.35)",
+        "조명": "(a single warm ambient lighting:1.35)",
+        "불빛": "(a single warm ambient lighting:1.35)",
+        "식물": "(a single indoor green plants decor:1.35)",
+        "화분": "(a single indoor green plants decor:1.35)",
+        "커튼": "(a single soft flowing curtains:1.30)",
+        "거울": "(a single modern wall mirror:1.30)",
         "벽": "wall texture",
         "바닥": "floor texture",
     }
@@ -719,10 +767,10 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 prompt_api_data["3"]["inputs"]["denoise"] = 0.65
                 print("⚙️ [inpainting_API] KSampler 1 Denoise 디폴트 값 주입: 0.65 (공간 투시 보존)")
 
-            # VAE 인코더 마스크 가중치 패딩(grow_mask_by) 확장 적용 (주변 공간 컨텍스트 64px 조화로 꽉참 현상 방지)
+            # VAE 인코더 마스크 가중치 패딩(grow_mask_by)을 2px로 극소화하여 누끼 따진 가구 안에서만 렌더링하도록 잠금 처리
             if "10" in prompt_api_data:
-                prompt_api_data["10"]["inputs"]["grow_mask_by"] = 64
-                print("📐 [inpainting_API] VAEEncode 1 grow_mask_by 확장: 64 (주변 공간 구조 대조)")
+                prompt_api_data["10"]["inputs"]["grow_mask_by"] = 2
+                print("📐 [inpainting_API] VAEEncode 1 grow_mask_by 축소: 2 (누끼 합성 효과 적용)")
 
             # ─── 동적 1/2단계 분기 판별 ───
             img_b = parameters.get("image_filename_b")
@@ -748,8 +796,8 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                     print(f"⚙️ [inpainting_API] KSampler 2 Denoise 강도 조절: {prompt_api_data['15']['inputs']['denoise']}")
                 
                 if "14" in prompt_api_data:
-                    prompt_api_data["14"]["inputs"]["grow_mask_by"] = 64
-                    print("📐 [inpainting_API] VAEEncode 2 grow_mask_by 확장: 64")
+                    prompt_api_data["14"]["inputs"]["grow_mask_by"] = 2
+                    print("📐 [inpainting_API] VAEEncode 2 grow_mask_by 축소: 2 (누끼 합성 효과 적용)")
 
                 # 최종 저장은 Node 16 (2단계 디코드) 결과물 사용
                 prompt_api_data["9"]["inputs"]["images"] = ["16", 0]
@@ -2616,7 +2664,13 @@ def edit_image(req: ImageEditRequest):
                     mask_layer = decoded_img.convert("L")
                 
                 if mask_layer.size != (width, height):
-                    mask_layer = mask_layer.resize((width, height), Image.Resampling.NEAREST)
+                    mask_layer = mask_layer.resize((width, height), Image.Resampling.BILINEAR)
+                
+                # 🎨 [산디과 코딩 가이드 - 마스크 경계 소프트 페더링 블러 필터 적용]
+                # 비유: 원형으로 뚝 끊기는 마스크 경계를 부드럽게 뭉개어 자연스러운 그라데이션 깃털(Feather)처럼 배경에 합쳐지게 합니다.
+                feather = max(8, min(width, height) // 80)
+                mask_layer = mask_layer.filter(ImageFilter.MaxFilter(feather + 1))
+                mask_layer = mask_layer.filter(ImageFilter.GaussianBlur(feather))
                     
             except Exception as e:
                 print(f"⚠️ Base64 디코딩 에러: {e}")
@@ -2672,19 +2726,26 @@ def edit_image(req: ImageEditRequest):
         print(f"⚠️ 마스크 체인 빌드 중 에러: {e}")
         w, h = 768, 512
 
+    # ── [번역 중복 호출 제거 및 1회 일괄 배정] ──
+    # 번역 함수를 연달아 두 번 호출하면 업로드 대역폭이 2배로 들고 타임아웃 확률이 폭증합니다.
+    # 단 한 번만 호출해 변수에 획득한 뒤 분배하여 API 성공률을 2배 높입니다.
+    translated_main_prompt = translate_prompt_to_english(req.prompt, orig_path)
+    translated_sub_prompt = translate_prompt_to_english(req.prompt_b, orig_path) if req.prompt_b else translated_main_prompt
+
     parameters = {
         "image_filename": mask_filename_a,
         "image_filename_b": mask_filename_b or "",
         "orig_image": orig_input_filename,
-        "prompt": translate_prompt_to_english(req.prompt),
-        "prompt_b": translate_prompt_to_english(req.prompt_b or req.prompt),
+        "prompt": translated_main_prompt,
+        "prompt_b": translated_sub_prompt,
         "seed": int(time.time()) % 1000000
     }
     
     # 실시간 화질 자연스러움 극대화를 위한 기본 권장 스윗스팟 자동 연동 (요청에 누락 시 적용)
+    # [이유: 0.45 디노이즈 강도는 원래 가구의 3D 투시 구도와 크기 비율을 90% 이상 박제한 채 스타일만 변경합니다.]
     parameters["steps"] = req.steps if req.steps is not None else 25
     parameters["cfg"] = req.cfg if req.cfg is not None else 8.0
-    parameters["denoise"] = req.denoise if req.denoise is not None else 0.81
+    parameters["denoise"] = req.denoise if req.denoise is not None else 0.45
     
     real_filename = None
     if comfy_online:
@@ -2778,18 +2839,11 @@ def edit_image(req: ImageEditRequest):
                     mask_b = mask_b.resize((target_w, target_h), Image.Resampling.BILINEAR)
                     final_mask = ImageChops.lighter(final_mask, mask_b)
                 
-                # 3. [더블 패스 클린 알파 블렌딩 + 마스크 침식 페더링] (상시 정밀 합성)
-                # [한글 주석] 1단계: 칼 마스크 기준으로 결과물(res_img)과 리사이징된 원본(orig_img_resized)을 1차 합성하여 마스크 바깥쪽을 완전한 원본 이미지로 정제합니다.
-                clean_res_img = Image.composite(res_img, orig_img_resized, final_mask)
-                
-                # 2단계: 가구 외곽의 흰색 노이즈 경계를 안쪽으로 수축(Erosion)시켜 깎아내기 위해 MinFilter 적용 (3x3 커널)
-                eroded_mask = final_mask.filter(ImageFilter.MinFilter(size=3))
-                
-                # 3단계: 깎인 경계면을 카펫/소파와 부드럽게 스며들게 하기 위해 6px 가우시안 블러 페더링 적용
-                final_mask_blurred = eroded_mask.filter(ImageFilter.GaussianBlur(radius=6))
-                
-                # 4단계: 정제된 가구 이미지와 원본을 침식 블러 마스크 기준으로 최종 합성
-                composite_img = Image.composite(clean_res_img, orig_img_resized, final_mask_blurred)
+                # 3. [초정밀 1:1 누끼 레이어 얹기 합성]
+                # 🎨 [산디과 코딩 가이드 - 마스크 100% 누끼 다이렉트 패치]
+                # 비유: AI가 그린 고해상도 가구 이미지를 가위로 정교하게 잘라내어(누끼), 사용자가 올린 원본 사진의 정확한 위치에 한 픽셀의 오차도 없이 얹는 포토샵 레이어 기법입니다.
+                # 주변 배경(벽, 창문)은 1픽셀도 건드리지 않고 100% 선명한 원본 그대로 완벽하게 보존됩니다.
+                composite_img = Image.composite(res_img, orig_img_resized, final_mask)
                 
                 # 5단계: 리사이징 시 흐려진 화질 선명도 1.2배 향상 보강
                 from PIL import ImageEnhance

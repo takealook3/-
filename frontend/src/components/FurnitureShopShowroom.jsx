@@ -35,17 +35,16 @@ const HIGH_RES_OBJECT_IMAGES = [
   "https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?auto=format&fit=crop&w=800&q=80"  // 모던 메탈 오브제
 ];
 
-// 저화질 구글 썸네일 검출 및 스마트 고화질 대체 필터
 const resolveHighResImage = (category, url, id) => {
-  // 1. URL이 비어있거나 구글 썸네일(gstatic.com / tbn:) 형태인 경우 Unsplash 고화질 맵으로 덮어씀
-  if (!url || url.includes('gstatic.com') || url.includes('tbn:')) {
+  // 1. URL이 완전히 비어있는 최후의 경우에만 깨짐 방지용 기본 고화질 이미지 매핑
+  if (!url) {
     const seed = id - 1; // 0-indexed로 일관성 매핑
     if (category === '침대') return HIGH_RES_BED_IMAGES[seed % HIGH_RES_BED_IMAGES.length];
     if (category === '소파') return HIGH_RES_SOFA_IMAGES[seed % HIGH_RES_SOFA_IMAGES.length];
     return HIGH_RES_OBJECT_IMAGES[seed % HIGH_RES_OBJECT_IMAGES.length];
   }
   
-  // 2. 핀터레스트 등 일반 이미지 링크 중 해상도 강제 축소(w=292, w=200 등)가 있는 경우 1000px급으로 치환
+  // 2. 사용자가 제대로 등록한 링크는 원본 그대로 사용 (핀터레스트 해상도 치환만 안전하게 처리)
   let adjustedUrl = url;
   if (adjustedUrl.includes('w=292') || adjustedUrl.includes('w=200') || adjustedUrl.includes('w=115')) {
     adjustedUrl = adjustedUrl.replace(/w=\d+/, 'w=1000').replace(/h=\d+/, 'h=700');
@@ -171,20 +170,29 @@ export default function FurnitureShopShowroom({ onSelectStyle, selectedCategory,
   };
 
   return (
-    <section id="furniture-showroom" ref={showroomRef} className="card" style={{
+    <section id="furniture-showroom" ref={showroomRef} style={{
       width: '100vw',
       marginLeft: 'calc(-50vw + 50%)',
       marginRight: 'calc(-50vw + 50%)',
       backgroundColor: '#FCFAF7',
-      padding: '80px 10%',
+      padding: '80px 0',
       borderTop: '1px solid var(--border-color)',
       fontFamily: 'Outfit, sans-serif',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '36px',
-      color: '#2A2521'
+      color: '#2A2521',
+      boxSizing: 'border-box'
     }}>
-      {/* 쇼룸 타이틀 영역 */}
+      {/* 내부 중앙 정렬 컨테이너 (스크롤바와 상관없이 상품들을 가만히 정렬선에 고정) */}
+      <div style={{
+        maxWidth: '1400px',
+        width: '100%',
+        margin: '0 auto',
+        padding: '0 24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '36px',
+        boxSizing: 'border-box'
+      }}>
+        {/* 쇼룸 타이틀 영역 */}
       <div style={{ textAlign: 'center' }}>
         <span style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--accent)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
           🛋️ Premium Furniture Showroom
@@ -447,6 +455,7 @@ export default function FurnitureShopShowroom({ onSelectStyle, selectedCategory,
           </div>
         )}
       </div>
-    </section>
-  );
+    </div>
+  </section>
+);
 }
