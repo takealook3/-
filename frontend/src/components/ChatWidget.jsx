@@ -345,7 +345,7 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
                 gap: '8px',
                 marginTop: '2px'
               }}>
-                <span style={{ color: '#7A6C62', fontSize: '0.75rem', fontWeight: '600', paddingLeft: '4px' }}>
+                <span style={{ color: '#7A6C62', fontSize: '0.7rem', fontWeight: '600', paddingLeft: '4px' }}>
                   이런 질문은 어때요? 👇
                 </span>
                 {SUGGESTED_QUESTIONS.map((q, i) => (
@@ -354,19 +354,18 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
                     type="button"
                     onClick={() => handleSend(q)}
                     style={{
-                      maxWidth: '90%',
+                      maxWidth: '85%',
                       textAlign: 'left',
-                      backgroundColor: '#FCFAF7',
+                      backgroundColor: 'transparent',
                       color: '#2B3530',
                       border: '1px solid #CDBCB2',
-                      borderRadius: '14px 14px 14px 4px',
-                      padding: '9px 14px',
-                      fontSize: '0.82rem',
-                      lineHeight: '1.4',
+                      borderRadius: '12px 12px 12px 3px',
+                      padding: '5px 10px',
+                      fontSize: '0.74rem',
+                      lineHeight: '1.35',
                       fontFamily: 'inherit',
                       cursor: 'pointer',
-                      boxShadow: '0 2px 6px rgba(43, 53, 48, 0.05)',
-                      transition: 'background-color 0.2s, border-color 0.2s, transform 0.15s'
+                      transition: 'background-color 0.2s, color 0.2s, transform 0.15s'
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.backgroundColor = '#2B3530';
@@ -374,7 +373,7 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
                       e.currentTarget.style.transform = 'translateX(2px)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = '#FCFAF7';
+                      e.currentTarget.style.backgroundColor = 'transparent';
                       e.currentTarget.style.color = '#2B3530';
                       e.currentTarget.style.transform = 'translateX(0)';
                     }}
