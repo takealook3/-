@@ -9,6 +9,43 @@ import { sendChatMessage, API_BASE_URL } from '../services/api';
 
 export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt, setPendingPrompt }) {
   const [isOpen, setIsOpen] = useState(false);
+
+  // [코너 스냅 배치] 챗봇 위젯은 화면 좌하단/우하단 두 곳에만 붙는다.
+  // 자유 배치(dragPos) 대신 코너 상태만 관리 — 드래그 중 포인터가 화면 왼쪽 절반이면 좌하단,
+  // 오른쪽 절반이면 우하단으로 실시간 스냅되어 본문 컨텐츠를 가리는 어중간한 위치를 방지한다.
+  const [corner, setCorner] = useState('right'); // 'left' | 'right'
+  const dragStateRef = useRef({ dragging: false, moved: false, lastX: 0, lastY: 0 });
+
+  const handleDragMove = (e) => {
+    if (!dragStateRef.current.dragging) return;
+    const dx = e.clientX - dragStateRef.current.lastX;
+    const dy = e.clientY - dragStateRef.current.lastY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragStateRef.current.moved = true;
+    dragStateRef.current.lastX = e.clientX;
+    dragStateRef.current.lastY = e.clientY;
+    setCorner(e.clientX < window.innerWidth / 2 ? 'left' : 'right');
+  };
+
+  const handleDragEnd = () => {
+    dragStateRef.current.dragging = false;
+    document.body.style.userSelect = '';
+    window.removeEventListener('mousemove', handleDragMove);
+    window.removeEventListener('mouseup', handleDragEnd);
+  };
+
+  const handleDragStart = (e) => {
+    dragStateRef.current = { dragging: true, moved: false, lastX: e.clientX, lastY: e.clientY };
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', handleDragMove);
+    window.addEventListener('mouseup', handleDragEnd);
+  };
+
+  useEffect(() => {
+    return () => {
+      window.removeEventListener('mousemove', handleDragMove);
+      window.removeEventListener('mouseup', handleDragEnd);
+    };
+  }, []);
   const [messages, setMessages] = useState([
     {
       sender: 'ai',
@@ -115,53 +152,59 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
           animation-delay: .4s;
         }
       `}</style>
-      {/* 1. [플로팅 아이콘 버튼: 상시 렌더링 및 iOS 감성 작아짐 트랜지션] */}
+      {/* 1. [플로팅 아이콘 버튼: 텍스트 없는 컴팩트 원형 FAB — 좌하단/우하단 코너 스냅] */}
       <button
-        onClick={() => setIsOpen(true)}
+        onMouseDown={handleDragStart}
+        onClick={() => { if (!dragStateRef.current.moved) setIsOpen(true); }}
+        title="AI 취향 & 인테리어 상담 (꾹 눌러 드래그하면 좌/우 하단으로 옮길 수 있어요)"
+        aria-label="AI 취향 & 인테리어 정보 상담 열기"
         style={{
           position: 'fixed',
           bottom: '24px',
-          right: '24px',
+          ...(corner === 'left' ? { left: '24px' } : { right: '24px' }),
           zIndex: 9999,
           fontFamily: 'Outfit, sans-serif',
           backgroundColor: '#2B3530',
           color: '#FCFAF7',
           border: 'none',
-          borderRadius: '50px',
-          padding: '14px 26px',
-          fontSize: '0.95rem',
-          fontWeight: '600',
-          cursor: 'pointer',
+          borderRadius: '50%',
+          width: '56px',
+          height: '56px',
+          padding: 0,
+          fontSize: '1.5rem',
+          cursor: 'grab',
           boxShadow: '0 8px 24px rgba(43, 53, 48, 0.2)',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
+          justifyContent: 'center',
           opacity: isOpen ? 0 : 1, // 오픈 시 부드럽게 감춤
           transform: isOpen ? 'translateY(15px) scale(0.7)' : 'translateY(0) scale(1)', // 아래로 내려앉으며 작아짐
           visibility: isOpen ? 'hidden' : 'visible',
           pointerEvents: isOpen ? 'none' : 'auto',
-          transition: 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s, visibility 0.45s, background-color 0.25s'
+          transition: 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s, visibility 0.45s, background-color 0.25s',
+          touchAction: 'none'
         }}
-        onMouseEnter={(e) => { 
+        onMouseEnter={(e) => {
           e.currentTarget.style.backgroundColor = '#19201C';
         }}
-        onMouseLeave={(e) => { 
+        onMouseLeave={(e) => {
           e.currentTarget.style.backgroundColor = '#2B3530';
         }}
       >
-        <span style={{ fontSize: '1.2rem' }}>💬</span>
-        <span>AI 취향 & 인테리어 정보 상담</span>
+        <span>💬</span>
       </button>
 
-      {/* 2. [메신저 대화창 패널: 상시 렌더링 및 iOS 찰진 줌인 팝업 트랜지션] */}
+      {/* 2. [메신저 대화창 패널: 상시 렌더링 및 iOS 찰진 줌인 팝업 트랜지션 — 버튼과 같은 코너에 정렬] */}
       <div style={{
         position: 'fixed',
         bottom: '24px',
-        right: '24px',
+        ...(corner === 'left' ? { left: '24px' } : { right: '24px' }),
         zIndex: 9999,
         fontFamily: 'Outfit, sans-serif',
         width: '380px',
+        maxWidth: 'calc(100vw - 48px)',
         height: '560px',
+        maxHeight: 'calc(100vh - 48px)',
         backgroundColor: '#FCFAF7',
         border: '1px solid #CDBCB2',
         borderRadius: '20px',
@@ -172,26 +215,33 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
         flexDirection: 'column',
         overflow: 'hidden',
         opacity: isOpen ? 1 : 0, // 오픈 시 밝아짐
-        transform: isOpen ? 'scale(1) translate3d(0, 0, 0)' : 'scale(0.12) translate3d(120px, 200px, 0)', // 우하단 기점에서 솟구침
-        transformOrigin: 'bottom right', // 팝업 출발점을 우측 하단 버튼으로 세팅
+        transform: isOpen ? 'scale(1)' : 'scale(0.12)', // 코너 기점에서 솟구침
+        transformOrigin: corner === 'left' ? 'bottom left' : 'bottom right', // 팝업 출발점 = 코너 버튼 위치
         visibility: isOpen ? 'visible' : 'hidden',
         pointerEvents: isOpen ? 'auto' : 'none',
         transition: 'transform 0.48s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.38s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.48s'
       }}>
-        {/* 상단 헤더 바 */}
-        <div style={{
-          backgroundColor: '#2B3530',
-          padding: '16px 20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          borderBottom: '1px solid #CDBCB2'
-        }}>
+        {/* 상단 헤더 바 (꾹 눌러 드래그하면 위젯 전체를 원하는 위치로 옮길 수 있음) */}
+        <div
+          onMouseDown={handleDragStart}
+          title="꾹 눌러서 드래그하면 위치를 옮길 수 있어요"
+          style={{
+            backgroundColor: '#2B3530',
+            padding: '16px 20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderBottom: '1px solid #CDBCB2',
+            cursor: 'grab',
+            touchAction: 'none',
+            userSelect: 'none'
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '1.2rem' }}>🎨</span>
             <div>
-              <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#FCFAF7', fontFamily: 'Outfit, sans-serif' }}>AI 인테리어 취향 & 정보 큐레이터</div>
-              <div style={{ fontSize: '0.75rem', color: '#C7B7AE' }}>나만의 취향 매칭부터 시공·자재 가이드까지 종합 안내</div>
+              <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#FCFAF7', fontFamily: 'Outfit, sans-serif' }}>AI 인테리어 상담</div>
+              <div style={{ fontSize: '0.75rem', color: '#C7B7AE' }}>취향 분석 · 자재/시공 가이드</div>
             </div>
           </div>
           <button

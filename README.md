@@ -1,4 +1,49 @@
-# 🏠 AI 기반 2D 인테리어 이미지 수정 기술 가이드북
+# 🏠 ZipPT — AI 인테리어 스튜디오
+
+방 사진을 업로드해 스타일 변환(Img2Img), 가구 영역 교체(Inpainting), AI 인테리어 상담을 제공하는 웹 애플리케이션입니다.
+
+## 🚀 설치 및 실행 (처음 받은 사람용)
+
+### 1. 사전 준비물
+| 항목 | 필수 여부 | 비고 |
+|---|---|---|
+| Python 3.10+ | 필수 | PATH 등록 필요 |
+| Node.js LTS | 필수 | 프론트엔드(Vite) 구동용 |
+| Gemini API 키 | 필수 | 프롬프트 번역·챗봇 ([발급](https://aistudio.google.com/apikey)) |
+| ComfyUI (포터블) | 권장 | 실제 AI 이미지 생성 엔진. 없으면 로컬 diffusers 폴백으로 동작하나 느림 |
+| NVIDIA GPU | 권장 | 이미지 생성 속도. CLIP 평가 지표는 CPU로도 동작 |
+
+### 2. 설치
+```bash
+git clone <repo-url>
+cd project
+setup.bat        # venv 생성 + 파이썬/프론트 패키지 설치 + .env 생성 (1회)
+```
+설치 후 `.env` 파일을 열어 `GOOGLE_API_KEY`와 `COMFYUI_PATH`를 본인 환경에 맞게 수정하세요.
+
+### 3. ComfyUI 모델 준비 (이미지 생성 품질을 위해 권장)
+ComfyUI 포터블 설치 후, 아래 파일들을 해당 폴더에 넣어주세요.
+
+| 파일 | 넣을 위치 | 다운로드 |
+|---|---|---|
+| `realisticVisionV60B1_v51HyperVAE.safetensors` | `ComfyUI/models/checkpoints/` | [Civitai - Realistic Vision V6.0](https://civitai.com/models/4201) |
+| `control_v11p_sd15_mlsd.safetensors` | `ComfyUI/models/controlnet/` | [HuggingFace - ControlNet v1.1](https://huggingface.co/lllyasviel/ControlNet-v1-1/tree/main) |
+| `comfyui_controlnet_aux` (커스텀 노드) | `ComfyUI/custom_nodes/` | `git clone https://github.com/Fannovel16/comfyui_controlnet_aux` 또는 ComfyUI-Manager로 설치 |
+
+> MLSD ControlNet(방 구조 유지용)이 없어도 가구 교체는 자동으로 ControlNet 없이 동작합니다(품질만 낮아짐).
+> YOLO 가중치와 CLIP 평가 모델은 첫 실행 시 자동 다운로드됩니다 (인터넷 연결 필요).
+
+### 4. 실행
+```bash
+run_app.bat      # 백엔드(8000) + 프론트(5173) + ComfyUI(8188) 동시 기동
+```
+브라우저에서 http://localhost:5173 접속.
+
+> 첫 이미지 생성 시 CLIP 평가 모델 다운로드(약 600MB)로 지표 계산이 15~20초 걸릴 수 있으며, 이후에는 즉시 계산됩니다.
+
+---
+
+# 📚 AI 기반 2D 인테리어 이미지 수정 기술 가이드북
 
 이 가이드북은 `.safetensors` 파일을 활용하여 **인테리어 스타일을 변경(Img2Img)**하고, **특정 영역을 수정(Inpainting)**하는 기술의 개념과 파이썬 구현 방법을 설명합니다.
 
