@@ -6,6 +6,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { sendChatMessage, API_BASE_URL } from '../services/api';
 
+// [추천 질문 칩] 클릭 즉시 질문이 전송되는 스타터 질문 3종.
+// 백엔드가 가장 잘 답하는 세 갈래(평형대 규격 추천 DB2 / 스타일·자재 매칭 DB1 / 시공 체크리스트 RAG)를 하나씩 커버한다.
+// 칩에는 짧은 라벨(label)만 보여주고, 클릭하면 질문 전문(question)이 전송된다.
+const SUGGESTED_QUESTIONS = [
+  { icon: '📐', label: '30평 가구 추천', question: '30평 아파트에 어울리는 가구 규격과 스타일을 추천해줘' },
+  { icon: '🎨', label: '모던 자재 조합', question: '모던 스타일에 어울리는 벽지와 바닥재 조합을 알려줘' },
+  { icon: '✅', label: '시공 체크리스트', question: '셀프 인테리어 시공 전에 꼭 확인해야 할 체크리스트를 알려줘' }
+];
+
 
 export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt, setPendingPrompt }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -352,15 +361,77 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
                   <div className="kakao-dot" />
                   <div className="kakao-dot" />
                 </div>
-                <span style={{ color: '#7A6C62', fontSize: '0.78rem', paddingLeft: '4px', fontWeight: '500' }}>
-                  {imageId ? "AI가 인테리어를 분석하고 새 스타일로 변환하는 중입니다..." : "AI 스타일리스트가 공간 정보를 분석하고 있습니다..."}
-                </span>
               </div>
             )}
 
           <div ref={messagesEndRef} />
         </div>
 
+
+        {/* [추천 질문 칩] 텍스트 입력창 바로 위, 세로로 3개 스택 — 대화 시작 전에만 노출, 클릭 시 즉시 전송 */}
+        {messages.length === 1 && !loading && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: '6px',
+            padding: '10px 12px',
+            backgroundColor: '#F3EBE5'
+          }}>
+            {SUGGESTED_QUESTIONS.map((q, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => handleSend(q.question)}
+                title={q.question}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.6)',
+                  backdropFilter: 'blur(6px)',
+                  color: '#4A443E',
+                  border: 'none',
+                  borderRadius: '14px',
+                  padding: '7px 12px 7px 7px',
+                  fontSize: '0.76rem',
+                  fontWeight: '500',
+                  fontFamily: 'inherit',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  boxShadow: '0 2px 8px rgba(43, 53, 48, 0.06)',
+                  transition: 'background-color 0.2s, transform 0.15s, box-shadow 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(43, 53, 48, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.6)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(43, 53, 48, 0.06)';
+                }}
+              >
+                <span style={{
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '9px',
+                  backgroundColor: '#FCFAF7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.85rem',
+                  flexShrink: 0,
+                  boxShadow: 'inset 0 0 0 1px rgba(205, 188, 178, 0.4)'
+                }}>
+                  {q.icon}
+                </span>
+                {q.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* 하단 입력 영역 */}
         <form
