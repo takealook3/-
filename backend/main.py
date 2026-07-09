@@ -791,7 +791,7 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 "accurate real-world proportions, typical realistic size, correct scale for the room, "
                 "naturally placed and properly supported, soft realistic contact shadow, "
                 "drawn in the same perspective and vanishing lines as the room, "
-                "soft natural lighting matching the room, "
+                "lighting, white balance and color temperature matching the room, "
                 "seamlessly blended into the existing interior, high quality"
             )
 
@@ -865,8 +865,9 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 print("🔗 [inpainting_API] 2차 수선 활성화 (2단계 릴레이 파이프라인)")
                 prompt_api_data["18"]["inputs"]["image"] = img_b
                 # 2단계도 1단계와 동일한 범용 오브젝트 접미사를 사용한다.
+                # 가중치도 1단계와 동일하게 1.1로 통일 (1.25는 마스크를 꽉 채우는 거대 가구 유발 — 1단계 주석 참조)
                 _prompt_b_text = parameters.get("prompt_b") or parameters.get("prompt", "")
-                prompt_api_data["11"]["inputs"]["text"] = f"({_prompt_b_text}:1.25), {_generic_style_suffix}"
+                prompt_api_data["11"]["inputs"]["text"] = f"({_prompt_b_text}:1.1), {_generic_style_suffix}"
                 
                 if "seed" in parameters:
                     prompt_api_data["15"]["inputs"]["seed"] = int(parameters["seed"]) + 13
@@ -2938,6 +2939,48 @@ def _build_bbox_mask_b64(img_w: int, img_h: int, bbox: list):
     return mask_b64, [bx1, by1, bx2, by2]
 
 
+def _build_silhouette_mask_b64(img_w: int, img_h: int, bbox: list, seg_polys: list):
+    """세그멘테이션 실루엣(폴리곤 목록)을 넉넉히 팽창시킨 인페인팅 마스크를 만든다.
+    bbox 사각형 마스크는 가구 아래/주변 바닥까지 포함해 '바닥이 같이 바뀌는' 부작용이 있어,
+    실제 가구 윤곽만 덮되 새 가구의 형태 차이를 흡수할 수 있게 크게 팽창시키는 절충안이다.
+    (팽창량이 부족하면 과거처럼 새 가구가 옛 실루엣에 잘리는 문제가 생기므로 여유 있게 잡는다)
+    L자 소파처럼 하나의 가구가 여러 부분 폴리곤으로 나뉘어 인식되는 경우를 지원하기 위해
+    폴리곤 여러 개를 하나의 마스크에 합집합으로 그린다."""
+    import base64
+    from io import BytesIO
+
+    poly_list = []
+    for poly in (seg_polys or []):
+        pts = [(float(x), float(y)) for x, y in poly]
+        if len(pts) >= 3:
+            poly_list.append(pts)
+    if not poly_list:
+        return None
+
+    mask_img = Image.new("L", (img_w, img_h), 0)
+    draw = ImageDraw.Draw(mask_img)
+    for pts in poly_list:
+        draw.polygon(pts, fill=255)
+
+    # 오브젝트 크기의 약 10%만큼 팽창시켜 새 가구의 형태 차이(직사각형→원형 등)를 흡수.
+    # MaxFilter 커널은 홀수여야 하며 과도한 연산을 막기 위해 상한을 둔다.
+    bw = max(1.0, bbox[2] - bbox[0])
+    bh = max(1.0, bbox[3] - bbox[1])
+    dilate = int(min(bw, bh) * 0.10)
+    dilate = max(9, min(dilate, 51))
+    kernel = dilate if dilate % 2 == 1 else dilate + 1
+    mask_img = mask_img.filter(ImageFilter.MaxFilter(kernel))
+
+    # 경계가 배경과 부드럽게 섞이도록 페더링 (기존 bbox 마스크와 동일 강도)
+    feather = max(3, min(img_w, img_h) // 100)
+    mask_img = mask_img.filter(ImageFilter.GaussianBlur(feather))
+
+    rgb_mask = Image.merge("RGB", (mask_img, mask_img, mask_img))
+    buf = BytesIO()
+    rgb_mask.save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+
+
 def _bbox_iou(a: list, b: list) -> float:
     ix1, iy1 = max(a[0], b[0]), max(a[1], b[1])
     ix2, iy2 = min(a[2], b[2]), min(a[3], b[3])
@@ -2982,11 +3025,13 @@ def detect_all_objects(payload: dict):
         candidates = []
 
         # 1) YOLO11-seg (COCO 80종): 소파/의자/침대/식탁/TV/화분 등 기본 가구
+        #    세그멘테이션 실루엣(폴리곤)도 함께 보관 → 바닥/벽이 마스크에 쓸려 들어가지 않는
+        #    실루엣 기반 마스크 생성에 사용한다.
         model = _get_yolo_seg_model()
         results = model(orig_path, verbose=False)
         r0 = results[0] if results else None
         if r0 is not None and r0.boxes is not None:
-            for box in r0.boxes:
+            for i, box in enumerate(r0.boxes):
                 cls_name = model.names[int(box.cls[0].item())]
                 if cls_name in YOLO_EXCLUDED_CLASSES:
                     continue
@@ -2996,7 +3041,13 @@ def detect_all_objects(payload: dict):
                 bx1, by1, bx2, by2 = box.xyxy[0].tolist()
                 if (bx2 - bx1) * (by2 - by1) < min_area:
                     continue
-                candidates.append({"label": cls_name, "confidence": conf, "bbox": [bx1, by1, bx2, by2], "source": "yolo11-seg"})
+                seg_poly = None
+                try:
+                    if r0.masks is not None and r0.masks.xy is not None and i < len(r0.masks.xy):
+                        seg_poly = r0.masks.xy[i].tolist()
+                except Exception:
+                    seg_poly = None
+                candidates.append({"label": cls_name, "confidence": conf, "bbox": [bx1, by1, bx2, by2], "source": "yolo11-seg", "seg_polys": [seg_poly] if seg_poly else []})
 
         # 2) YOLOv8-OIV7 (Open Images 600여 종): 램프/거울/커튼/선반/옷장/서랍장 등 확장 카테고리
         #    로딩 실패(다운로드 불가 등) 시에도 COCO 결과만으로 정상 응답하도록 개별 try 처리
@@ -3016,14 +3067,51 @@ def detect_all_objects(payload: dict):
                     bx1, by1, bx2, by2 = box.xyxy[0].tolist()
                     if (bx2 - bx1) * (by2 - by1) < min_area:
                         continue
-                    candidates.append({"label": cls_name, "confidence": conf, "bbox": [bx1, by1, bx2, by2], "source": "yolov8-oiv7"})
+                    candidates.append({"label": cls_name, "confidence": conf, "bbox": [bx1, by1, bx2, by2], "source": "yolov8-oiv7", "seg_polys": []})
         except Exception as oiv7_err:
             print(f"⚠️ [YOLOv8-OIV7] 확장 카테고리 탐지 스킵 (COCO 결과만 사용): {oiv7_err}")
 
-        # 3) 두 모델이 같은 가구를 중복 탐지한 경우 IoU 기준으로 신뢰도 높은 쪽만 남긴다
+        # 3) [부분 인식 병합] L자 소파처럼 하나의 큰 가구가 여러 개의 부분 박스로 쪼개져
+        #    인식되면, 그 마스크가 가구 일부만 덮어 새 가구가 옛 가구 위에 '반쪽만' 그려지는
+        #    짜깁기 결과의 직접 원인이 된다. 같은 종류(한국어 라벨 기준)이면서 서로 크게
+        #    겹치는 후보들은 bbox 합집합 + 실루엣 폴리곤 합집합으로 하나의 오브젝트로 합친다.
+        #    (식탁 의자처럼 나란히 붙어만 있는 별개 가구는 겹침 비율이 낮아 병합되지 않는다.
+        #     두 모델이 같은 가구를 중복 탐지한 경우도 같은 라벨 그룹이면 여기서 함께 흡수된다)
+        def _overlap_over_smaller(a, b):
+            ix1, iy1 = max(a[0], b[0]), max(a[1], b[1])
+            ix2, iy2 = min(a[2], b[2]), min(a[3], b[3])
+            inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+            if inter <= 0:
+                return 0.0
+            area_a = (a[2] - a[0]) * (a[3] - a[1])
+            area_b = (b[2] - b[0]) * (b[3] - b[1])
+            return inter / max(1.0, min(area_a, area_b))
+
         candidates.sort(key=lambda c: c["confidence"], reverse=True)
-        kept = []
+        merged = []
         for c in candidates:
+            group = _korean_object_label(c["label"])
+            target = None
+            for m in merged:
+                if m["group"] == group and _overlap_over_smaller(m["bbox"], c["bbox"]) > 0.25:
+                    target = m
+                    break
+            if target is None:
+                entry = dict(c)
+                entry["group"] = group
+                entry["seg_polys"] = list(c.get("seg_polys") or [])
+                merged.append(entry)
+            else:
+                target["bbox"] = [
+                    min(target["bbox"][0], c["bbox"][0]), min(target["bbox"][1], c["bbox"][1]),
+                    max(target["bbox"][2], c["bbox"][2]), max(target["bbox"][3], c["bbox"][3]),
+                ]
+                target["seg_polys"].extend(c.get("seg_polys") or [])
+                target["confidence"] = max(target["confidence"], c["confidence"])
+
+        # 라벨 그룹이 달라도 같은 가구를 중복 탐지한 잔여 케이스는 기존 IoU 기준으로 정리
+        kept = []
+        for c in merged:
             if any(_bbox_iou(c["bbox"], k["bbox"]) > 0.55 for k in kept):
                 continue
             kept.append(c)
@@ -3034,7 +3122,22 @@ def detect_all_objects(payload: dict):
 
         objects = []
         for idx, c in enumerate(kept):
-            mask_b64, padded = _build_bbox_mask_b64(img_w, img_h, c["bbox"])
+            # 마스크 전략: 실루엣(팽창) 마스크 우선, 실루엣이 없으면(OIV7 탐지 등) bbox 마스크 폴백.
+            # bbox 마스크는 가구 아래 바닥/러그까지 포함해 "테이블을 바꿨는데 바닥까지 나무로 변하는"
+            # 부작용이 있어, 가구의 실제 윤곽 + 10% 팽창만 덮는 실루엣 마스크를 기본으로 쓴다.
+            # (이웃 가구 실루엣을 '빼는' 방식은 옛 가구 픽셀이 남는 문제로 롤백했음 — 빼기가 아니라
+            #  애초에 마스크를 가구 윤곽에 맞게 좁히는 현재 방식이 안전하다)
+            mask_b64 = None
+            if c.get("seg_polys"):
+                mask_b64 = _build_silhouette_mask_b64(img_w, img_h, c["bbox"], c["seg_polys"])
+            if mask_b64 is None:
+                mask_b64, padded = _build_bbox_mask_b64(img_w, img_h, c["bbox"])
+            else:
+                # 실루엣 마스크를 쓰더라도 화면 표시용 박스는 bbox(5% 패딩)를 그대로 사용
+                bx1, by1, bx2, by2 = c["bbox"]
+                pad_x = (bx2 - bx1) * 0.05
+                pad_y = (by2 - by1) * 0.05
+                padded = [max(0, bx1 - pad_x), max(0, by1 - pad_y), min(img_w, bx2 + pad_x), min(img_h, by2 + pad_y)]
             px = [round(v) for v in padded]
             objects.append({
                 "id": f"obj_{idx}",
@@ -3047,6 +3150,7 @@ def detect_all_objects(payload: dict):
                     "x2": px[2] / img_w, "y2": px[3] / img_h,
                 },
                 "mask": mask_b64,
+                "mask_type": "silhouette" if c.get("seg_polys") else "bbox",
                 "source": c["source"],
             })
 
@@ -3268,27 +3372,57 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
                 with Image.open(orig_path) as _oi:
                     _crop_img = _oi.convert("RGB").crop((cx1, cy1, cx2, cy2)).resize(
                         (gen_w, gen_h), Image.Resampling.LANCZOS)
-                comfy_orig_filename = f"{req.image_id}_crop{cache_bust_suffix}.png"
-                _crop_img_path = os.path.join(PROJECT_ROOT, "uploads", comfy_orig_filename)
-                _crop_img.save(_crop_img_path, "PNG")
-                if os.path.exists(COMFYUI_INPUT_DIR):
-                    shutil.copy(_crop_img_path, os.path.join(COMFYUI_INPUT_DIR, comfy_orig_filename))
 
-                def _save_cropped_mask(src_path, dest_filename):
+                def _cropped_mask_l(src_path):
                     with Image.open(src_path) as _mi:
-                        _mc = _mi.convert("L").crop((cx1, cy1, cx2, cy2)).resize(
+                        return _mi.convert("L").crop((cx1, cy1, cx2, cy2)).resize(
                             (gen_w, gen_h), Image.Resampling.BILINEAR)
-                    _rgb = Image.merge("RGB", (_mc, _mc, _mc))
+
+                def _save_mask_rgb(mask_l, dest_filename):
+                    _rgb = Image.merge("RGB", (mask_l, mask_l, mask_l))
                     _dest = os.path.join(PROJECT_ROOT, "uploads", dest_filename)
                     _rgb.save(_dest, "PNG")
                     if os.path.exists(COMFYUI_INPUT_DIR):
                         shutil.copy(_dest, os.path.join(COMFYUI_INPUT_DIR, dest_filename))
 
+                _mask_l_a = _cropped_mask_l(mask_path_a)
                 comfy_mask_filename_a = f"{req.image_id}_maskA_crop{cache_bust_suffix}.png"
-                _save_cropped_mask(mask_path_a, comfy_mask_filename_a)
+                _save_mask_rgb(_mask_l_a, comfy_mask_filename_a)
+                _union_mask_l = _mask_l_a
                 if mask_path_b and os.path.exists(mask_path_b):
+                    _mask_l_b = _cropped_mask_l(mask_path_b)
                     comfy_mask_filename_b = f"{req.image_id}_maskB_crop{cache_bust_suffix}.png"
-                    _save_cropped_mask(mask_path_b, comfy_mask_filename_b)
+                    _save_mask_rgb(_mask_l_b, comfy_mask_filename_b)
+                    _union_mask_l = Image.fromarray(
+                        np.maximum(np.asarray(_union_mask_l), np.asarray(_mask_l_b)))
+
+                # [잔상(고스팅)/짜깁기 원천 제거] SetLatentNoiseMask 구성은 마스크 영역의 원본 가구를
+                # 밑그림으로 남기는데, 색/형태가 크게 다른 가구로 바꿀 때(흰 소파→검정 소파,
+                # 사각 테이블→원형 테이블) 옛 가구가 새 가구에 비쳐 겹쳐 보이는 주범이었다.
+                # 또한 MLSD ControlNet이 원본 이미지에서 '옛 가구의 직선'까지 추출해 새 가구를
+                # 옛 형태에 강제로 끼워 맞추는 문제도 있었다.
+                # → ComfyUI에 보내는 크롭 이미지에서 마스크 영역을 미리 주변 배경으로 메워,
+                #   밑그림과 구조선 양쪽 모두에서 옛 가구를 제거한다. (uploads 원본은 건드리지 않음)
+                try:
+                    import cv2
+                    _hard = _union_mask_l.point(lambda p: 255 if p > 8 else 0)
+                    _hard = _hard.filter(ImageFilter.MaxFilter(9))  # 페더링된 경계 잔여분까지 포함
+                    _filled = cv2.inpaint(
+                        np.array(_crop_img), np.asarray(_hard, dtype=np.uint8),
+                        5, cv2.INPAINT_TELEA)
+                    _crop_img = Image.fromarray(_filled)
+                    print("🧽 [Prefill] 마스크 영역의 기존 가구 사전 제거(Telea 인페인트) 완료")
+                except Exception as _fill_err:
+                    # OpenCV 미설치 등 예외 시: 강한 블러로 뭉갠 배경으로 채움 (밑그림 잔존보단 낫다)
+                    _blurred = _crop_img.filter(ImageFilter.GaussianBlur(24))
+                    _crop_img = Image.composite(_blurred, _crop_img, _union_mask_l)
+                    print(f"⚠️ [Prefill] OpenCV 인페인트 실패 → 블러 채움 폴백: {_fill_err}")
+
+                comfy_orig_filename = f"{req.image_id}_crop{cache_bust_suffix}.png"
+                _crop_img_path = os.path.join(PROJECT_ROOT, "uploads", comfy_orig_filename)
+                _crop_img.save(_crop_img_path, "PNG")
+                if os.path.exists(COMFYUI_INPUT_DIR):
+                    shutil.copy(_crop_img_path, os.path.join(COMFYUI_INPUT_DIR, comfy_orig_filename))
 
                 inpaint_crop = (cx1, cy1, cx2, cy2)
                 print(f"✂️ [Crop&Stitch] 크롭 영역 ({cx1},{cy1})-({cx2},{cy2}) → 생성 해상도 {gen_w}x{gen_h}")
@@ -3343,31 +3477,16 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
     
     # [인페인팅 최적 파라미터] 가구만 교체하고 배경을 보존하기 위한 균형점
     # steps=30: 충분한 디테일 확보, cfg=7.0: 과한 프롬프트 강제로 인한 거대/부자연 오브젝트 방지
-    # denoise=0.87 (SetLatentNoiseMask 구조 보존 구성): 기존 가구의 배치/방향/크기를 밑그림으로
-    #   이어받으면서 재질/형태는 프롬프트대로 새로 그려지는 균형점 (execute_real_comfyui 기본값과 동일)
     parameters["steps"] = req.steps if req.steps is not None else 30
     parameters["cfg"] = req.cfg if req.cfg is not None else 7.0
 
-    # [넓은 마스크 보정] 마스크 영역이 이미지의 상당 부분(가로 또는 세로 40% 이상)을 덮으면,
-    # AI가 "가구 하나"가 아니라 식탁+의자 세트 같은 여러 오브젝트로 구성된 장면을 상상해서 채우는
-    # 경향이 커진다. denoise를 살짝 낮춰 원본 구조 단서를 더 남겨 과도한 창작을 억제한다.
-    default_denoise = 0.87
-    try:
-        with Image.open(mask_path_a).convert("L") as _mask_check:
-            _bbox = _mask_check.getbbox()
-            if _bbox:
-                _mw, _mh = _mask_check.size
-                _frac_w = (_bbox[2] - _bbox[0]) / _mw
-                _frac_h = (_bbox[3] - _bbox[1]) / _mh
-                # 가로로 긴 저상 가구(소파, 낮고 긴 테이블)는 정상적으로도 가로 비중이 크므로
-                # 가로 단독 조건으로는 오탐이 잦다. 가로·세로 둘 다 큰 경우만 "여러 오브젝트를 덮은
-                # 과대 선택"으로 간주한다.
-                if _frac_w > 0.45 and _frac_h >= 0.35:
-                    default_denoise = 0.78
-                    print(f"⚠️ [inpainting_API] 마스크 영역이 넓음(가로 {_frac_w:.0%}, 세로 {_frac_h:.0%}) → denoise 기본값을 {default_denoise}로 완화")
-    except Exception as _mask_check_err:
-        print(f"⚠️ [inpainting_API] 마스크 크기 검사 실패(무시): {_mask_check_err}")
-    parameters["denoise"] = req.denoise if req.denoise is not None else default_denoise
+    # [Prefill 이후 denoise 정책] ComfyUI 입력 크롭에서 마스크 영역의 옛 가구를 미리 지우므로,
+    # 밑그림은 '주변 배경으로 메워진 빈 자리'다. denoise가 낮으면 그 뭉개진 밑그림이 비쳐
+    # 흐릿한 얼룩형 가구가 되므로, 충분히 높은 0.92로 새 가구를 온전히 그려낸다.
+    # (예전의 '넓은 마스크 → denoise 0.78 완화'는 옛 가구의 구조 단서를 남기기 위한 것이었는데,
+    #  이제 그 단서 자체를 지우므로 낮은 denoise는 이득 없이 뭉개짐만 유발해 제거했다.
+    #  여러 오브젝트 상상 문제는 "exactly one single object" 프롬프트와 크롭-앤-스티치가 억제한다)
+    parameters["denoise"] = req.denoise if req.denoise is not None else 0.92
 
     real_filename = None
     if comfy_online:
@@ -3531,7 +3650,39 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
                 _holes = _fill_probe.point(lambda p: 255 if p == 0 else 0)
                 obj_mask = ImageChops.lighter(obj_mask, _holes)
 
-                obj_mask_blurred = obj_mask.filter(ImageFilter.GaussianBlur(3))
+                obj_arr = np.asarray(obj_mask) > 0
+                holes_arr = np.asarray(_holes) > 0
+
+                # 4. [색온도(화이트밸런스) 정합] AI 패치는 방 조명과 다른 색조(예: 차가운 백색 조명의
+                # 방에 따뜻한 노란빛)로 렌더링되는 일이 잦아, 새 가구와 그 주변 그림자가 "다른 사진에서
+                # 오려 붙인" 듯 이질감이 났다. 마스크 안이지만 합성에서 버려지는 영역(=AI가 배경을 거의
+                # 그대로 다시 그린 픽셀)은 원본과 AI 결과가 '같은 배경'을 그린 표본이므로, 그 표본의
+                # 채널별 평균 차이 = AI 패치의 전역 색 편차다. 이 편차를 결과에서 제거해 방 조명에 맞춘다.
+                # (나무 테이블의 고유한 따뜻한 색은 유지되고, 조명 캐스트만 보정된다)
+                cast_sample = hard_arr & ~obj_arr
+                if int(cast_sample.sum()) > 400:
+                    res_f = np.asarray(res_img, dtype=np.float32)
+                    orig_f = np.asarray(orig_img, dtype=np.float32)
+                    cast = (orig_f[cast_sample] - res_f[cast_sample]).mean(axis=0)
+                    cast = np.clip(cast, -30.0, 30.0)
+                    if float(np.abs(cast).max()) >= 2.0:
+                        res_img = Image.fromarray(np.clip(res_f + cast, 0, 255).astype(np.uint8))
+                        print(f"🌡️ [Composite] AI 패치 색온도 보정 적용 (R{cast[0]:+.1f} G{cast[1]:+.1f} B{cast[2]:+.1f})")
+
+                # 선명도 보강은 합성 전에 '생성된 패치'에만 적용한다.
+                # (합성 후 전체 이미지에 적용하면 보존해야 할 원본 배경까지 미세하게 변형된다)
+                from PIL import ImageEnhance
+                res_img = ImageEnhance.Sharpness(res_img).enhance(1.2)
+
+                # 5. [소프트 알파 합성] 씨앗(강한 변화=가구 본체)과 가구 내부는 불투명하게,
+                # 흡수된 약한 변화 영역은 변화량에 비례한 반투명으로 합성한다.
+                # → 진짜 그림자는 자연스러운 그라데이션으로 이어지고, AI가 미묘하게 다른 색으로
+                #   다시 그린 배경 잔재(러그 위 얼룩 등)는 옅어져 원본 배경에 스며든다.
+                opaque_arr = (strong_arr | holes_arr) & obj_arr
+                soft_scale = np.clip((diff_arr.astype(np.float32) - 9.0) / 17.0, 0.0, 1.0)
+                alpha_arr = np.where(opaque_arr, 255.0, np.where(obj_arr, 80.0 + soft_scale * 175.0, 0.0))
+                obj_mask_blurred = Image.fromarray(alpha_arr.astype(np.uint8), mode="L").filter(
+                    ImageFilter.GaussianBlur(3))
 
                 # 안전장치: 변화 영역이 마스크의 2% 미만이면(생성 실패/거의 무변화) 기존 전체 마스크 방식으로 폴백
                 mask_area = max(1, int(np.count_nonzero(np.asarray(hard_mask))))
@@ -3544,11 +3695,6 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
                 else:
                     print(f"🎯 [Composite] 변화 감지 합성 적용: 오브젝트 픽셀 {obj_area} / 마스크 픽셀 {mask_area} ({obj_area/mask_area:.0%})")
                     composite_img = Image.composite(res_img, orig_img, obj_mask_blurred)
-                
-                # 5단계: 리사이징 시 흐려진 화질 선명도 1.2배 향상 보강
-                from PIL import ImageEnhance
-                enhancer = ImageEnhance.Sharpness(composite_img)
-                composite_img = enhancer.enhance(1.2)
 
                 # 6. 포맷 매치 후 저장
                 save_format = "PNG" if real_filename.lower().endswith(".png") else "JPEG"
