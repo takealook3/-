@@ -8,10 +8,11 @@ import { sendChatMessage, API_BASE_URL } from '../services/api';
 
 // [추천 질문 칩] 클릭 즉시 질문이 전송되는 스타터 질문 3종.
 // 백엔드가 가장 잘 답하는 세 갈래(평형대 규격 추천 DB2 / 스타일·자재 매칭 DB1 / 시공 체크리스트 RAG)를 하나씩 커버한다.
+// 칩에는 짧은 라벨(label)만 보여주고, 클릭하면 질문 전문(question)이 전송된다.
 const SUGGESTED_QUESTIONS = [
-  "30평 아파트에 어울리는 가구 규격과 스타일을 추천해줘",
-  "모던 스타일에 어울리는 벽지와 바닥재 조합을 알려줘",
-  "셀프 인테리어 시공 전에 꼭 확인해야 할 체크리스트를 알려줘"
+  { icon: '📐', label: '30평 가구 추천', question: '30평 아파트에 어울리는 가구 규격과 스타일을 추천해줘' },
+  { icon: '🎨', label: '모던 자재 조합', question: '모던 스타일에 어울리는 벽지와 바닥재 조합을 알려줘' },
+  { icon: '✅', label: '시공 체크리스트', question: '셀프 인테리어 시공 전에 꼭 확인해야 할 체크리스트를 알려줘' }
 ];
 
 
@@ -336,49 +337,66 @@ export default function ChatWidget({ sessionId, imageId, onError, pendingPrompt,
             </div>
           ))}
 
-            {/* [추천 질문 칩] 대화 시작 전(첫 인사말만 있을 때)에만 노출 — 클릭하면 곧바로 질문 전송 */}
+            {/* [추천 질문 칩] 대화 시작 전(첫 인사말만 있을 때)에만 노출 — 클릭하면 곧바로 질문 전송.
+                아이콘 박스 + 짧은 라벨의 가로 배열 필 카드 스타일 (반투명 유리 질감) */}
             {messages.length === 1 && !loading && (
               <div style={{
                 display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-start',
+                flexDirection: 'row',
+                flexWrap: 'wrap',
                 gap: '8px',
-                marginTop: '2px'
+                marginTop: '4px',
+                width: '100%'
               }}>
-                <span style={{ color: '#7A6C62', fontSize: '0.7rem', fontWeight: '600', paddingLeft: '4px' }}>
-                  이런 질문은 어때요? 👇
-                </span>
                 {SUGGESTED_QUESTIONS.map((q, i) => (
                   <button
                     key={i}
                     type="button"
-                    onClick={() => handleSend(q)}
+                    onClick={() => handleSend(q.question)}
+                    title={q.question}
                     style={{
-                      maxWidth: '85%',
-                      textAlign: 'left',
-                      backgroundColor: 'transparent',
-                      color: '#2B3530',
-                      border: '1px solid #CDBCB2',
-                      borderRadius: '12px 12px 12px 3px',
-                      padding: '5px 10px',
-                      fontSize: '0.74rem',
-                      lineHeight: '1.35',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.6)',
+                      backdropFilter: 'blur(6px)',
+                      color: '#4A443E',
+                      border: 'none',
+                      borderRadius: '14px',
+                      padding: '7px 12px 7px 7px',
+                      fontSize: '0.76rem',
+                      fontWeight: '500',
                       fontFamily: 'inherit',
                       cursor: 'pointer',
-                      transition: 'background-color 0.2s, color 0.2s, transform 0.15s'
+                      whiteSpace: 'nowrap',
+                      boxShadow: '0 2px 8px rgba(43, 53, 48, 0.06)',
+                      transition: 'background-color 0.2s, transform 0.15s, box-shadow 0.2s'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#2B3530';
-                      e.currentTarget.style.color = '#FCFAF7';
-                      e.currentTarget.style.transform = 'translateX(2px)';
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(43, 53, 48, 0.1)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = 'transparent';
-                      e.currentTarget.style.color = '#2B3530';
-                      e.currentTarget.style.transform = 'translateX(0)';
+                      e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.6)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(43, 53, 48, 0.06)';
                     }}
                   >
-                    💡 {q}
+                    <span style={{
+                      width: '26px',
+                      height: '26px',
+                      borderRadius: '9px',
+                      backgroundColor: '#FCFAF7',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '0.85rem',
+                      boxShadow: 'inset 0 0 0 1px rgba(205, 188, 178, 0.4)'
+                    }}>
+                      {q.icon}
+                    </span>
+                    {q.label}
                   </button>
                 ))}
               </div>
