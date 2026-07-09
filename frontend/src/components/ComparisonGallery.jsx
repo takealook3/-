@@ -112,12 +112,17 @@ export default function ComparisonGallery({
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '0.75rem', color: '#1e40af', fontWeight: '700', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>🎯 CLIP 일치도</div>
             <div style={{ fontSize: '1.05rem', color: '#1d4ed8', fontWeight: '850', marginTop: '2px', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
-              {resultData.metrics.clip_score !== undefined && resultData.metrics.clip_score !== null 
-                ? `${(resultData.metrics.clip_score * 100).toFixed(0)}점` 
+              {/* 표준 CLIPScore(2.5 x cosine, 상한 100%) 백분율 — 백엔드 clip_score_pct 우선, 없으면 raw로 계산 */}
+              {resultData.metrics.clip_score !== undefined && resultData.metrics.clip_score !== null
+                ? `${resultData.metrics.clip_score_pct !== undefined && resultData.metrics.clip_score_pct !== null
+                    ? resultData.metrics.clip_score_pct
+                    : Math.round(Math.min(Math.max(resultData.metrics.clip_score, 0) * 2.5, 1) * 100)}%`
                 : 'N/A'}
-              <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#60a5fa', marginLeft: '4px' }}>
-                ({resultData.metrics.clip_score || 0})
-              </span>
+              {resultData.metrics.clip_score !== undefined && resultData.metrics.clip_score !== null && (
+                <span style={{ fontSize: '0.75rem', fontWeight: '600', color: '#60a5fa', marginLeft: '4px' }}>
+                  ({resultData.metrics.clip_score})
+                </span>
+              )}
             </div>
           </div>
 

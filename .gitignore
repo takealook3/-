@@ -27,9 +27,10 @@ Thumbs.db
 # 데이터베이스 캐시
 chroma_db/
 
-# 환경 변수 및 비밀 정보
+# 환경 변수 및 비밀 정보 (.env.example 템플릿은 예외로 커밋)
 .env
 .env.*
+!.env.example
 
 # 업로드 및 임시 결과 이미지 폴더
 uploads/

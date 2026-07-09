@@ -12,15 +12,15 @@
         0
       ],
       "positive": [
-        "6",
+        "32",
         0
       ],
       "negative": [
-        "7",
-        0
+        "32",
+        1
       ],
       "latent_image": [
-        "10",
+        "35",
         0
       ]
     },
@@ -104,7 +104,6 @@
   },
   "10": {
     "inputs": {
-      "grow_mask_by": 8,
       "pixels": [
         "5",
         0
@@ -112,15 +111,11 @@
       "vae": [
         "4",
         2
-      ],
-      "mask": [
-        "17",
-        0
       ]
     },
-    "class_type": "VAEEncodeForInpaint",
+    "class_type": "VAEEncode",
     "_meta": {
-      "title": "VAE 인코드 (마스크 1 적용)"
+      "title": "VAE 인코드 1 (원본 구조 보존)"
     }
   },
   "11": {
@@ -138,7 +133,6 @@
   },
   "14": {
     "inputs": {
-      "grow_mask_by": 8,
       "pixels": [
         "8",
         0
@@ -146,15 +140,11 @@
       "vae": [
         "4",
         2
-      ],
-      "mask": [
-        "18",
-        0
       ]
     },
-    "class_type": "VAEEncodeForInpaint",
+    "class_type": "VAEEncode",
     "_meta": {
-      "title": "VAE 인코드 (마스크 2 적용)"
+      "title": "VAE 인코드 2 (1단계 결과 보존)"
     }
   },
   "15": {
@@ -170,15 +160,15 @@
         0
       ],
       "positive": [
-        "11",
+        "34",
         0
       ],
       "negative": [
-        "7",
-        0
+        "34",
+        1
       ],
       "latent_image": [
-        "14",
+        "36",
         0
       ]
     },
@@ -221,6 +211,131 @@
     "class_type": "LoadImageMask",
     "_meta": {
       "title": "웹 마스크 2 로드"
+    }
+  },
+  "30": {
+    "inputs": {
+      "control_net_name": "control_v11p_sd15_mlsd.safetensors"
+    },
+    "class_type": "ControlNetLoader",
+    "_meta": {
+      "title": "MLSD ControlNet 로드 (공간 구조선 유지)"
+    }
+  },
+  "31": {
+    "inputs": {
+      "score_threshold": 0.1,
+      "dist_threshold": 0.1,
+      "resolution": 512,
+      "image": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "M-LSDPreprocessor",
+    "_meta": {
+      "title": "M-LSD 직선 추출 1 (원본 구조선)"
+    }
+  },
+  "32": {
+    "inputs": {
+      "strength": 0.55,
+      "start_percent": 0.0,
+      "end_percent": 0.8,
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "control_net": [
+        "30",
+        0
+      ],
+      "image": [
+        "31",
+        0
+      ]
+    },
+    "class_type": "ControlNetApplyAdvanced",
+    "_meta": {
+      "title": "ControlNet 적용 1 (원근/구조 유지)"
+    }
+  },
+  "33": {
+    "inputs": {
+      "score_threshold": 0.1,
+      "dist_threshold": 0.1,
+      "resolution": 512,
+      "image": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "M-LSDPreprocessor",
+    "_meta": {
+      "title": "M-LSD 직선 추출 2 (1단계 결과 구조선)"
+    }
+  },
+  "34": {
+    "inputs": {
+      "strength": 0.55,
+      "start_percent": 0.0,
+      "end_percent": 0.8,
+      "positive": [
+        "11",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "control_net": [
+        "30",
+        0
+      ],
+      "image": [
+        "33",
+        0
+      ]
+    },
+    "class_type": "ControlNetApplyAdvanced",
+    "_meta": {
+      "title": "ControlNet 적용 2 (원근/구조 유지)"
+    }
+  },
+  "35": {
+    "inputs": {
+      "samples": [
+        "10",
+        0
+      ],
+      "mask": [
+        "17",
+        0
+      ]
+    },
+    "class_type": "SetLatentNoiseMask",
+    "_meta": {
+      "title": "노이즈 마스크 1 (기존 가구를 밑그림으로 유지)"
+    }
+  },
+  "36": {
+    "inputs": {
+      "samples": [
+        "14",
+        0
+      ],
+      "mask": [
+        "18",
+        0
+      ]
+    },
+    "class_type": "SetLatentNoiseMask",
+    "_meta": {
+      "title": "노이즈 마스크 2 (기존 가구를 밑그림으로 유지)"
     }
   }
 }

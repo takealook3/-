@@ -741,7 +741,32 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
             
             with open(api_workflow_path, "r", encoding="utf-8") as f:
                 prompt_api_data = json.load(f)
-                
+
+            # ── [MLSD ControlNet 가용성 체크] ──
+            # 워크플로우는 기본적으로 MLSD ControlNet(노드 30~34)으로 방의 직선 구조(벽/바닥/천장
+            # 원근선)를 유지하며 생성한다. 다른 PC 등 모델/커스텀노드 미설치 환경에서는
+            # 해당 노드를 제거하고 프롬프트를 KSampler에 직결해 안전하게 동작시킨다.
+            _cn_model_name = "control_v11p_sd15_mlsd.safetensors"
+            _cn_model_ok = any(os.path.exists(p) for p in (
+                os.path.join(COMFYUI_PATH, "ComfyUI", "models", "controlnet", _cn_model_name),
+                os.path.join(COMFYUI_PATH, "models", "controlnet", _cn_model_name),
+            ))
+            _cn_aux_ok = any(os.path.exists(p) for p in (
+                os.path.join(COMFYUI_PATH, "ComfyUI", "custom_nodes", "comfyui_controlnet_aux"),
+                os.path.join(COMFYUI_PATH, "custom_nodes", "comfyui_controlnet_aux"),
+            ))
+            if not (_cn_model_ok and _cn_aux_ok):
+                for _cn_node in ("30", "31", "32", "33", "34"):
+                    prompt_api_data.pop(_cn_node, None)
+                prompt_api_data["3"]["inputs"]["positive"] = ["6", 0]
+                prompt_api_data["3"]["inputs"]["negative"] = ["7", 0]
+                if "15" in prompt_api_data:
+                    prompt_api_data["15"]["inputs"]["positive"] = ["11", 0]
+                    prompt_api_data["15"]["inputs"]["negative"] = ["7", 0]
+                print("⚠️ [inpainting_API] MLSD ControlNet 미설치 감지 → ControlNet 없이 진행 (구조 유지 성능 저하 가능)")
+            else:
+                print("🧭 [inpainting_API] MLSD ControlNet 활성화: 방 구조선(원근) 유지 모드")
+
             # 1. 원본 이미지 로드 설정 (Node 5)
             if "orig_image" in parameters:
                 prompt_api_data["5"]["inputs"]["image"] = parameters["orig_image"]
@@ -757,13 +782,17 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
             # "furniture" 같은 카테고리 강제 문구와 "바닥에 붙어야 함" 같은 설치방식 강제 문구를 제거했다.
             # (벽걸이 에어컨·TV처럼 바닥에 놓이지 않는 물체와 모순을 일으켜 정체불명의 결과가 나오던 원인)
             # 배치 방식은 사용자의 오브젝트 설명(번역된 프롬프트)이 스스로 결정하게 한다.
+            # [원근 정합 패치] "front view facing the camera"는 방의 원근(소실선)을 무시하고
+            # 카메라 정면을 보는 오브젝트를 강제해, 배경과 어긋난 "스티커 합성" 느낌의 원인이었다.
+            # 뷰 방향은 지정하지 않고, 방의 카메라 각도/원근을 따르라는 문구만 남긴다.
             _generic_style_suffix = (
-                "exactly one single isolated object, front view facing the camera, "
+                "exactly one single object, "
                 "photorealistic, highly detailed, realistic materials and textures, "
                 "accurate real-world proportions, typical realistic size, correct scale for the room, "
                 "naturally placed and properly supported, soft realistic contact shadow, "
-                "matching the room's camera perspective, soft natural lighting matching the room, "
-                "seamlessly blended into the existing interior, high quality, 8k"
+                "drawn in the same perspective and vanishing lines as the room, "
+                "soft natural lighting matching the room, "
+                "seamlessly blended into the existing interior, high quality"
             )
 
             # 3. 긍정 프롬프트 1 주입 (Node 6)
@@ -776,19 +805,21 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 core_kw = _re.sub(r'[\(\)]', '', _re.sub(r':\d+(\.\d+)?\)', ')', translated)).strip()
                 # ⚠️ "product photography / sharp focus" 는 배경을 아웃포커스(보케)로 흐리게 만들어
                 #    마스크 영역이 흐릿한 원형 얼룩이 되는 원인이므로 절대 사용하지 않는다.
-                prompt_api_data["6"]["inputs"]["text"] = f"({core_kw}:1.25), {_generic_style_suffix}"
+                # 가중치 1.25는 오브젝트를 과하게 강조해 마스크를 꽉 채우는 거대 가구를 유발 → 1.1로 완화
+                prompt_api_data["6"]["inputs"]["text"] = f"({core_kw}:1.1), {_generic_style_suffix}"
                 # 네거티브 프롬프트: CLIP 토큰 한도(77) 내로 압축 — 너무 길면 뒷부분이 잘려 나가 오히려
                 # 과다노출/백지(흰색) 결과를 유발할 수 있어, 핵심 억제 개념만 간결하게 유지한다.
                 # [추가] 마스크 영역이 넓을 때 AI가 "가구 하나" 대신 식탁+의자 세트 등 여러 오브젝트를
                 # 상상해서 채워 넣는 경향이 있어, 단일 오브젝트 강제 문구를 명시적으로 추가한다.
                 # [범용 네거티브] 특정 가구 카테고리 전용 문구 대신 어떤 오브젝트에도 통용되는 억제어만 유지
+                # [원근 정합 패치] "side view, rear view, rotated at an angle" 억제어는 사실상
+                # 정면 뷰를 강제해 방의 원근과 어긋난 결과를 만들었으므로 제거했다.
                 prompt_api_data["7"]["inputs"]["text"] = (
                     "blurry, low quality, distorted, bad proportions, deformed, worst quality, overexposed, "
                     "plain white, blank, washed out, changed background, changed floor, changed wall, "
                     "floating in air, hovering, transparent, cropped, incomplete, "
-                    "side view, rear view, turned away, rotated at an angle, "
                     "white glow, halo around object, bright outline, "
-                    "tilted, crooked, warped, oversized, disproportionate scale, "
+                    "tilted, crooked, warped, oversized, giant, disproportionate scale, "
                     "multiple objects, duplicated objects, cluttered, people, animals"
                 )
                 print(f"✅ [inpainting_API] 긍정 프롬프트 1 주입: {core_kw[:50]}...")
@@ -802,23 +833,27 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
             if "cfg" in parameters:
                 prompt_api_data["3"]["inputs"]["cfg"] = float(parameters["cfg"])
             else:
-                # CFG 미전달 시 프롬프트 충실도를 높이는 8.5 기본값 지정
-                prompt_api_data["3"]["inputs"]["cfg"] = 8.5
+                # CFG 8.5는 프롬프트를 과도하게 강제해 마스크를 꽉 채우는 부자연스러운 오브젝트를
+                # 유발했다. RealisticVision 계열 권장 범위(5~8)의 중간값 7.0으로 완화.
+                prompt_api_data["3"]["inputs"]["cfg"] = 7.0
             
             # KSampler 1 Denoise 강도 조절 (안정적인 생성과 원본 잔재 소거 균형을 고려한 동적 매핑)
             if "denoise" in parameters:
                 prompt_api_data["3"]["inputs"]["denoise"] = float(parameters["denoise"])
                 print(f"⚙️ [inpainting_API] KSampler 1 Denoise 적용: {parameters['denoise']}")
             else:
-                # denoise 1.0은 기존 가구 잔상은 완전히 지우지만, 원본 노이즈의 원근/수평 단서까지 함께
-                # 날려버려 방과 어긋난 각도(드럼통처럼 떠 보이는 등)로 그려지는 부작용이 있었다.
-                # 0.9는 잔상 없이 깨끗이 지우면서도 최소한의 구조적 단서를 남겨 방 원근에 맞게 그려진다.
-                prompt_api_data["3"]["inputs"]["denoise"] = 0.9
-                print("⚙️ [inpainting_API] KSampler 1 Denoise 기본값(0.9) 적용")
+                # SetLatentNoiseMask 구성에서는 마스크 영역에 원본 가구가 밑그림으로 남는다.
+                # 0.87은 기존 가구의 배치/방향/크기 단서는 이어받으면서도, 재질/형태는
+                # 프롬프트대로 새로 그려져 잔상(고스팅) 없이 자연스럽게 교체되는 균형점이다.
+                prompt_api_data["3"]["inputs"]["denoise"] = 0.87
+                print("⚙️ [inpainting_API] KSampler 1 Denoise 기본값(0.87) 적용")
 
-            # VAE 인코더 마스크 패딩 확장 설정 (grow_mask_by)
-            # 배경 침범을 방지하고 잔재 소거를 조화롭게 하기 위해 12px 기본 설정
-            if "10" in prompt_api_data:
+            # [구조 보존 인페인트] 노드 10/14는 VAEEncode + SetLatentNoiseMask(35/36) 조합으로 교체됨.
+            # 마스크 영역을 지우지 않고 원본 가구를 흐릿한 밑그림(잠상)으로 남겨,
+            # 새 가구가 기존 가구의 위치/방향/크기를 이어받게 한다.
+            # 마스크 팽창(grow_mask_by)은 백엔드 process_and_save_mask의 MaxFilter 팽창이 대신 수행한다.
+            # (하위 호환: 구버전 inpainting.json의 VAEEncodeForInpaint에만 grow_mask_by를 주입)
+            if prompt_api_data.get("10", {}).get("class_type") == "VAEEncodeForInpaint":
                 g_mask = int(parameters["grow_mask_by"]) if "grow_mask_by" in parameters else 8
                 prompt_api_data["10"]["inputs"]["grow_mask_by"] = g_mask
                 print(f"📐 [inpainting_API] VAEEncode 1 grow_mask_by 적용: {g_mask}")
@@ -840,18 +875,18 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 if "cfg" in parameters:
                     prompt_api_data["15"]["inputs"]["cfg"] = float(parameters["cfg"])
                 else:
-                    prompt_api_data["15"]["inputs"]["cfg"] = 8.5
+                    prompt_api_data["15"]["inputs"]["cfg"] = 7.0
                 
                 # KSampler 2 Denoise 강도 조절 (안정적인 생성과 원본 잔재 소거 균형을 고려한 동적 매핑)
                 if "denoise" in parameters:
                     prompt_api_data["15"]["inputs"]["denoise"] = float(parameters["denoise"])
                     print(f"⚙️ [inpainting_API] KSampler 2 Denoise 적용: {parameters['denoise']}")
                 else:
-                    prompt_api_data["15"]["inputs"]["denoise"] = 0.9
-                    print("⚙️ [inpainting_API] KSampler 2 Denoise 기본값(0.9) 적용")
+                    prompt_api_data["15"]["inputs"]["denoise"] = 0.87
+                    print("⚙️ [inpainting_API] KSampler 2 Denoise 기본값(0.87) 적용")
                 
-                # VAE Encode 2 grow_mask_by 설정 (기본 12px 완화)
-                if "14" in prompt_api_data:
+                # (하위 호환: 구버전 VAEEncodeForInpaint에만 grow_mask_by 주입 — 신규 구성은 백엔드 마스크 팽창 사용)
+                if prompt_api_data.get("14", {}).get("class_type") == "VAEEncodeForInpaint":
                     g_mask_b = int(parameters["grow_mask_by"]) if "grow_mask_by" in parameters else 8
                     prompt_api_data["14"]["inputs"]["grow_mask_by"] = g_mask_b
                     print(f"📐 [inpainting_API] VAEEncode 2 grow_mask_by 적용: {g_mask_b}")
@@ -864,7 +899,8 @@ def execute_real_comfyui(workflow_filename: str, parameters: dict, status_callba
                 # Node 9 (SaveImage)의 입력을 Node 8 (1단계 디코드) 결과물로 리다이렉트
                 prompt_api_data["9"]["inputs"]["images"] = ["8", 0]
                 # 미사용 2단계 노드 제거하여 ComfyUI 연산 낭비 차단
-                for unused_node in ["11", "14", "15", "16", "18"]:
+                # (33/34 = 2단계용 ControlNet, 36 = 2단계용 SetLatentNoiseMask)
+                for unused_node in ["11", "14", "15", "16", "18", "33", "34", "36"]:
                     if unused_node in prompt_api_data:
                         del prompt_api_data[unused_node]
                         
@@ -1763,7 +1799,8 @@ def internal_generate_interior_image(image_id: str, session_id: str, style: str,
             eval_orig_path = os.path.join(PROJECT_ROOT, "uploads", input_filename) if os.path.exists(os.path.join(PROJECT_ROOT, "uploads", input_filename)) else None
             eval_dest_path = os.path.join(PROJECT_ROOT, "results", result_filename)
             if os.path.exists(eval_dest_path):
-                metrics_data = evaluate_generated_image(eval_orig_path, eval_dest_path, prompt)
+                # CLIP은 영어 학습 모델이므로 한글 원문 대신 번역된 영어 프롬프트로 평가해야 점수가 유의미함
+                metrics_data = evaluate_generated_image(eval_orig_path, eval_dest_path, translated_prompt or prompt)
         except Exception as eval_err:
             print(f"⚠️ [Evaluation Integration] 평가 오류: {eval_err}")
             metrics_data = {"error": str(eval_err)}
@@ -2304,7 +2341,8 @@ def generate_image(req: ImageGenerateRequest):
             eval_orig_path = os.path.join(PROJECT_ROOT, "uploads", input_filename) if os.path.exists(os.path.join(PROJECT_ROOT, "uploads", input_filename)) else None
             eval_dest_path = os.path.join(PROJECT_ROOT, "results", os.path.basename(generated_url))
             if os.path.exists(eval_dest_path):
-                metrics_data = evaluate_generated_image(eval_orig_path, eval_dest_path, req.prompt)
+                # CLIP은 영어 학습 모델이므로 한글 원문 대신 번역된 영어 프롬프트로 평가해야 점수가 유의미함
+                metrics_data = evaluate_generated_image(eval_orig_path, eval_dest_path, translated_prompt or req.prompt)
         except Exception as eval_err:
             print(f"⚠️ [Evaluation Integration] 평가 오류: {eval_err}")
             metrics_data = {"error": str(eval_err)}
@@ -2796,6 +2834,235 @@ def detect_furniture_mask(payload: dict):
         })
 
 
+# =====================================================================
+# [전체 가구/사물 자동 인식 - 부분 가구 교체 탭 전용]
+# 비유: 사진을 받자마자 방 안의 모든 가구에 미리 견출지(라벨)를 붙여두는 정리 컨설턴트입니다.
+# 사용자는 드래그할 필요 없이, 미리 붙어 있는 견출지 중 바꾸고 싶은 가구를 클릭만 하면 됩니다.
+# 기본 YOLO11-seg(COCO 80종)에 더해, Open Images V7로 학습된 YOLOv8-oiv7(600여 종)을
+# 앙상블로 함께 돌려 램프/거울/커튼/옷장/선반/서랍장 같은 확장 카테고리까지 폭넓게 인식한다.
+# =====================================================================
+_yolo_oiv7_model = None
+
+# Open Images V7(600여 클래스) 결과 중 실내 인테리어 교체 대상으로 의미 있는 카테고리만
+# 키워드 매칭으로 통과시킨다. (정확한 클래스명 나열 대신 키워드 포함 방식이라 버전 차이에 강함)
+OIV7_INTERIOR_KEYWORDS = (
+    "chair", "couch", "sofa", "bed", "table", "desk", "lamp", "mirror", "curtain",
+    "shelf", "bookcase", "cabinet", "cupboard", "wardrobe", "closet", "drawer",
+    "nightstand", "bench", "stool", "pillow", "cushion", "picture frame", "blind",
+    "fireplace", "chandelier", "ceiling fan", "clock", "vase", "houseplant",
+    "flowerpot", "television", "refrigerator", "oven", "microwave", "sink",
+    "bathtub", "toilet", "countertop", "rug", "carpet", "wine rack", "furniture",
+)
+
+# 인식된 영어 클래스명을 사용자에게 보여줄 한국어 라벨로 변환하는 사전
+KOREAN_OBJECT_LABELS = {
+    "chair": "의자", "couch": "소파", "sofa": "소파", "sofa bed": "소파베드",
+    "studio couch": "카우치 소파", "loveseat": "러브시트 소파", "bed": "침대",
+    "infant bed": "아기 침대", "dining table": "식탁", "kitchen & dining room table": "식탁",
+    "coffee table": "커피 테이블", "table": "테이블", "desk": "책상", "tv": "TV",
+    "television": "TV", "potted plant": "화분", "houseplant": "화분 식물",
+    "flowerpot": "화분", "vase": "꽃병", "clock": "시계", "book": "책",
+    "lamp": "조명/램프", "mirror": "거울", "curtain": "커튼", "shelf": "선반",
+    "bookcase": "책장", "cabinetry": "수납장", "cabinet": "수납장", "cupboard": "찬장",
+    "wardrobe": "옷장", "closet": "붙박이장", "drawer": "서랍장",
+    "chest of drawers": "서랍장", "filing cabinet": "서류장", "nightstand": "협탁",
+    "bench": "벤치", "stool": "스툴", "pillow": "쿠션/베개", "picture frame": "액자",
+    "window blind": "블라인드", "fireplace": "벽난로", "chandelier": "샹들리에",
+    "ceiling fan": "실링팬", "refrigerator": "냉장고", "oven": "오븐",
+    "microwave": "전자레인지", "microwave oven": "전자레인지", "sink": "싱크대",
+    "toilet": "변기", "bathtub": "욕조", "countertop": "조리대", "rug": "러그",
+    "carpet": "카펫", "wine rack": "와인랙", "furniture": "가구", "laptop": "노트북",
+    "keyboard": "키보드", "mouse": "마우스", "remote": "리모컨", "cell phone": "휴대폰",
+    "cup": "컵", "bottle": "병", "bowl": "그릇", "wine glass": "와인잔",
+    "teddy bear": "인형", "backpack": "가방", "handbag": "핸드백", "suitcase": "여행가방",
+    "umbrella": "우산", "toaster": "토스터", "scissors": "가위", "hair drier": "드라이어",
+}
+
+
+def _korean_object_label(name: str) -> str:
+    """영어 클래스명을 한국어 라벨로 변환한다. 사전에 없으면 키워드 부분 일치로 한 번 더 찾는다."""
+    low = (name or "").lower()
+    if low in KOREAN_OBJECT_LABELS:
+        return KOREAN_OBJECT_LABELS[low]
+    for key, ko in KOREAN_OBJECT_LABELS.items():
+        if key in low:
+            return ko
+    return name
+
+
+def _get_yolo_oiv7_model():
+    """Open Images V7(600여 클래스) 사전학습 YOLOv8 탐지 모델을 지연 로딩한다.
+    다운로드/로딩 실패 시 호출부에서 예외를 잡아 COCO 결과만으로 자연스럽게 폴백한다."""
+    global _yolo_oiv7_model
+    if _yolo_oiv7_model is None:
+        from ultralytics import YOLO
+        print("🧠 [YOLOv8-OIV7] 확장 카테고리(600여 종) 탐지 모델 로딩 중... (최초 1회, 가중치 자동 다운로드 포함)")
+        _yolo_oiv7_model = YOLO("yolov8s-oiv7.pt")
+        print("✅ [YOLOv8-OIV7] 모델 로딩 완료")
+    return _yolo_oiv7_model
+
+
+def _build_bbox_mask_b64(img_w: int, img_h: int, bbox: list):
+    """탐지된 바운딩 박스를 5% 패딩 + 라운드 사각형 + 팽창/페더링 처리한
+    인페인팅용 base64 PNG 마스크로 변환한다. (패딩 적용된 bbox도 함께 반환)"""
+    import base64
+    from io import BytesIO
+
+    bx1, by1, bx2, by2 = bbox
+    pad_x = (bx2 - bx1) * 0.05
+    pad_y = (by2 - by1) * 0.05
+    bx1 = max(0, bx1 - pad_x)
+    by1 = max(0, by1 - pad_y)
+    bx2 = min(img_w, bx2 + pad_x)
+    by2 = min(img_h, by2 + pad_y)
+
+    mask_img = Image.new("L", (img_w, img_h), 0)
+    radius = min(bx2 - bx1, by2 - by1) * 0.12
+    draw = ImageDraw.Draw(mask_img)
+    if hasattr(draw, "rounded_rectangle"):
+        draw.rounded_rectangle([bx1, by1, bx2, by2], radius=radius, fill=255)
+    else:
+        draw.rectangle([bx1, by1, bx2, by2], fill=255)
+
+    # 가구 경계가 배경과 부드럽게 스며들도록 소폭 팽창 + 페더링
+    pad = max(4, min(img_w, img_h) // 60)
+    kernel = pad if pad % 2 == 1 else pad + 1
+    mask_img = mask_img.filter(ImageFilter.MaxFilter(kernel))
+    feather = max(3, min(img_w, img_h) // 100)
+    mask_img = mask_img.filter(ImageFilter.GaussianBlur(feather))
+
+    rgb_mask = Image.merge("RGB", (mask_img, mask_img, mask_img))
+    buf = BytesIO()
+    rgb_mask.save(buf, format="PNG")
+    mask_b64 = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+    return mask_b64, [bx1, by1, bx2, by2]
+
+
+def _bbox_iou(a: list, b: list) -> float:
+    ix1, iy1 = max(a[0], b[0]), max(a[1], b[1])
+    ix2, iy2 = min(a[2], b[2]), min(a[3], b[3])
+    inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+    if inter <= 0:
+        return 0.0
+    area_a = (a[2] - a[0]) * (a[3] - a[1])
+    area_b = (b[2] - b[0]) * (b[3] - b[1])
+    return inter / max(1.0, area_a + area_b - inter)
+
+
+@app.post("/api/image/detect_all_objects")
+def detect_all_objects(payload: dict):
+    """
+    [이미지 전체 가구/사물 일괄 인식 창구]
+    부분 가구 교체 탭에 진입하면 프론트가 이 API를 호출해, 사진 속 모든 교체 후보
+    가구/사물의 라벨·바운딩박스·인페인팅 마스크를 한 번에 받아 화면에 미리 표시한다.
+    사용자는 드래그 없이 표시된 박스를 클릭하는 것만으로 교체 대상을 선택할 수 있다.
+    """
+    image_id = payload.get("image_id")
+    if not image_id:
+        return JSONResponse(status_code=400, content={"success": False, "message": "image_id가 필요합니다."})
+
+    orig_path = None
+    for folder in ("uploads", "results"):
+        for ext in (".jpg", ".jpeg", ".png"):
+            candidate = os.path.join(PROJECT_ROOT, folder, f"{image_id}{ext}")
+            if os.path.exists(candidate):
+                orig_path = candidate
+                break
+        if orig_path:
+            break
+    if not orig_path:
+        return JSONResponse(status_code=404, content={"success": False, "message": "원본 이미지를 찾을 수 없습니다."})
+
+    try:
+        with Image.open(orig_path) as im:
+            img_w, img_h = im.size
+        # 전체 면적의 0.5% 미만 초소형 박스는 클릭도 어렵고 오탐이 잦아 노이즈로 간주
+        min_area = img_w * img_h * 0.005
+
+        candidates = []
+
+        # 1) YOLO11-seg (COCO 80종): 소파/의자/침대/식탁/TV/화분 등 기본 가구
+        model = _get_yolo_seg_model()
+        results = model(orig_path, verbose=False)
+        r0 = results[0] if results else None
+        if r0 is not None and r0.boxes is not None:
+            for box in r0.boxes:
+                cls_name = model.names[int(box.cls[0].item())]
+                if cls_name in YOLO_EXCLUDED_CLASSES:
+                    continue
+                conf = float(box.conf[0].item())
+                if conf < 0.25:
+                    continue
+                bx1, by1, bx2, by2 = box.xyxy[0].tolist()
+                if (bx2 - bx1) * (by2 - by1) < min_area:
+                    continue
+                candidates.append({"label": cls_name, "confidence": conf, "bbox": [bx1, by1, bx2, by2], "source": "yolo11-seg"})
+
+        # 2) YOLOv8-OIV7 (Open Images 600여 종): 램프/거울/커튼/선반/옷장/서랍장 등 확장 카테고리
+        #    로딩 실패(다운로드 불가 등) 시에도 COCO 결과만으로 정상 응답하도록 개별 try 처리
+        try:
+            oiv7 = _get_yolo_oiv7_model()
+            results2 = oiv7(orig_path, verbose=False)
+            r1 = results2[0] if results2 else None
+            if r1 is not None and r1.boxes is not None:
+                for box in r1.boxes:
+                    cls_name = oiv7.names[int(box.cls[0].item())]
+                    low = cls_name.lower()
+                    if not any(kw in low for kw in OIV7_INTERIOR_KEYWORDS):
+                        continue
+                    conf = float(box.conf[0].item())
+                    if conf < 0.20:
+                        continue
+                    bx1, by1, bx2, by2 = box.xyxy[0].tolist()
+                    if (bx2 - bx1) * (by2 - by1) < min_area:
+                        continue
+                    candidates.append({"label": cls_name, "confidence": conf, "bbox": [bx1, by1, bx2, by2], "source": "yolov8-oiv7"})
+        except Exception as oiv7_err:
+            print(f"⚠️ [YOLOv8-OIV7] 확장 카테고리 탐지 스킵 (COCO 결과만 사용): {oiv7_err}")
+
+        # 3) 두 모델이 같은 가구를 중복 탐지한 경우 IoU 기준으로 신뢰도 높은 쪽만 남긴다
+        candidates.sort(key=lambda c: c["confidence"], reverse=True)
+        kept = []
+        for c in candidates:
+            if any(_bbox_iou(c["bbox"], k["bbox"]) > 0.55 for k in kept):
+                continue
+            kept.append(c)
+
+        # 4) 큰 가구부터 정렬해 최대 12개까지만 반환 (프론트에서 작은 박스가 위에 그려지도록)
+        kept.sort(key=lambda c: (c["bbox"][2] - c["bbox"][0]) * (c["bbox"][3] - c["bbox"][1]), reverse=True)
+        kept = kept[:12]
+
+        objects = []
+        for idx, c in enumerate(kept):
+            mask_b64, padded = _build_bbox_mask_b64(img_w, img_h, c["bbox"])
+            px = [round(v) for v in padded]
+            objects.append({
+                "id": f"obj_{idx}",
+                "label": c["label"],
+                "label_ko": _korean_object_label(c["label"]),
+                "confidence": round(c["confidence"], 3),
+                "bbox_px": px,
+                "bbox_norm": {
+                    "x1": px[0] / img_w, "y1": px[1] / img_h,
+                    "x2": px[2] / img_w, "y2": px[3] / img_h,
+                },
+                "mask": mask_b64,
+                "source": c["source"],
+            })
+
+        labels_summary = ", ".join(f"{o['label']}({o['confidence']:.0%})" for o in objects) or "없음"
+        print(f"🪑 [전체 오브젝트 인식] {len(objects)}개 인식 완료: {labels_summary}")
+
+        return JSONResponse(status_code=200, content={
+            "success": True,
+            "data": {"objects": objects, "image_size": {"width": img_w, "height": img_h}},
+            "message": f"{len(objects)}개의 가구/사물을 인식했습니다."
+        })
+    except Exception as e:
+        print(f"⚠️ [전체 오브젝트 인식] 실패: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "message": f"가구 인식 중 오류가 발생했습니다: {e}"})
+
+
 def _is_result_blank_or_overexposed(image_path: str, mask_path: str, mean_thresh: float = 245.0, std_thresh: float = 10.0) -> bool:
     """마스크 영역이 거의 순백/과다노출(디테일 없이 밝기만 균일)인지 검사한다.
     가구 인페인팅 결과가 간헐적으로 '하얗게' 나오는 문제를 감지해 재시도를 트리거하기 위한 안전장치."""
@@ -2960,6 +3227,96 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
         print(f"⚠️ 마스크 체인 빌드 중 에러: {e}")
         w, h = 768, 512
 
+    # ── [크롭-앤-스티치 인페인팅] SD1.5 네이티브 해상도로 마스크 주변만 생성 ──
+    # 고해상도 원본 전체를 잠상으로 쓰면 SD1.5(학습 해상도 512px)가 마스크를 "512px 감각"으로
+    # 채워, 방 전체 크기의 거대한 가구가 그려지는 문제가 있었다.
+    # 마스크 주변에 충분한 문맥(바닥/벽의 원근 단서)을 포함한 영역만 잘라 SD 친화 해상도로
+    # 리사이즈해 생성하고, 결과를 원본 좌표에 되붙인다(stitch). 마스크 대비 문맥 비율이
+    # 일정해져 스케일/원근이 안정되고, 크롭 확대 생성 덕분에 디테일도 좋아진다.
+    inpaint_crop = None  # (x1, y1, x2, y2) 원본 좌표계 크롭 영역
+    comfy_orig_filename = orig_input_filename
+    comfy_mask_filename_a = mask_filename_a
+    comfy_mask_filename_b = mask_filename_b
+    try:
+        if os.path.exists(orig_path) and os.path.exists(mask_path_a):
+            _bbox_paths = [mask_path_a]
+            if mask_path_b and os.path.exists(mask_path_b):
+                _bbox_paths.append(mask_path_b)
+            union_bbox = None
+            for _mp in _bbox_paths:
+                with Image.open(_mp) as _m:
+                    _b = _m.convert("L").getbbox()
+                if _b:
+                    union_bbox = _b if union_bbox is None else (
+                        min(union_bbox[0], _b[0]), min(union_bbox[1], _b[1]),
+                        max(union_bbox[2], _b[2]), max(union_bbox[3], _b[3]),
+                    )
+            if union_bbox:
+                bx1, by1, bx2, by2 = union_bbox
+                # 문맥 패딩: 마스크 긴 변의 60% (최소 128px). 주변 바닥/벽이 함께 보여야
+                # AI가 방의 원근과 기존 가구 스케일에 맞춰 그린다.
+                ctx = max(128, int(max(bx2 - bx1, by2 - by1) * 0.6))
+                cx1, cy1 = max(0, bx1 - ctx), max(0, by1 - ctx)
+                cx2, cy2 = min(w, bx2 + ctx), min(h, by2 + ctx)
+                crop_w, crop_h = cx2 - cx1, cy2 - cy1
+
+                # 생성 해상도: 긴 변 640px(8의 배수 정렬). 작은 크롭은 최대 2배까지 확대해 디테일 확보.
+                scale = min(640.0 / max(crop_w, crop_h), 2.0)
+                gen_w = max(64, int(round(crop_w * scale / 8)) * 8)
+                gen_h = max(64, int(round(crop_h * scale / 8)) * 8)
+
+                with Image.open(orig_path) as _oi:
+                    _crop_img = _oi.convert("RGB").crop((cx1, cy1, cx2, cy2)).resize(
+                        (gen_w, gen_h), Image.Resampling.LANCZOS)
+                comfy_orig_filename = f"{req.image_id}_crop{cache_bust_suffix}.png"
+                _crop_img_path = os.path.join(PROJECT_ROOT, "uploads", comfy_orig_filename)
+                _crop_img.save(_crop_img_path, "PNG")
+                if os.path.exists(COMFYUI_INPUT_DIR):
+                    shutil.copy(_crop_img_path, os.path.join(COMFYUI_INPUT_DIR, comfy_orig_filename))
+
+                def _save_cropped_mask(src_path, dest_filename):
+                    with Image.open(src_path) as _mi:
+                        _mc = _mi.convert("L").crop((cx1, cy1, cx2, cy2)).resize(
+                            (gen_w, gen_h), Image.Resampling.BILINEAR)
+                    _rgb = Image.merge("RGB", (_mc, _mc, _mc))
+                    _dest = os.path.join(PROJECT_ROOT, "uploads", dest_filename)
+                    _rgb.save(_dest, "PNG")
+                    if os.path.exists(COMFYUI_INPUT_DIR):
+                        shutil.copy(_dest, os.path.join(COMFYUI_INPUT_DIR, dest_filename))
+
+                comfy_mask_filename_a = f"{req.image_id}_maskA_crop{cache_bust_suffix}.png"
+                _save_cropped_mask(mask_path_a, comfy_mask_filename_a)
+                if mask_path_b and os.path.exists(mask_path_b):
+                    comfy_mask_filename_b = f"{req.image_id}_maskB_crop{cache_bust_suffix}.png"
+                    _save_cropped_mask(mask_path_b, comfy_mask_filename_b)
+
+                inpaint_crop = (cx1, cy1, cx2, cy2)
+                print(f"✂️ [Crop&Stitch] 크롭 영역 ({cx1},{cy1})-({cx2},{cy2}) → 생성 해상도 {gen_w}x{gen_h}")
+    except Exception as crop_err:
+        # 크롭 실패 시 기존 전체 이미지 방식으로 안전하게 폴백
+        inpaint_crop = None
+        comfy_orig_filename = orig_input_filename
+        comfy_mask_filename_a = mask_filename_a
+        comfy_mask_filename_b = mask_filename_b
+        print(f"⚠️ [Crop&Stitch] 크롭 준비 실패 → 전체 이미지 방식 폴백: {crop_err}")
+
+    def _stitch_crop_back(candidate_filename):
+        """ComfyUI가 크롭 영역만 생성한 결과를 원본 전체 캔버스 위에 되붙여 저장한다."""
+        if not inpaint_crop:
+            return
+        _cpath = os.path.join(PROJECT_ROOT, "results", candidate_filename)
+        if not (os.path.exists(_cpath) and os.path.exists(orig_path)):
+            return
+        sx1, sy1, sx2, sy2 = inpaint_crop
+        with Image.open(orig_path) as _o:
+            _full = _o.convert("RGB").copy()
+        with Image.open(_cpath) as _r:
+            _region = _r.convert("RGB").resize((sx2 - sx1, sy2 - sy1), Image.Resampling.LANCZOS)
+        _full.paste(_region, (sx1, sy1))
+        _fmt = "PNG" if candidate_filename.lower().endswith(".png") else "JPEG"
+        _full.save(_cpath, _fmt)
+        print(f"🧵 [Crop&Stitch] 생성 결과를 원본 좌표 ({sx1},{sy1})에 되붙임 완료")
+
     _report("translating", "가구 설명을 AI 프롬프트로 번역 중...")
     try:
         translated_prompt_a = translate_prompt_to_english(req.prompt, furniture_only=True)
@@ -2974,26 +3331,27 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
         )
     _report("translating_done", "번역 완료. ComfyUI 생성 준비 중...", {"translated": translated_prompt_a})
 
+    # 크롭-앤-스티치가 준비된 경우 ComfyUI에는 크롭된 이미지/마스크를 전달한다.
     parameters = {
-        "image_filename": mask_filename_a,
-        "image_filename_b": mask_filename_b or "",
-        "orig_image": orig_input_filename,
+        "image_filename": comfy_mask_filename_a,
+        "image_filename_b": comfy_mask_filename_b or "",
+        "orig_image": comfy_orig_filename,
         "prompt": translated_prompt_a,
         "prompt_b": translated_prompt_b,
         "seed": int(time.time()) % 1000000
     }
     
     # [인페인팅 최적 파라미터] 가구만 교체하고 배경을 보존하기 위한 균형점
-    # steps=30: 충분한 디테일 확보, cfg=8.5: 프롬프트 충실도와 자연스러움 균형
-    # denoise=0.9: 기존 가구 잔상은 확실히 지우면서도, 1.0처럼 원근/수평 단서를 완전히 잃지 않아
-    #   방 각도에 맞게 자연스럽게 놓인 가구가 나온다. (1.0은 깨끗하지만 종종 방과 어긋난 각도/비율로 그려짐)
+    # steps=30: 충분한 디테일 확보, cfg=7.0: 과한 프롬프트 강제로 인한 거대/부자연 오브젝트 방지
+    # denoise=0.87 (SetLatentNoiseMask 구조 보존 구성): 기존 가구의 배치/방향/크기를 밑그림으로
+    #   이어받으면서 재질/형태는 프롬프트대로 새로 그려지는 균형점 (execute_real_comfyui 기본값과 동일)
     parameters["steps"] = req.steps if req.steps is not None else 30
-    parameters["cfg"] = req.cfg if req.cfg is not None else 8.5
+    parameters["cfg"] = req.cfg if req.cfg is not None else 7.0
 
     # [넓은 마스크 보정] 마스크 영역이 이미지의 상당 부분(가로 또는 세로 40% 이상)을 덮으면,
     # AI가 "가구 하나"가 아니라 식탁+의자 세트 같은 여러 오브젝트로 구성된 장면을 상상해서 채우는
     # 경향이 커진다. denoise를 살짝 낮춰 원본 구조 단서를 더 남겨 과도한 창작을 억제한다.
-    default_denoise = 0.9
+    default_denoise = 0.87
     try:
         with Image.open(mask_path_a).convert("L") as _mask_check:
             _bbox = _mask_check.getbbox()
@@ -3027,6 +3385,11 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
             )
             if not candidate:
                 break
+            # 크롭 생성 결과를 원본 전체 캔버스에 되붙임 (이후 백지 검사/합성은 전체 좌표계 기준)
+            try:
+                _stitch_crop_back(candidate)
+            except Exception as stitch_err:
+                print(f"⚠️ [Crop&Stitch] 되붙임 실패(원본 크기 결과로 간주하고 계속): {stitch_err}")
             candidate_path = os.path.join(PROJECT_ROOT, "results", candidate)
             if os.path.exists(candidate_path) and _is_result_blank_or_overexposed(candidate_path, mask_path_a):
                 real_filename = candidate  # 최후 수단으로 보관해 두되 계속 재시도
@@ -3219,7 +3582,8 @@ def _run_edit_image_core(req: ImageEditRequest, status_callback=None):
             eval_orig_path = orig_path if orig_path and os.path.exists(orig_path) else None
             eval_dest_path = os.path.join(PROJECT_ROOT, "results", os.path.basename(result_url))
             if os.path.exists(eval_dest_path):
-                metrics_data = evaluate_generated_image(eval_orig_path, eval_dest_path, req.prompt)
+                # CLIP은 영어 학습 모델이므로 한글 원문 대신 번역된 영어 프롬프트로 평가해야 점수가 유의미함
+                metrics_data = evaluate_generated_image(eval_orig_path, eval_dest_path, translated_prompt_a or req.prompt)
         except Exception as eval_err:
             print(f"⚠️ [Evaluation Integration] 평가 오류: {eval_err}")
             metrics_data = {"error": str(eval_err)}

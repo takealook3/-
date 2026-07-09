@@ -1,10 +1,10 @@
 // ==============================================================
-// [ImageEditor.jsx: 1/2차 원형 마스킹 (Circle Double Inpainting) 통합 편집소]
-// 비유: 사진 속에서 바꾸고 싶은 가구 영역들을 각각 블루(A)와 핑크(B) 원형 스티커로
-// 동그랗게 지정하여 흑백 이미지 파일로 개별 캔버스 추출한 뒤, 백엔드로 송신하여 
-// 1차 단독 혹은 2차 동시 수선을 의뢰하는 프리미엄 편집 컴포넌트입니다.
+// [ImageEditor.jsx: 자동 가구 인식 + 클릭 선택 (Auto-Detect Double Inpainting) 통합 편집소]
+// 비유: 사진이 올라오면 AI가 방 안의 모든 가구에 미리 견출지(라벨)를 붙여둡니다.
+// 사용자는 드래그할 필요 없이, 바꾸고 싶은 가구의 견출지를 클릭(A: 블루 / B: 핑크)하고
+// 원하는 스타일 프롬프트만 입력하면 백엔드로 송신되어 1차 단독 혹은 2차 동시 수선이 진행됩니다.
 // ==============================================================
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { searchProducts, embedCropImage, API_BASE_URL } from '../services/api';
 
 export default function ImageEditor({ 
@@ -26,11 +26,14 @@ export default function ImageEditor({
   // 마스크 모드: 'A' (1차 가구 수선) 또는 'B' (2차 가구 수선)
   const [maskMode, setMaskMode] = useState('A');
 
-  // 마우스 드래그 상태
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  // 드래그 중 현재 좌표를 ref로 추적 (mouseUp에서 최신값 동기적으로 읽기 위함)
-  const dragCurrentRef = useRef({ x: 0, y: 0 });
+  // 🪑 [자동 전체 가구 인식 상태] 탭 진입(이미지 준비) 시 사진 속 모든 가구를 미리 인식해 보관
+  // detectedObjects: 인식된 오브젝트 목록 [{id, label, label_ko, confidence, bbox_norm, bbox_px, mask}]
+  const [detectedObjects, setDetectedObjects] = useState([]);
+  const [detectingAll, setDetectingAll] = useState(false);
+  const [detectError, setDetectError] = useState(null);
+  // 사용자가 클릭으로 선택한 오브젝트 id (A: 1차 교체 대상 / B: 2차 교체 대상)
+  const [selectedIdA, setSelectedIdA] = useState(null);
+  const [selectedIdB, setSelectedIdB] = useState(null);
 
   // 1차/2차 수선 프롬프트 복원
   const [promptA, setPromptA] = useState("");
@@ -46,7 +49,7 @@ export default function ImageEditor({
   const [productsListB, setProductsListB] = useState([]);
 
   // 🎨 [산디과 코딩 가이드 - 실시간 CLIP 임베딩 상태 등록]
-  // 비유: 드래그가 끝난 소파나 테이블의 512차원 특징값(임베딩)과 추출 진행 상태를 각각 담는 레이어(State)입니다.
+  // 비유: 클릭으로 선택된 소파나 테이블의 512차원 특징값(임베딩)과 추출 진행 상태를 각각 담는 레이어(State)입니다.
   const [embeddingA, setEmbeddingA] = useState(null);
   const [isEmbeddingA, setIsEmbeddingA] = useState(false);
   const [embeddingModelA, setEmbeddingModelA] = useState("");
@@ -59,48 +62,53 @@ export default function ImageEditor({
   const [embeddingStepsB, setEmbeddingStepsB] = useState([]);
   const [embeddingCurrentStepB, setEmbeddingCurrentStepB] = useState("");
 
-  // 🎯 [YOLOv8-seg 가구 정밀 인식] 드래그 영역 안의 실제 가구 실루엣만 자동으로 잡아내는 상태
-  // detecting: 인식 중 여부 / mask: 감지 성공 시 받은 정밀 세그멘테이션 마스크(base64) / label: 감지된 가구 종류
-  const [yoloStateA, setYoloStateA] = useState({ detecting: false, mask: null, label: null, confidence: null });
-  const [yoloStateB, setYoloStateB] = useState({ detecting: false, mask: null, label: null, confidence: null });
-
   const containerRef = useRef(null);
   const imgRef = useRef(null);
 
-  // 드래그 완료 시 백엔드에 YOLOv8-seg 가구 인식을 요청하여 사각형 대신 정밀 실루엣 마스크로 교체 시도
-  const detectFurnitureMask = async (mode, pixels) => {
-    if (!imageId || !pixels || pixels.length !== 4) return;
-    const setYoloState = mode === 'A' ? setYoloStateA : setYoloStateB;
-    setYoloState({ detecting: true, mask: null, label: null, confidence: null });
+  // 선택된 오브젝트 정보를 목록에서 파생 (라벨/마스크/신뢰도 접근용)
+  const selectedObjA = detectedObjects.find((o) => o.id === selectedIdA) || null;
+  const selectedObjB = detectedObjects.find((o) => o.id === selectedIdB) || null;
+
+  // 🪑 이미지 전체에서 모든 가구/사물을 한 번에 인식 (부분 가구 교체 탭 진입 시 자동 실행)
+  const fetchAllObjects = async () => {
+    if (!imageId) return;
+    setDetectingAll(true);
+    setDetectError(null);
+    setDetectedObjects([]);
+    setSelectedIdA(null);
+    setSelectedIdB(null);
+    setBboxNormA(null);
+    setMaskPixelsA(null);
+    setBboxNormB(null);
+    setMaskPixelsB(null);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/image/detect_furniture_mask`, {
+      const res = await fetch(`${API_BASE_URL}/api/image/detect_all_objects`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image_id: imageId, bbox: pixels })
+        body: JSON.stringify({ image_id: imageId })
       });
       const data = await res.json();
-      if (data.success && data.data?.detected) {
-        setYoloState({
-          detecting: false,
-          mask: data.data.mask,
-          label: data.data.label,
-          confidence: data.data.confidence
-        });
-        // 감지된 실제 가구 경계로 화면 미리보기 박스도 정밀 정합
-        const bp = data.data.bbox_norm;
-        if (bp) {
-          const setBbox = mode === 'A' ? setBboxNormA : setBboxNormB;
-          setBbox({ x1: bp.x1, y1: bp.y1, x2: bp.x2, y2: bp.y2 });
+      if (data.success && Array.isArray(data.data?.objects)) {
+        setDetectedObjects(data.data.objects);
+        if (data.data.objects.length === 0) {
+          setDetectError("사진에서 인식된 가구/사물이 없습니다. 다른 사진을 사용해 보세요.");
         }
       } else {
-        // 인식 실패 시 기존 사각형 드래그 선택을 그대로 사용 (조용히 폴백)
-        setYoloState({ detecting: false, mask: null, label: null, confidence: null });
+        setDetectError(data.message || "가구 자동 인식에 실패했습니다.");
       }
     } catch (err) {
-      console.error("YOLO 가구 인식 실패:", err);
-      setYoloState({ detecting: false, mask: null, label: null, confidence: null });
+      console.error("전체 가구 인식 실패:", err);
+      setDetectError(`가구 인식 통신 오류: ${err.message}`);
+    } finally {
+      setDetectingAll(false);
     }
   };
+
+  // 이미지가 준비되면(업로드/변경 시) 즉시 전체 가구 인식을 미리 수행해 둔다
+  useEffect(() => {
+    fetchAllObjects();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageId]);
 
   if (!imageId || !originalImageUrl) return null;
 
@@ -111,51 +119,6 @@ export default function ImageEditor({
   };
 
   const fullOrigUrl = getFullUrl(originalImageUrl);
-
-  // 마우스 클릭 시작
-  const handleMouseDown = (e) => {
-    if (!imgRef.current) return;
-    const rect = imgRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    setIsDragging(true);
-    setDragStart({ x, y });
-
-    if (maskMode === 'A') {
-      setBboxNormA(null);
-      setMaskPixelsA(null);
-      setEmbeddingA(null);
-      setYoloStateA({ detecting: false, mask: null, label: null, confidence: null });
-    } else {
-      setBboxNormB(null);
-      setMaskPixelsB(null);
-      setEmbeddingB(null);
-      setYoloStateB({ detecting: false, mask: null, label: null, confidence: null });
-    }
-  };
-
-  // 마우스 드래그 중
-  const handleMouseMove = (e) => {
-    if (!isDragging || !imgRef.current) return;
-    const rect = imgRef.current.getBoundingClientRect();
-    const currentX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-    const currentY = Math.max(0, Math.min(e.clientY - rect.top, rect.height));
-
-    // ref에도 동기적으로 저장 (mouseUp에서 최신 좌표를 즉시 읽기 위함)
-    dragCurrentRef.current = { x: currentX, y: currentY };
-
-    const x1Norm = Math.min(dragStart.x, currentX) / rect.width;
-    const y1Norm = Math.min(dragStart.y, currentY) / rect.height;
-    const x2Norm = Math.max(dragStart.x, currentX) / rect.width;
-    const y2Norm = Math.max(dragStart.y, currentY) / rect.height;
-
-    const coords = { x1: x1Norm, y1: y1Norm, x2: x2Norm, y2: y2Norm };
-    if (maskMode === 'A') {
-      setBboxNormA(coords);
-    } else {
-      setBboxNormB(coords);
-    }
-  };
 
   // 🎨 [산디과 코딩 가이드 - 실시간 CLIP 임베딩 비동기 트리거 함수]
   // 비유: 백엔드 주방에 좌표를 보내 그 영역만 크롭하고, 분석 완료된 임베딩(특징벡터)을 받아오는 비동기 주문 작업입니다.
@@ -181,11 +144,11 @@ export default function ImageEditor({
     setEmbedding(null);
     setModel("");
     setSteps([]);
-    setCurrentStep("1. 드래그 영역 좌표 획득 완료 (분석 개시)");
+    setCurrentStep("1. 선택 가구 좌표 획득 완료 (분석 개시)");
 
     // 실시간 진행 단계 가상 시뮬레이션 (유저 편의성 극대화)
     const stepMessages = [
-      "1. 드래그 영역 좌표 획득 완료 (분석 개시)",
+      "1. 선택 가구 좌표 획득 완료 (분석 개시)",
       "2. 지정 영역 이미지 크롭(Crop) 수행 중...",
       "3. 인코더 입력을 위한 크기 조정(224x224) 및 텐서 변환 중...",
       "4. CLIP 심층 신경망을 활용한 다차원 이미지 특징 분석 중..."
@@ -230,54 +193,57 @@ export default function ImageEditor({
     }
   };
 
-  // 마우스 클릭 종료 (정밀 픽셀 좌표 바인딩)
-  const handleMouseUp = (e) => {
-    if (!isDragging) return;
-    setIsDragging(false);
-
-    if (!imgRef.current) return;
-
-    const rect = imgRef.current.getBoundingClientRect();
-    // React state 비동기 갱신 대신 ref에서 최신 좌표를 즉시 동기적으로 읽음
-    const currentX = dragCurrentRef.current.x;
-    const currentY = dragCurrentRef.current.y;
-
-    const x1Norm = Math.min(dragStart.x, currentX) / rect.width;
-    const y1Norm = Math.min(dragStart.y, currentY) / rect.height;
-    const x2Norm = Math.max(dragStart.x, currentX) / rect.width;
-    const y2Norm = Math.max(dragStart.y, currentY) / rect.height;
-
-    const finalCoords = { x1: x1Norm, y1: y1Norm, x2: x2Norm, y2: y2Norm };
-
-    const natW = imgRef.current.naturalWidth || 800;
-    const natH = imgRef.current.naturalHeight || 600;
-    const px1 = Math.round(x1Norm * natW);
-    const py1 = Math.round(y1Norm * natH);
-    const px2 = Math.round(x2Norm * natW);
-    const py2 = Math.round(y2Norm * natH);
-
-    const targetPixels = [px1, py1, px2, py2];
+  // 🖱️ 미리 인식된 가구 박스 클릭 시 선택/해제 처리 (현재 활성 모드 A/B 슬롯에 배정)
+  const handleSelectObject = (obj) => {
+    const pixels = obj.bbox_px;
+    const norm = obj.bbox_norm;
 
     if (maskMode === 'A') {
-      setBboxNormA(finalCoords);
-      setMaskPixelsA(targetPixels);
-      // 드래그 완료 후 즉시 실시간 임베딩 트리거
-      triggerClipEmbedding('A', targetPixels);
-      // 사각형 대신 실제 가구 윤곽선만 쓸 수 있도록 YOLOv8-seg 정밀 인식 시도
-      detectFurnitureMask('A', targetPixels);
+      // 같은 오브젝트를 다시 클릭하면 선택 해제
+      if (selectedIdA === obj.id) {
+        setSelectedIdA(null);
+        setBboxNormA(null);
+        setMaskPixelsA(null);
+        setEmbeddingA(null);
+        return;
+      }
+      // B 슬롯에 이미 배정된 오브젝트라면 B에서 해제 후 A로 이동
+      if (selectedIdB === obj.id) {
+        setSelectedIdB(null);
+        setBboxNormB(null);
+        setMaskPixelsB(null);
+        setEmbeddingB(null);
+      }
+      setSelectedIdA(obj.id);
+      setBboxNormA(norm);
+      setMaskPixelsA(pixels);
+      // 선택 즉시 실시간 CLIP 임베딩 트리거 (유사 상품 검색 준비)
+      triggerClipEmbedding('A', pixels);
     } else {
-      setBboxNormB(finalCoords);
-      setMaskPixelsB(targetPixels);
-      // 드래그 완료 후 즉시 실시간 임베딩 트리거
-      triggerClipEmbedding('B', targetPixels);
-      // 사각형 대신 실제 가구 윤곽선만 쓸 수 있도록 YOLOv8-seg 정밀 인식 시도
-      detectFurnitureMask('B', targetPixels);
+      if (selectedIdB === obj.id) {
+        setSelectedIdB(null);
+        setBboxNormB(null);
+        setMaskPixelsB(null);
+        setEmbeddingB(null);
+        return;
+      }
+      if (selectedIdA === obj.id) {
+        setSelectedIdA(null);
+        setBboxNormA(null);
+        setMaskPixelsA(null);
+        setEmbeddingA(null);
+      }
+      setSelectedIdB(obj.id);
+      setBboxNormB(norm);
+      setMaskPixelsB(pixels);
+      triggerClipEmbedding('B', pixels);
     }
   };
 
   // 개별 마스크 영역 클리어
   const handleClearActiveMask = () => {
     if (maskMode === 'A') {
+      setSelectedIdA(null);
       setBboxNormA(null);
       setMaskPixelsA(null);
       setEmbeddingA(null);
@@ -286,8 +252,8 @@ export default function ImageEditor({
       setEmbeddingCurrentStepA("");
       setProductsListA([]);
       setPromptA("");
-      setYoloStateA({ detecting: false, mask: null, label: null, confidence: null });
     } else {
+      setSelectedIdB(null);
       setBboxNormB(null);
       setMaskPixelsB(null);
       setEmbeddingB(null);
@@ -296,12 +262,12 @@ export default function ImageEditor({
       setEmbeddingCurrentStepB("");
       setProductsListB([]);
       setPromptB("");
-      setYoloStateB({ detecting: false, mask: null, label: null, confidence: null });
     }
   };
 
   // 전체 마스크 영역 클리어
   const handleClearAll = () => {
+    setSelectedIdA(null);
     setBboxNormA(null);
     setMaskPixelsA(null);
     setEmbeddingA(null);
@@ -309,8 +275,8 @@ export default function ImageEditor({
     setEmbeddingStepsA([]);
     setEmbeddingCurrentStepA("");
     setPromptA("");
-    setYoloStateA({ detecting: false, mask: null, label: null, confidence: null });
 
+    setSelectedIdB(null);
     setBboxNormB(null);
     setMaskPixelsB(null);
     setEmbeddingB(null);
@@ -318,7 +284,6 @@ export default function ImageEditor({
     setEmbeddingStepsB([]);
     setEmbeddingCurrentStepB("");
     setPromptB("");
-    setYoloStateB({ detecting: false, mask: null, label: null, confidence: null });
 
     setEditedResultUrl(null);
     setProductsListA([]);
@@ -364,7 +329,7 @@ export default function ImageEditor({
       return;
     }
     if (!maskPixelsA) {
-      onError({ errorCode: "MASK_REQUIRED", message: "수선할 가구 영역(A)을 마우스 드래그로 먼저 지정해 주세요." });
+      onError({ errorCode: "MASK_REQUIRED", message: "사진 속 인식된 가구 중 교체할 가구(A)를 클릭하여 먼저 선택해 주세요." });
       return;
     }
     
@@ -390,7 +355,9 @@ export default function ImageEditor({
         });
       }
 
-      // 수선 성공 시, 다음 단계 교체를 용이하게 하기 위해 드래그 영역 및 폼 인풋 리셋
+      // 수선 성공 시, 다음 단계 교체를 용이하게 하기 위해 선택 상태 및 폼 인풋 리셋
+      setSelectedIdA(null);
+      setSelectedIdB(null);
       setBboxNormA(null);
       setMaskPixelsA(null);
       setBboxNormB(null);
@@ -403,12 +370,12 @@ export default function ImageEditor({
       const natW = imgRef.current.naturalWidth || 800;
       const natH = imgRef.current.naturalHeight || 600;
 
-      // 마스크 1 (A): YOLOv8-seg 가 실제 가구 실루엣을 인식했다면 그 정밀 마스크를 우선 사용하고,
-      // 인식 실패 시(오브젝트 미검출 등) 기존 사각형 드래그 마스크로 자연스럽게 폴백한다.
-      const base64MaskA = yoloStateA.mask || generateBase64Mask(bboxNormA, natW, natH);
+      // 마스크 1 (A): 자동 인식 단계에서 백엔드가 만들어 둔 오브젝트 마스크를 우선 사용하고,
+      // 없을 경우(예외 상황) 선택 박스 좌표 기반 사각형 마스크로 자연스럽게 폴백한다.
+      const base64MaskA = selectedObjA?.mask || generateBase64Mask(bboxNormA, natW, natH);
 
-      // 마스크 2 (B) 렌더링 (선택적) - 동일하게 YOLO 정밀 마스크 우선
-      const base64MaskB = bboxNormB ? (yoloStateB.mask || generateBase64Mask(bboxNormB, natW, natH)) : null;
+      // 마스크 2 (B) 렌더링 (선택적) - 동일하게 자동 인식 마스크 우선
+      const base64MaskB = bboxNormB ? (selectedObjB?.mask || generateBase64Mask(bboxNormB, natW, natH)) : null;
 
       const requestBody = {
         image_id: imageId,
@@ -417,7 +384,7 @@ export default function ImageEditor({
         mask_b: base64MaskB,
         mask_pixels_a: maskPixelsA,  // mock 폴백용 픽셀 좌표 배열 [x1,y1,x2,y2]
         mask_pixels_b: maskPixelsB ? maskPixelsB : null,
-        selected_object: null,
+        selected_object: selectedObjA?.label || null,  // 자동 인식된 가구 클래스명 전달
         prompt: promptA.trim(),
         prompt_b: base64MaskB ? promptB.trim() : null
       };
@@ -482,7 +449,7 @@ export default function ImageEditor({
   // 유사 가구 쇼핑 정보 검색 (A와 B 다중 영역 병렬 검색)
   const handleSearchProducts = async () => {
     if (!maskPixelsA && !maskPixelsB) {
-      onError({ errorCode: "MASK_REQUIRED", message: "유사 가구를 검색할 영역(A영역 또는 B영역)을 최소 한 개 이상 드래그하여 원형으로 지정해 주세요." });
+      onError({ errorCode: "MASK_REQUIRED", message: "유사 가구를 검색할 가구(A 또는 B)를 사진에서 최소 한 개 이상 클릭하여 선택해 주세요." });
       return;
     }
     
@@ -572,11 +539,7 @@ export default function ImageEditor({
           <div
             ref={containerRef}
             className="canvas-container"
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            style={{ 
-              cursor: 'crosshair', 
+            style={{
               position: 'relative',
               borderRadius: '16px',
               border: `2px dashed ${maskMode === 'A' ? '#3B82F6' : '#EC4899'}`,
@@ -594,66 +557,106 @@ export default function ImageEditor({
               draggable={false}
               style={{ width: '100%', height: 'auto', display: 'block' }}
             />
-            
-            {/* 1차 마스크 영역 박스 (디지털 블루 네온 원형/사각형) */}
-            {bboxNormA && (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: `${bboxNormA.x1 * 100}%`,
-                  top: `${bboxNormA.y1 * 100}%`,
-                  width: `${(bboxNormA.x2 - bboxNormA.x1) * 100}%`,
-                  height: `${(bboxNormA.y2 - bboxNormA.y1) * 100}%`,
-                  border: `3px ${yoloStateA.mask ? 'solid' : 'dashed'} #3B82F6`,
-                  borderRadius: '12%', // 실제 전송되는 마스크(roundRect, radius 12%)와 동일한 모양으로 미리보기 표시
-                  background: 'rgba(59, 130, 246, 0.15)',
-                  boxShadow: '0 0 16px rgba(59, 130, 246, 0.5)',
-                  pointerEvents: 'none'
-                }}
-              >
-                <span style={{
-                  position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)',
-                  background: '#3B82F6', color: '#FCFAF7', fontSize: '0.7rem', fontWeight: '800',
-                  padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
-                }}>
-                  {yoloStateA.detecting
-                    ? 'AI 가구 인식 중...'
-                    : yoloStateA.mask
-                      ? `AI 정밀 인식: ${yoloStateA.label} (${Math.round((yoloStateA.confidence || 0) * 100)}%)`
-                      : '가구 A (사각형 선택)'}
-                </span>
-              </div>
-            )}
 
-            {/* 2차 마스크 영역 박스 (로즈 핑크 네온 원형/사각형) - 이모지 제거 */}
-            {bboxNormB && (
-              <div
-                style={{
-                  position: 'absolute',
-                  left: `${bboxNormB.x1 * 100}%`,
-                  top: `${bboxNormB.y1 * 100}%`,
-                  width: `${(bboxNormB.x2 - bboxNormB.x1) * 100}%`,
-                  height: `${(bboxNormB.y2 - bboxNormB.y1) * 100}%`,
-                  border: `3px ${yoloStateB.mask ? 'solid' : 'dashed'} #EC4899`,
-                  borderRadius: '12%', // 실제 전송되는 마스크(roundRect, radius 12%)와 동일한 모양으로 미리보기 표시
-                  background: 'rgba(236, 72, 153, 0.15)',
-                  boxShadow: '0 0 16px rgba(236, 72, 153, 0.5)',
-                  pointerEvents: 'none'
-                }}
-              >
-                <span style={{
-                  position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)',
-                  background: '#EC4899', color: '#FCFAF7', fontSize: '0.7rem', fontWeight: '800',
-                  padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
-                }}>
-                  {yoloStateB.detecting
-                    ? 'AI 가구 인식 중...'
-                    : yoloStateB.mask
-                      ? `AI 정밀 인식: ${yoloStateB.label} (${Math.round((yoloStateB.confidence || 0) * 100)}%)`
-                      : '가구 B (사각형 선택)'}
+            {/* 🪑 자동 인식된 전체 가구/사물 박스 오버레이 (클릭으로 A/B 선택) */}
+            {/* 백엔드가 큰 가구부터 정렬해 주므로, 뒤에 렌더링되는 작은 박스가 위에 올라와 클릭 가능 */}
+            {detectedObjects.map((obj) => {
+              const isA = obj.id === selectedIdA;
+              const isB = obj.id === selectedIdB;
+              const isSelected = isA || isB;
+              const color = isA ? '#3B82F6' : isB ? '#EC4899' : 'rgba(255, 255, 255, 0.9)';
+              return (
+                <div
+                  key={obj.id}
+                  onClick={() => handleSelectObject(obj)}
+                  style={{
+                    position: 'absolute',
+                    left: `${obj.bbox_norm.x1 * 100}%`,
+                    top: `${obj.bbox_norm.y1 * 100}%`,
+                    width: `${(obj.bbox_norm.x2 - obj.bbox_norm.x1) * 100}%`,
+                    height: `${(obj.bbox_norm.y2 - obj.bbox_norm.y1) * 100}%`,
+                    border: isSelected ? `3px solid ${color}` : '2px dashed rgba(255, 255, 255, 0.75)',
+                    borderRadius: '10px',
+                    background: isA
+                      ? 'rgba(59, 130, 246, 0.18)'
+                      : isB
+                        ? 'rgba(236, 72, 153, 0.18)'
+                        : 'rgba(255, 255, 255, 0.04)',
+                    boxShadow: isA
+                      ? '0 0 16px rgba(59, 130, 246, 0.5)'
+                      : isB
+                        ? '0 0 16px rgba(236, 72, 153, 0.5)'
+                        : 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.borderColor = maskMode === 'A' ? '#3B82F6' : '#EC4899';
+                      e.currentTarget.style.background = maskMode === 'A' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(236, 72, 153, 0.12)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSelected) {
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.75)';
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
+                    }
+                  }}
+                >
+                  <span style={{
+                    position: 'absolute', top: '-22px', left: '50%', transform: 'translateX(-50%)',
+                    background: isA ? '#3B82F6' : isB ? '#EC4899' : 'rgba(15, 23, 42, 0.85)',
+                    color: '#FCFAF7', fontSize: '0.68rem', fontWeight: '700',
+                    padding: '2px 8px', borderRadius: '4px', whiteSpace: 'nowrap', pointerEvents: 'none',
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+                  }}>
+                    {isA ? 'A · ' : isB ? 'B · ' : ''}{obj.label_ko || obj.label} {Math.round((obj.confidence || 0) * 100)}%
+                  </span>
+                </div>
+              );
+            })}
+
+            {/* 자동 인식 진행 중 오버레이 */}
+            {detectingAll && (
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center', gap: '12px',
+                background: 'rgba(15, 23, 42, 0.55)', backdropFilter: 'blur(2px)'
+              }}>
+                <div style={{
+                  width: '32px', height: '32px', borderRadius: '50%',
+                  border: '3px solid rgba(255,255,255,0.25)', borderTopColor: '#FCFAF7',
+                  animation: 'spin 0.9s linear infinite'
+                }} />
+                <span style={{ color: '#FCFAF7', fontSize: '0.85rem', fontWeight: '600', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+                  AI가 사진 속 가구를 인식하고 있습니다...
                 </span>
               </div>
             )}
+          </div>
+
+          {/* 인식 결과 요약 및 다시 인식 버튼 */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '0.78rem', color: detectError ? '#EF4444' : '#7A6C62', fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif' }}>
+              {detectingAll
+                ? '가구 인식 중...'
+                : detectError
+                  ? detectError
+                  : `${detectedObjects.length}개의 가구/사물이 인식되었습니다. 교체할 가구를 클릭해 선택하세요.`}
+            </span>
+            <button
+              type="button"
+              onClick={fetchAllObjects}
+              disabled={detectingAll}
+              style={{
+                fontSize: '0.72rem', padding: '5px 12px', borderRadius: '14px', whiteSpace: 'nowrap',
+                border: '1px solid var(--border-color)', background: '#fff',
+                cursor: detectingAll ? 'not-allowed' : 'pointer', color: '#7A6C62',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif'
+              }}
+            >
+              가구 다시 인식
+            </button>
           </div>
         </div>
 
@@ -676,7 +679,7 @@ export default function ImageEditor({
               {/* 수선 영역 탭 스위처 - 파스텔 색상 배경 & 이모지 및 가이드 문구 삭제, 탭 대제목 굵기 복구 (두껍게) */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <span style={{ display: 'block', fontSize: '0.9rem', fontWeight: '700', color: '#7A6C62', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  지정할 가구 선택
+                  교체할 가구 선택 (사진에서 클릭)
                 </span>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
@@ -698,7 +701,7 @@ export default function ImageEditor({
                       boxShadow: maskMode === 'A' ? '0 4px 12px rgba(59, 130, 246, 0.15)' : 'none'
                     }}
                   >
-                    1순위: 가구 A 지정
+                    1순위: 가구 A {selectedObjA ? `· ${selectedObjA.label_ko || selectedObjA.label}` : '선택'}
                   </button>
                   <button
                     type="button"
@@ -719,7 +722,7 @@ export default function ImageEditor({
                       boxShadow: maskMode === 'B' ? '0 4px 12px rgba(236, 72, 153, 0.15)' : 'none'
                     }}
                   >
-                    2순위: 가구 B 지정 (선택)
+                    2순위: 가구 B {selectedObjB ? `· ${selectedObjB.label_ko || selectedObjB.label}` : '(선택)'}
                   </button>
                 </div>
                 {/* 띠 박스 제거 대신 여백을 거의 먹지 않는 초경량 텍스트 정렬로 지우기 기능 유지 */}

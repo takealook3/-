@@ -111,6 +111,9 @@ yarl==1.24.2
 zstandard==0.25.0
 kiwipiepy==0.23.2
 rank-bm25==0.2.2
+fastapi
+python-multipart
+diffusers
 scikit-image
 transformers
 torch

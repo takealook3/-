@@ -81,7 +81,6 @@ def evaluate_generated_image(
 
     try:
         import torch
-        from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
         # 1. 생성 이미지 열기 및 RGB 모드 변환, 512x512 리사이징 (요구사항 5)
         with Image.open(generated_image_path) as gen_img:
@@ -96,7 +95,12 @@ def evaluate_generated_image(
             if model and processor:
                 try:
                     # 프로세서로 이미지와 텍스트 전처리
-                    inputs = processor(text=[prompt], images=gen_img_512, return_tensors="pt", padding=True).to(device)
+                    # truncation: CLIP 텍스트 인코더의 최대 길이(77토큰)를 넘는 프롬프트(특히 한글 장문)가
+                    # 들어오면 예외로 죽어 점수가 N/A가 되던 문제를 방지 — 앞부분 77토큰만 사용
+                    inputs = processor(
+                        text=[prompt], images=gen_img_512, return_tensors="pt",
+                        padding=True, truncation=True, max_length=77
+                    ).to(device)
                     with torch.no_grad():
                         outputs = model(**inputs)
                         # 이미지와 텍스트 간의 코사인 유사도 추출
@@ -115,6 +119,10 @@ def evaluate_generated_image(
         
         if original_image_path and os.path.exists(original_image_path):
             try:
+                # [방어적 임포트] skimage(scikit-image) 미설치 환경에서도 CLIP Score까지 죽지 않도록,
+                # PSNR/SSIM 연산 직전에만 임포트한다. (과거: 함수 최상단 임포트 실패 → 전 지표 N/A)
+                from skimage.metrics import peak_signal_noise_ratio, structural_similarity
+
                 with Image.open(original_image_path) as orig_img:
                     orig_img_rgb = orig_img.convert("RGB")
                     orig_img_512 = orig_img_rgb.resize((512, 512), Image.Resampling.LANCZOS)
@@ -123,6 +131,10 @@ def evaluate_generated_image(
                 # PSNR 계산 (skimage.metrics.peak_signal_noise_ratio) (요구사항 4)
                 # 원본과 생성 이미지 간의 픽셀 차이 비율 (보조 지표)
                 psnr_raw = peak_signal_noise_ratio(orig_arr, gen_arr, data_range=255)
+                # 원본과 생성 이미지가 사실상 동일하면 PSNR이 inf가 되는데, inf는 JSON 표준에 없어
+                # 응답 직렬화/프론트 파싱을 깨뜨린다 → 관례적 상한값 99.0dB로 캡핑
+                if not np.isfinite(psnr_raw):
+                    psnr_raw = 99.0
                 psnr_val = round(float(psnr_raw), 2)
                 
                 # SSIM 계산 (skimage.metrics.structural_similarity) (요구사항 4)
@@ -141,9 +153,17 @@ def evaluate_generated_image(
         t_elapsed = round(time.time() - t_start, 2)
         print(f"[Evaluation Service] 정량평가 완료 (소요시간: {t_elapsed}초)")
 
+        # [CLIP 점수 백분율화] 이미지-텍스트 코사인 유사도의 실용 범위는 0.2~0.35라
+        # 그대로 100을 곱하면(24점) 좋은 결과도 낙제점처럼 보인다.
+        # 표준 CLIPScore 정의(Hessel et al. 2021: 2.5 x max(cos, 0), 상한 1.0)를 백분율로 제공한다.
+        clip_score_pct = None
+        if clip_score_val is not None:
+            clip_score_pct = round(min(max(clip_score_val, 0.0) * 2.5, 1.0) * 100)
+
         # 최종 반환 규격 (요구사항 8)
         return {
             "clip_score": clip_score_val,
+            "clip_score_pct": clip_score_pct,
             "psnr": psnr_val,
             "ssim": ssim_val
         }
